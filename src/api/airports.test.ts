@@ -37,6 +37,13 @@ describe('airports catalog', () => {
     }
   })
 
+  it('attaches a published tower frequency', () => {
+    const tower = getAirport('ORD').stations.find((s) => s.kind === 'TWR')
+    expect(tower?.frequencyMhz).toBe(126.9)
+    const ground = getAirport('ORD').stations.find((s) => s.kind === 'GND')
+    expect(ground?.frequencyMhz).toBe(121.675)
+  })
+
   it('resolves bbox by icao', () => {
     const b = getAirportBbox('lga')
     expect(b.lamin).toBeLessThan(40.78)

@@ -1,15 +1,23 @@
-/** Decorative bars — CSS animates when active. */
+/**
+ * Decorative audio bars. Heights follow a fixed pseudo-random pattern so the
+ * bar looks like a real waveform; when `active`, each bar animates with a
+ * staggered delay to suggest speech.
+ */
+const BARS = 40
+
 export function Waveform({ active }: { active: boolean }) {
   return (
-    <div className="flex h-7 w-full items-end gap-0.5 px-1" aria-hidden>
-      {Array.from({ length: 36 }, (_, i) => (
+    <div className="flex h-7 w-full items-center gap-[3px] px-1" aria-hidden>
+      {Array.from({ length: BARS }, (_, i) => (
         <span
           key={i}
-          className={`flex-1 rounded-sm bg-black ${active ? 'animate-pulse' : 'opacity-40'}`}
+          className={`flex-1 origin-center rounded-full bg-black transition-opacity duration-300 ${
+            active ? 'animate-wave opacity-80' : 'opacity-30'
+          }`}
           style={{
-            height: `${20 + ((i * 37) % 70)}%`,
-            animationDelay: `${(i % 8) * 0.07}s`,
-            opacity: active ? 0.55 + ((i * 13) % 40) / 100 : 0.25,
+            height: `${25 + ((i * 37) % 70)}%`,
+            animationDelay: `${(i % 9) * 0.06}s`,
+            animationDuration: `${0.55 + ((i * 7) % 5) * 0.08}s`,
           }}
         />
       ))}

@@ -1,0 +1,2197 @@
+{
+  "source": "OurAirports (public domain) — https://ourairports.com/data/",
+  "fetchedAt": "2026-11-09",
+  "airports": {
+    "ATL": {
+      "icao": "KATL",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "ATLANTA APP (090°-269°)",
+          "mhz": 127.9
+        },
+        {
+          "type": "APP",
+          "description": "ATLANTA APPROACH",
+          "mhz": 128
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 119.65
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 118.1
+        },
+        {
+          "type": "DEP",
+          "description": "ATLANTA DEP (RWAY 10-28)",
+          "mhz": 121.225
+        },
+        {
+          "type": "DEP",
+          "description": "ATLANTA DEP (RWAY 09-27)",
+          "mhz": 125.65
+        },
+        {
+          "type": "DEP",
+          "description": "ATLANTA DEP (RWY 08-26)",
+          "mhz": 133.475
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.65
+        },
+        {
+          "type": "TWR",
+          "description": "ATLANTA TWR",
+          "mhz": 119.1
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 9000,
+          "widthFt": 150,
+          "le": {
+            "ident": "08L",
+            "lat": 33.64950180053711,
+            "lon": -84.43900299072266,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "26R",
+            "lat": 33.64950180053711,
+            "lon": -84.40950012207031,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 9999,
+          "widthFt": 150,
+          "le": {
+            "ident": "08R",
+            "lat": 33.64680099,
+            "lon": -84.43840027,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "26L",
+            "lat": 33.64680099,
+            "lon": -84.40550232,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 12390,
+          "widthFt": 150,
+          "le": {
+            "ident": "09L",
+            "lat": 33.63470078,
+            "lon": -84.44799805,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "27R",
+            "lat": 33.63470078,
+            "lon": -84.4088974,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 9000,
+          "widthFt": 150,
+          "le": {
+            "ident": "09R",
+            "lat": 33.63180161,
+            "lon": -84.44799805,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "27L",
+            "lat": 33.63180161,
+            "lon": -84.41840363,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 9000,
+          "widthFt": 150,
+          "le": {
+            "ident": "10",
+            "lat": 33.62030029296875,
+            "lon": -84.4478988647461,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "28",
+            "lat": 33.62030029296875,
+            "lon": -84.41829681396484,
+            "hdg": 270
+          }
+        }
+      ]
+    },
+    "LAX": {
+      "icao": "KLAX",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "SOCAL APP",
+          "mhz": 124.3
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 133.8
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 121.4
+        },
+        {
+          "type": "DEP",
+          "description": "SOCAL DEP",
+          "mhz": 124.3
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.65
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 119.8
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 8926,
+          "widthFt": 150,
+          "le": {
+            "ident": "6L",
+            "lat": 33.949119,
+            "lon": -118.431187,
+            "hdg": 83
+          },
+          "he": {
+            "ident": "24R",
+            "lat": 33.952112,
+            "lon": -118.401954,
+            "hdg": 263
+          }
+        },
+        {
+          "lengthFt": 10859,
+          "widthFt": 150,
+          "le": {
+            "ident": "6R",
+            "lat": 33.94682,
+            "lon": -118.434693,
+            "hdg": 83
+          },
+          "he": {
+            "ident": "24L",
+            "lat": 33.95047,
+            "lon": -118.399063,
+            "hdg": 263
+          }
+        },
+        {
+          "lengthFt": 12894,
+          "widthFt": 150,
+          "le": {
+            "ident": "7L",
+            "lat": 33.935556,
+            "lon": -118.422089,
+            "hdg": 83
+          },
+          "he": {
+            "ident": "25R",
+            "lat": 33.939881,
+            "lon": -118.379794,
+            "hdg": 263
+          }
+        },
+        {
+          "lengthFt": 11095,
+          "widthFt": 200,
+          "le": {
+            "ident": "7R",
+            "lat": 33.933659,
+            "lon": -118.419074,
+            "hdg": 83
+          },
+          "he": {
+            "ident": "25L",
+            "lat": 33.937371,
+            "lon": -118.3827,
+            "hdg": 263
+          }
+        }
+      ]
+    },
+    "DFW": {
+      "icao": "KDFW",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "RGNL APP",
+          "mhz": 119.875
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 123.775
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 128.25
+        },
+        {
+          "type": "DEP",
+          "description": "RGNL DEP",
+          "mhz": 118.55
+        },
+        {
+          "type": "GND",
+          "description": "RGNL GND",
+          "mhz": 121.65
+        },
+        {
+          "type": "TWR",
+          "description": "RGNL TWR",
+          "mhz": 124.15
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 9000,
+          "widthFt": 200,
+          "le": {
+            "ident": "13L",
+            "lat": 32.912601470947266,
+            "lon": -97.02149963378906,
+            "hdg": 135.3
+          },
+          "he": {
+            "ident": "31R",
+            "lat": 32.89500045776367,
+            "lon": -97.00080108642578,
+            "hdg": 315.3
+          }
+        },
+        {
+          "lengthFt": 9300,
+          "widthFt": 150,
+          "le": {
+            "ident": "13R",
+            "lat": 32.9095993,
+            "lon": -97.08309937,
+            "hdg": 139
+          },
+          "he": {
+            "ident": "31L",
+            "lat": 32.89030075,
+            "lon": -97.06330109,
+            "hdg": 319
+          }
+        },
+        {
+          "lengthFt": 13400,
+          "widthFt": 150,
+          "le": {
+            "ident": "17C",
+            "lat": 32.91569901,
+            "lon": -97.02600098,
+            "hdg": 180.3
+          },
+          "he": {
+            "ident": "35C",
+            "lat": 32.87889862,
+            "lon": -97.02619934,
+            "hdg": 0.3
+          }
+        },
+        {
+          "lengthFt": 8500,
+          "widthFt": 150,
+          "le": {
+            "ident": "17L",
+            "lat": 32.89830017089844,
+            "lon": -97.00980377197266,
+            "hdg": 180.3
+          },
+          "he": {
+            "ident": "35R",
+            "lat": 32.875,
+            "lon": -97.00990295410156,
+            "hdg": 0.3
+          }
+        },
+        {
+          "lengthFt": 13400,
+          "widthFt": 200,
+          "le": {
+            "ident": "17R",
+            "lat": 32.91569901,
+            "lon": -97.0298996,
+            "hdg": 180.3
+          },
+          "he": {
+            "ident": "35L",
+            "lat": 32.87889862,
+            "lon": -97.03009796,
+            "hdg": 0.3
+          }
+        },
+        {
+          "lengthFt": 13401,
+          "widthFt": 200,
+          "le": {
+            "ident": "18L",
+            "lat": 32.91579819,
+            "lon": -97.05069733,
+            "hdg": 180.2
+          },
+          "he": {
+            "ident": "36R",
+            "lat": 32.87900162,
+            "lon": -97.05090332,
+            "hdg": 0.2
+          }
+        },
+        {
+          "lengthFt": 13400,
+          "widthFt": 150,
+          "le": {
+            "ident": "18R",
+            "lat": 32.91579818725586,
+            "lon": -97.05460357666016,
+            "hdg": 180.3
+          },
+          "he": {
+            "ident": "36L",
+            "lat": 32.87900161743164,
+            "lon": -97.05480194091797,
+            "hdg": 0.3
+          }
+        }
+      ]
+    },
+    "DEN": {
+      "icao": "KDEN",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "APP",
+          "mhz": 119.3
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 125.6
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 118.75
+        },
+        {
+          "type": "DEP",
+          "description": "DEP",
+          "mhz": 126.1
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.85
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 124.3
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 12000,
+          "widthFt": 150,
+          "le": {
+            "ident": "07",
+            "lat": 39.84090042114258,
+            "lon": -104.72699737548828,
+            "hdg": 90.5
+          },
+          "he": {
+            "ident": "25",
+            "lat": 39.8406982421875,
+            "lon": -104.68399810791016,
+            "hdg": 270.5
+          }
+        },
+        {
+          "lengthFt": 12000,
+          "widthFt": 150,
+          "le": {
+            "ident": "08",
+            "lat": 39.877601623535156,
+            "lon": -104.66200256347656,
+            "hdg": 90.5
+          },
+          "he": {
+            "ident": "26",
+            "lat": 39.877201080322266,
+            "lon": -104.61900329589844,
+            "hdg": 270.5
+          }
+        },
+        {
+          "lengthFt": 12000,
+          "widthFt": 150,
+          "le": {
+            "ident": "16L",
+            "lat": 39.89699935913086,
+            "lon": -104.68699645996094,
+            "hdg": 180.5
+          },
+          "he": {
+            "ident": "34R",
+            "lat": 39.86410140991211,
+            "lon": -104.68699645996094,
+            "hdg": 0.5
+          }
+        },
+        {
+          "lengthFt": 16000,
+          "widthFt": 200,
+          "le": {
+            "ident": "16R",
+            "lat": 39.89580154418945,
+            "lon": -104.69599914550781,
+            "hdg": 180.5
+          },
+          "he": {
+            "ident": "34L",
+            "lat": 39.851898193359375,
+            "lon": -104.6969985961914,
+            "hdg": 0.5
+          }
+        },
+        {
+          "lengthFt": 12000,
+          "widthFt": 150,
+          "le": {
+            "ident": "17L",
+            "lat": 39.8650016784668,
+            "lon": -104.64099884033203,
+            "hdg": 180.5
+          },
+          "he": {
+            "ident": "35R",
+            "lat": 39.832000732421875,
+            "lon": -104.64199829101562,
+            "hdg": 0.5
+          }
+        },
+        {
+          "lengthFt": 12000,
+          "widthFt": 150,
+          "le": {
+            "ident": "17R",
+            "lat": 39.86119842529297,
+            "lon": -104.66000366210938,
+            "hdg": 180.5
+          },
+          "he": {
+            "ident": "35L",
+            "lat": 39.82830047607422,
+            "lon": -104.66100311279297,
+            "hdg": 0.5
+          }
+        }
+      ]
+    },
+    "ORD": {
+      "icao": "KORD",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "APP",
+          "mhz": 119
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 135.4
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 121.6
+        },
+        {
+          "type": "DEP",
+          "description": "DEP",
+          "mhz": 125
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.675
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 126.9
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 7500,
+          "widthFt": 150,
+          "le": {
+            "ident": "04L",
+            "lat": 41.9817008972168,
+            "lon": -87.91390228271484,
+            "hdg": 39
+          },
+          "he": {
+            "ident": "22R",
+            "lat": 41.997501373291016,
+            "lon": -87.89640045166016,
+            "hdg": 219
+          }
+        },
+        {
+          "lengthFt": 8075,
+          "widthFt": 150,
+          "le": {
+            "ident": "04R",
+            "lat": 41.95330047607422,
+            "lon": -87.89939880371094,
+            "hdg": 42
+          },
+          "he": {
+            "ident": "22L",
+            "lat": 41.96989822387695,
+            "lon": -87.87979888916016,
+            "hdg": 222
+          }
+        },
+        {
+          "lengthFt": 11245,
+          "widthFt": 200,
+          "le": {
+            "ident": "09C",
+            "lat": 41.98831,
+            "lon": -87.931584,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "27C",
+            "lat": 41.988326,
+            "lon": -87.890211,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 7500,
+          "widthFt": 150,
+          "le": {
+            "ident": "09L",
+            "lat": 42.002830505371094,
+            "lon": -87.92667388916016,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "27R",
+            "lat": 42.002830505371094,
+            "lon": -87.89908599853516,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 11260,
+          "widthFt": 150,
+          "le": {
+            "ident": "09R",
+            "lat": 41.98389816,
+            "lon": -87.91835022,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "27L",
+            "lat": 41.98389816,
+            "lon": -87.88905334,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 10800,
+          "widthFt": 200,
+          "le": {
+            "ident": "10C",
+            "lat": 41.96569824,
+            "lon": -87.9315033,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "28C",
+            "lat": 41.96569824,
+            "lon": -87.89179993,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 13000,
+          "widthFt": 150,
+          "le": {
+            "ident": "10L",
+            "lat": 41.96900177001953,
+            "lon": -87.93150329589844,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "28R",
+            "lat": 41.96910095214844,
+            "lon": -87.88369750976562,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 7500,
+          "widthFt": 150,
+          "le": {
+            "ident": "10R",
+            "lat": 41.95719909667969,
+            "lon": -87.92790222167969,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "28L",
+            "lat": 41.957244873046875,
+            "lon": -87.9002914428711,
+            "hdg": 270
+          }
+        }
+      ]
+    },
+    "JFK": {
+      "icao": "KJFK",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "NEW YORK APP (ROBER)",
+          "mhz": 125.7
+        },
+        {
+          "type": "APP",
+          "description": "NEW YORK APPROACH (CAMRN)",
+          "mhz": 127.4
+        },
+        {
+          "type": "APP",
+          "description": "NEW YORK APPROACH (FINAL)",
+          "mhz": 132.4
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 115.1
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 135.05
+        },
+        {
+          "type": "DEP",
+          "description": "NEW YORK DEP",
+          "mhz": 135.9
+        },
+        {
+          "type": "GND",
+          "description": "GND ALT",
+          "mhz": 121.65
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.9
+        },
+        {
+          "type": "TWR",
+          "description": "KENNEDY TWR",
+          "mhz": 119.1
+        },
+        {
+          "type": "TWR",
+          "description": "TWR ALT",
+          "mhz": 123.9
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 12079,
+          "widthFt": 200,
+          "le": {
+            "ident": "04L",
+            "lat": 40.622002,
+            "lon": -73.785599,
+            "hdg": 31
+          },
+          "he": {
+            "ident": "22R",
+            "lat": 40.6488,
+            "lon": -73.764702,
+            "hdg": 211
+          }
+        },
+        {
+          "lengthFt": 8400,
+          "widthFt": 200,
+          "le": {
+            "ident": "04R",
+            "lat": 40.62540054321289,
+            "lon": -73.77030181884766,
+            "hdg": 30.6
+          },
+          "he": {
+            "ident": "22L",
+            "lat": 40.645198822021484,
+            "lon": -73.75489807128906,
+            "hdg": 210.6
+          }
+        },
+        {
+          "lengthFt": 10000,
+          "widthFt": 200,
+          "le": {
+            "ident": "13L",
+            "lat": 40.657799,
+            "lon": -73.790199,
+            "hdg": 121
+          },
+          "he": {
+            "ident": "31R",
+            "lat": 40.6437,
+            "lon": -73.7593,
+            "hdg": 301
+          }
+        },
+        {
+          "lengthFt": 14511,
+          "widthFt": 200,
+          "le": {
+            "ident": "13R",
+            "lat": 40.648399,
+            "lon": -73.816704,
+            "hdg": 121
+          },
+          "he": {
+            "ident": "31L",
+            "lat": 40.627899,
+            "lon": -73.771599,
+            "hdg": 301
+          }
+        }
+      ]
+    },
+    "MCO": {
+      "icao": "KMCO",
+      "frequencies": [
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 121.25
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 134.7
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.8
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.45
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 9001,
+          "widthFt": 150,
+          "le": {
+            "ident": "17L",
+            "lat": 28.44370079,
+            "lon": -81.2826004,
+            "hdg": 179.5
+          },
+          "he": {
+            "ident": "35R",
+            "lat": 28.41889954,
+            "lon": -81.28230286,
+            "hdg": 359.5
+          }
+        },
+        {
+          "lengthFt": 10000,
+          "widthFt": 150,
+          "le": {
+            "ident": "17R",
+            "lat": 28.43560028076172,
+            "lon": -81.2958984375,
+            "hdg": 179
+          },
+          "he": {
+            "ident": "35L",
+            "lat": 28.408100128173828,
+            "lon": -81.29560089111328,
+            "hdg": 359
+          }
+        },
+        {
+          "lengthFt": 12005,
+          "widthFt": 200,
+          "le": {
+            "ident": "18L",
+            "lat": 28.448299407958984,
+            "lon": -81.32230377197266,
+            "hdg": 179
+          },
+          "he": {
+            "ident": "36R",
+            "lat": 28.415300369262695,
+            "lon": -81.3219985961914,
+            "hdg": 359
+          }
+        },
+        {
+          "lengthFt": 12004,
+          "widthFt": 200,
+          "le": {
+            "ident": "18R",
+            "lat": 28.448299407958984,
+            "lon": -81.3270034790039,
+            "hdg": 179
+          },
+          "he": {
+            "ident": "36L",
+            "lat": 28.415300369262695,
+            "lon": -81.32659912109375,
+            "hdg": 359
+          }
+        }
+      ]
+    },
+    "LAS": {
+      "icao": "KLAS",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "LAS VEGAS APP",
+          "mhz": 125.025
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 132.4
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 118
+        },
+        {
+          "type": "DEP",
+          "description": "LAS VEGAS DEP",
+          "mhz": 125.02
+        },
+        {
+          "type": "GND",
+          "description": "Ground",
+          "mhz": 121.1
+        },
+        {
+          "type": "TWR",
+          "description": "Tower",
+          "mhz": 119.9
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 9770,
+          "widthFt": 150,
+          "le": {
+            "ident": "01L",
+            "lat": 36.07529831,
+            "lon": -115.1699982,
+            "hdg": 25
+          },
+          "he": {
+            "ident": "19R",
+            "lat": 36.09769821,
+            "lon": -115.1579971,
+            "hdg": 205
+          }
+        },
+        {
+          "lengthFt": 9769,
+          "widthFt": 150,
+          "le": {
+            "ident": "01R",
+            "lat": 36.074167,
+            "lon": -115.1675,
+            "hdg": 25
+          },
+          "he": {
+            "ident": "19L",
+            "lat": 36.0985,
+            "lon": -115.1535,
+            "hdg": 205
+          }
+        },
+        {
+          "lengthFt": 14835,
+          "widthFt": 150,
+          "le": {
+            "ident": "08L",
+            "lat": 36.076333,
+            "lon": -115.171333,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "26R",
+            "lat": 36.076333,
+            "lon": -115.121,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 10526,
+          "widthFt": 150,
+          "le": {
+            "ident": "08R",
+            "lat": 36.07360076904297,
+            "lon": -115.16100311279297,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "26L",
+            "lat": 36.073699951171875,
+            "lon": -115.1259994506836,
+            "hdg": 270
+          }
+        }
+      ]
+    },
+    "CLT": {
+      "icao": "KCLT",
+      "frequencies": [
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 121.15
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 127.15
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.8
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.1
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 9000,
+          "widthFt": 150,
+          "le": {
+            "ident": "01L",
+            "lat": 35.224998,
+            "lon": -80.9674,
+            "hdg": 176
+          },
+          "he": {
+            "ident": "19R",
+            "lat": 35.200901,
+            "lon": -80.965302,
+            "hdg": 356
+          }
+        },
+        {
+          "lengthFt": 10000,
+          "widthFt": 150,
+          "le": {
+            "ident": "01R",
+            "lat": 35.2271,
+            "lon": -80.953102,
+            "hdg": 176
+          },
+          "he": {
+            "ident": "19L",
+            "lat": 35.200298,
+            "lon": -80.950798,
+            "hdg": 356
+          }
+        },
+        {
+          "lengthFt": 8676,
+          "widthFt": 150,
+          "le": {
+            "ident": "18",
+            "lat": 35.2244,
+            "lon": -80.936096,
+            "hdg": 176
+          },
+          "he": {
+            "ident": "36",
+            "lat": 35.201199,
+            "lon": -80.934097,
+            "hdg": 356
+          }
+        }
+      ]
+    },
+    "MIA": {
+      "icao": "KMIA",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "APP",
+          "mhz": 120.5
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 119.15
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 120.35
+        },
+        {
+          "type": "DEP",
+          "description": "DEP",
+          "mhz": 119.45
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.8
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.3
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 8600,
+          "widthFt": 150,
+          "le": {
+            "ident": "08L",
+            "lat": 25.802900314331055,
+            "lon": -80.30149841308594,
+            "hdg": 87.4
+          },
+          "he": {
+            "ident": "26R",
+            "lat": 25.804000854492188,
+            "lon": -80.27539825439453,
+            "hdg": 267.4
+          }
+        },
+        {
+          "lengthFt": 10506,
+          "widthFt": 200,
+          "le": {
+            "ident": "08R",
+            "lat": 25.80069923400879,
+            "lon": -80.30139923095703,
+            "hdg": 87
+          },
+          "he": {
+            "ident": "26L",
+            "lat": 25.802000045776367,
+            "lon": -80.26950073242188,
+            "hdg": 267
+          }
+        },
+        {
+          "lengthFt": 13016,
+          "widthFt": 150,
+          "le": {
+            "ident": "09",
+            "lat": 25.7861,
+            "lon": -80.314796,
+            "hdg": 87
+          },
+          "he": {
+            "ident": "27",
+            "lat": 25.787701,
+            "lon": -80.275398,
+            "hdg": 267
+          }
+        },
+        {
+          "lengthFt": 9360,
+          "widthFt": 150,
+          "le": {
+            "ident": "12",
+            "lat": 25.799299,
+            "lon": -80.3023,
+            "hdg": 119
+          },
+          "he": {
+            "ident": "30",
+            "lat": 25.7866,
+            "lon": -80.277496,
+            "hdg": 299
+          }
+        }
+      ]
+    },
+    "SEA": {
+      "icao": "KSEA",
+      "frequencies": [
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 128
+        },
+        {
+          "type": "GND",
+          "description": "Seattle Ground",
+          "mhz": 121.7
+        },
+        {
+          "type": "TWR",
+          "description": "Seattle Tower",
+          "mhz": 119.9
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 9426,
+          "widthFt": 150,
+          "le": {
+            "ident": "16C",
+            "lat": 47.463799,
+            "lon": -122.310997,
+            "hdg": 180
+          },
+          "he": {
+            "ident": "34C",
+            "lat": 47.438,
+            "lon": -122.310997,
+            "hdg": 360
+          }
+        },
+        {
+          "lengthFt": 11901,
+          "widthFt": 150,
+          "le": {
+            "ident": "16L",
+            "lat": 47.463799,
+            "lon": -122.307999,
+            "hdg": 180
+          },
+          "he": {
+            "ident": "34R",
+            "lat": 47.431198,
+            "lon": -122.307999,
+            "hdg": 360
+          }
+        },
+        {
+          "lengthFt": 8500,
+          "widthFt": 150,
+          "le": {
+            "ident": "16R",
+            "lat": 47.463799,
+            "lon": -122.318001,
+            "hdg": 180
+          },
+          "he": {
+            "ident": "34L",
+            "lat": 47.440498,
+            "lon": -122.318001,
+            "hdg": 360
+          }
+        }
+      ]
+    },
+    "EWR": {
+      "icao": "KEWR",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "NEW YORK APP",
+          "mhz": 127.6
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 115.7
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 118.85
+        },
+        {
+          "type": "DEP",
+          "description": "NEW YORK DEP",
+          "mhz": 119.2
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.8
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.3
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 6725,
+          "widthFt": 150,
+          "le": {
+            "ident": "11",
+            "lat": 40.702815,
+            "lon": -74.180748,
+            "hdg": 95
+          },
+          "he": {
+            "ident": "29",
+            "lat": 40.701203,
+            "lon": -74.156502,
+            "hdg": 275
+          }
+        },
+        {
+          "lengthFt": 11000,
+          "widthFt": 150,
+          "le": {
+            "ident": "4L",
+            "lat": 40.675392,
+            "lon": -74.179456,
+            "hdg": 26
+          },
+          "he": {
+            "ident": "22R",
+            "lat": 40.70257,
+            "lon": -74.16217,
+            "hdg": 206
+          }
+        },
+        {
+          "lengthFt": 9999,
+          "widthFt": 150,
+          "le": {
+            "ident": "4R",
+            "lat": 40.677588,
+            "lon": -74.174253,
+            "hdg": 26
+          },
+          "he": {
+            "ident": "22L",
+            "lat": 40.702299,
+            "lon": -74.158539,
+            "hdg": 206
+          }
+        }
+      ]
+    },
+    "SFO": {
+      "icao": "KSFO",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "NORCAL APP",
+          "mhz": 128.325
+        },
+        {
+          "type": "APP",
+          "description": "NORCAL APP SECONDARY",
+          "mhz": 133.95
+        },
+        {
+          "type": "APP",
+          "description": "NORCAL APP INITIAL CONTACT",
+          "mhz": 134.5
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 113.7
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 118.2
+        },
+        {
+          "type": "DEP",
+          "description": "NORCAL DEP NW-EAST",
+          "mhz": 120.9
+        },
+        {
+          "type": "DEP",
+          "description": "NORCAL DEP SE-WEST",
+          "mhz": 135.1
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.8
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 120.5
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 11870,
+          "widthFt": 200,
+          "le": {
+            "ident": "10L",
+            "lat": 37.628742,
+            "lon": -122.39341,
+            "hdg": 118
+          },
+          "he": {
+            "ident": "28R",
+            "lat": 37.613538,
+            "lon": -122.35716,
+            "hdg": 298
+          }
+        },
+        {
+          "lengthFt": 11381,
+          "widthFt": 200,
+          "le": {
+            "ident": "10R",
+            "lat": 37.626298,
+            "lon": -122.393124,
+            "hdg": 118
+          },
+          "he": {
+            "ident": "28L",
+            "lat": 37.61172,
+            "lon": -122.358367,
+            "hdg": 298
+          }
+        },
+        {
+          "lengthFt": 7650,
+          "widthFt": 200,
+          "le": {
+            "ident": "1L",
+            "lat": 37.607898,
+            "lon": -122.38295,
+            "hdg": 28
+          },
+          "he": {
+            "ident": "19R",
+            "lat": 37.626476,
+            "lon": -122.37063,
+            "hdg": 208
+          }
+        },
+        {
+          "lengthFt": 8660,
+          "widthFt": 200,
+          "le": {
+            "ident": "1R",
+            "lat": 37.606333,
+            "lon": -122.381061,
+            "hdg": 28
+          },
+          "he": {
+            "ident": "19L",
+            "lat": 37.627346,
+            "lon": -122.367124,
+            "hdg": 208
+          }
+        }
+      ]
+    },
+    "PHX": {
+      "icao": "KPHX",
+      "frequencies": [
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 127.575
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 118.1
+        },
+        {
+          "type": "GND",
+          "description": "NORTH",
+          "mhz": 119.75
+        },
+        {
+          "type": "GND",
+          "description": "SOUTH",
+          "mhz": 132.55
+        },
+        {
+          "type": "TWR",
+          "description": "RWAY 08-26",
+          "mhz": 118.7
+        },
+        {
+          "type": "TWR",
+          "description": "RWAY 07-25",
+          "mhz": 120.9
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 10300,
+          "widthFt": 150,
+          "le": {
+            "ident": "07L",
+            "lat": 33.43109893798828,
+            "lon": -112.0270004272461,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "25R",
+            "lat": 33.430999755859375,
+            "lon": -111.99299621582031,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 7800,
+          "widthFt": 150,
+          "le": {
+            "ident": "07R",
+            "lat": 33.42890167236328,
+            "lon": -112.0270004272461,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "25L",
+            "lat": 33.42879867553711,
+            "lon": -112.00199890136719,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 11489,
+          "widthFt": 150,
+          "le": {
+            "ident": "08",
+            "lat": 33.44089889526367,
+            "lon": -112.02999877929688,
+            "hdg": 90.1
+          },
+          "he": {
+            "ident": "26",
+            "lat": 33.440799713134766,
+            "lon": -111.99199676513672,
+            "hdg": 270.1
+          }
+        }
+      ]
+    },
+    "IAH": {
+      "icao": "KIAH",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "APP",
+          "mhz": 120.05
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 124.05
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 128.1
+        },
+        {
+          "type": "DEP",
+          "description": "DEP",
+          "mhz": 119.7
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 118.575
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 120.725
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 9000,
+          "widthFt": 150,
+          "le": {
+            "ident": "08L",
+            "lat": 30.007200241088867,
+            "lon": -95.35880279541016,
+            "hdg": 89.9
+          },
+          "he": {
+            "ident": "26R",
+            "lat": 30.007200241088867,
+            "lon": -95.33039855957031,
+            "hdg": 269.9
+          }
+        },
+        {
+          "lengthFt": 9402,
+          "widthFt": 150,
+          "le": {
+            "ident": "08R",
+            "lat": 29.99340057373047,
+            "lon": -95.3550033569336,
+            "hdg": 89.9
+          },
+          "he": {
+            "ident": "26L",
+            "lat": 29.99340057373047,
+            "lon": -95.32530212402344,
+            "hdg": 269.9
+          }
+        },
+        {
+          "lengthFt": 10000,
+          "widthFt": 150,
+          "le": {
+            "ident": "09",
+            "lat": 29.97760009765625,
+            "lon": -95.33409881591797,
+            "hdg": 90
+          },
+          "he": {
+            "ident": "27",
+            "lat": 29.97760009765625,
+            "lon": -95.30249786376953,
+            "hdg": 270
+          }
+        },
+        {
+          "lengthFt": 12001,
+          "widthFt": 150,
+          "le": {
+            "ident": "15L",
+            "lat": 29.987899780273438,
+            "lon": -95.35790252685547,
+            "hdg": 152
+          },
+          "he": {
+            "ident": "33R",
+            "lat": 29.958799362182617,
+            "lon": -95.33999633789062,
+            "hdg": 332
+          }
+        },
+        {
+          "lengthFt": 10000,
+          "widthFt": 150,
+          "le": {
+            "ident": "15R",
+            "lat": 29.9878006,
+            "lon": -95.36139679,
+            "hdg": 152
+          },
+          "he": {
+            "ident": "33L",
+            "lat": 29.96349907,
+            "lon": -95.34649658,
+            "hdg": 332
+          }
+        }
+      ]
+    },
+    "LGA": {
+      "icao": "KLGA",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "NEW YORK APP",
+          "mhz": 118
+        },
+        {
+          "type": "APP",
+          "description": "NEW YORK APP",
+          "mhz": 132.7
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 125.95
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 121.875
+        },
+        {
+          "type": "DEP",
+          "description": "NEW YORK DEP",
+          "mhz": 120.4
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.7
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.7
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 7002,
+          "widthFt": 150,
+          "le": {
+            "ident": "04",
+            "lat": 40.76919937,
+            "lon": -73.88410187,
+            "hdg": 32
+          },
+          "he": {
+            "ident": "22",
+            "lat": 40.78540039,
+            "lon": -73.87069702,
+            "hdg": 212
+          }
+        },
+        {
+          "lengthFt": 7002,
+          "widthFt": 150,
+          "le": {
+            "ident": "13",
+            "lat": 40.78229904,
+            "lon": -73.87850189,
+            "hdg": 122
+          },
+          "he": {
+            "ident": "31",
+            "lat": 40.77209854,
+            "lon": -73.85710144,
+            "hdg": 302
+          }
+        }
+      ]
+    },
+    "YYZ": {
+      "icao": "CYYZ",
+      "frequencies": [
+        {
+          "type": "ARR",
+          "description": "APP",
+          "mhz": 124.475
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 112.15
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 121.3
+        },
+        {
+          "type": "DEP",
+          "description": "TORONTO DEPARTURE",
+          "mhz": 127.575
+        },
+        {
+          "type": "DEP",
+          "description": "TORONTO DEPARTURE",
+          "mhz": 128.8
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 119.1
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.65
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.9
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.35
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.7
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 11120,
+          "widthFt": 200,
+          "le": {
+            "ident": "05",
+            "lat": 43.67390060424805,
+            "lon": -79.66390228271484,
+            "hdg": 47
+          },
+          "he": {
+            "ident": "23",
+            "lat": 43.694698333740234,
+            "lon": -79.63330078125,
+            "hdg": 227
+          }
+        },
+        {
+          "lengthFt": 9697,
+          "widthFt": 200,
+          "le": {
+            "ident": "06L",
+            "lat": 43.661048889160156,
+            "lon": -79.62342834472656,
+            "hdg": 47
+          },
+          "he": {
+            "ident": "24R",
+            "lat": 43.678977966308594,
+            "lon": -79.59736633300781,
+            "hdg": 227
+          }
+        },
+        {
+          "lengthFt": 9000,
+          "widthFt": 200,
+          "le": {
+            "ident": "06R",
+            "lat": 43.65829849243164,
+            "lon": -79.6219253540039,
+            "hdg": 47
+          },
+          "he": {
+            "ident": "24L",
+            "lat": 43.675289154052734,
+            "lon": -79.59723663330078,
+            "hdg": 227
+          }
+        },
+        {
+          "lengthFt": 11050,
+          "widthFt": 200,
+          "le": {
+            "ident": "15L",
+            "lat": 43.691898345947266,
+            "lon": -79.64219665527344,
+            "hdg": 137
+          },
+          "he": {
+            "ident": "33R",
+            "lat": 43.66999816894531,
+            "lon": -79.61389923095703,
+            "hdg": 317
+          }
+        },
+        {
+          "lengthFt": 9088,
+          "widthFt": 200,
+          "le": {
+            "ident": "15R",
+            "lat": 43.68579864501953,
+            "lon": -79.65170288085938,
+            "hdg": 137
+          },
+          "he": {
+            "ident": "33L",
+            "lat": 43.66749954223633,
+            "lon": -79.62830352783203,
+            "hdg": 317
+          }
+        }
+      ]
+    },
+    "YVR": {
+      "icao": "CYVR",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "APP",
+          "mhz": 128.6
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 124.6
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 121.4
+        },
+        {
+          "type": "DEP",
+          "description": "DEP",
+          "mhz": 126.125
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.7
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.7
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 9940,
+          "widthFt": 200,
+          "le": {
+            "ident": "08L",
+            "lat": 49.20500183105469,
+            "lon": -123.20099639892578,
+            "hdg": 100
+          },
+          "he": {
+            "ident": "26R",
+            "lat": 49.200599670410156,
+            "lon": -123.16000366210938,
+            "hdg": 280
+          }
+        },
+        {
+          "lengthFt": 11500,
+          "widthFt": 200,
+          "le": {
+            "ident": "08R",
+            "lat": 49.190101623535156,
+            "lon": -123.20800018310547,
+            "hdg": 100.3
+          },
+          "he": {
+            "ident": "26L",
+            "lat": 49.18439865112305,
+            "lon": -123.16100311279297,
+            "hdg": 280.3
+          }
+        },
+        {
+          "lengthFt": 7300,
+          "widthFt": 200,
+          "le": {
+            "ident": "13",
+            "lat": 49.19990158081055,
+            "lon": -123.20099639892578,
+            "hdg": 142
+          },
+          "he": {
+            "ident": "31",
+            "lat": 49.184200286865234,
+            "lon": -123.18199920654297,
+            "hdg": 322
+          }
+        }
+      ]
+    },
+    "YUL": {
+      "icao": "CYUL",
+      "frequencies": [
+        {
+          "type": "ARR",
+          "description": "Montreal Terminal Arrivals",
+          "mhz": 118.9
+        },
+        {
+          "type": "ARR",
+          "description": "Montreal Terminal",
+          "mhz": 126.9
+        },
+        {
+          "type": "ATIS",
+          "description": "French ATIS",
+          "mhz": 127.5
+        },
+        {
+          "type": "ATIS",
+          "description": "English ATIS",
+          "mhz": 133.7
+        },
+        {
+          "type": "DEP",
+          "description": "Montreal Terminal Departures",
+          "mhz": 118.9
+        },
+        {
+          "type": "GND",
+          "description": "Montreal Ground",
+          "mhz": 121.9
+        },
+        {
+          "type": "TWR",
+          "description": "Montreal Tower",
+          "mhz": 119.9
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 11000,
+          "widthFt": 200,
+          "le": {
+            "ident": "06L",
+            "lat": 45.461063385009766,
+            "lon": -73.7650146484375,
+            "hdg": 42.7
+          },
+          "he": {
+            "ident": "24R",
+            "lat": 45.4832763671875,
+            "lon": -73.73592376708984,
+            "hdg": 222.7
+          }
+        },
+        {
+          "lengthFt": 9600,
+          "widthFt": 200,
+          "le": {
+            "ident": "06R",
+            "lat": 45.45766067504883,
+            "lon": -73.74138641357422,
+            "hdg": 41.3
+          },
+          "he": {
+            "ident": "24L",
+            "lat": 45.477020263671875,
+            "lon": -73.71601104736328,
+            "hdg": 221.3
+          }
+        }
+      ]
+    },
+    "YYC": {
+      "icao": "CYYC",
+      "frequencies": [
+        {
+          "type": "ARR",
+          "description": "Calgary Arrivals (W)",
+          "mhz": 123.85
+        },
+        {
+          "type": "ARR",
+          "description": "Calgary Arrivals (E)",
+          "mhz": 125.9
+        },
+        {
+          "type": "ARR",
+          "description": "Calgary Arrivals",
+          "mhz": 126.525
+        },
+        {
+          "type": "ATIS",
+          "description": "Automatic Terminal Information System",
+          "mhz": 128.225
+        },
+        {
+          "type": "CLD",
+          "description": "Calgary Clearance",
+          "mhz": 120.825
+        },
+        {
+          "type": "DEP",
+          "description": "Calgary Departures",
+          "mhz": 119.8
+        },
+        {
+          "type": "GND",
+          "description": "South Ground",
+          "mhz": 121.9
+        },
+        {
+          "type": "GND",
+          "description": "North Ground",
+          "mhz": 125.35
+        },
+        {
+          "type": "TWR",
+          "description": "Calgary Tower, (W)",
+          "mhz": 118.4
+        },
+        {
+          "type": "TWR",
+          "description": "Calgary Tower, (E)",
+          "mhz": 118.875
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 8000,
+          "widthFt": 200,
+          "le": {
+            "ident": "11",
+            "lat": 51.126399993896484,
+            "lon": -114.03700256347656,
+            "hdg": 119.5
+          },
+          "he": {
+            "ident": "29",
+            "lat": 51.1156005859375,
+            "lon": -114.00599670410156,
+            "hdg": 299.5
+          }
+        },
+        {
+          "lengthFt": 14000,
+          "widthFt": 200,
+          "le": {
+            "ident": "17L",
+            "lat": 51.1483,
+            "lon": -113.989998,
+            "hdg": 180
+          },
+          "he": {
+            "ident": "35R",
+            "lat": 51.110001,
+            "lon": -113.989998,
+            "hdg": null
+          }
+        },
+        {
+          "lengthFt": 12675,
+          "widthFt": 200,
+          "le": {
+            "ident": "17R",
+            "lat": 51.13140106201172,
+            "lon": -114.02100372314453,
+            "hdg": 180
+          },
+          "he": {
+            "ident": "35L",
+            "lat": 51.09659957885742,
+            "lon": -114.02100372314453,
+            "hdg": 360
+          }
+        }
+      ]
+    },
+    "YEG": {
+      "icao": "CYEG",
+      "frequencies": [
+        {
+          "type": "APP",
+          "description": "APP",
+          "mhz": 118.3
+        },
+        {
+          "type": "ARR",
+          "description": "ARR",
+          "mhz": 120.5
+        },
+        {
+          "type": "ATIS",
+          "description": "ATIS",
+          "mhz": 128
+        },
+        {
+          "type": "CLD",
+          "description": "CLNC DEL",
+          "mhz": 124.1
+        },
+        {
+          "type": "DEP",
+          "description": "DEP",
+          "mhz": 133.65
+        },
+        {
+          "type": "GND",
+          "description": "GND",
+          "mhz": 121.7
+        },
+        {
+          "type": "TWR",
+          "description": "TWR",
+          "mhz": 118.3
+        }
+      ],
+      "runways": [
+        {
+          "lengthFt": 11000,
+          "widthFt": 200,
+          "le": {
+            "ident": "02",
+            "lat": 53.30889892578125,
+            "lon": -113.59600067138672,
+            "hdg": 33.9
+          },
+          "he": {
+            "ident": "20",
+            "lat": 53.33420181274414,
+            "lon": -113.56800079345703,
+            "hdg": 213.9
+          }
+        },
+        {
+          "lengthFt": 10200,
+          "widthFt": 200,
+          "le": {
+            "ident": "12",
+            "lat": 53.306400299072266,
+            "lon": -113.59500122070312,
+            "hdg": 135.1
+          },
+          "he": {
+            "ident": "30",
+            "lat": 53.28670120239258,
+            "lon": -113.56199645996094,
+            "hdg": 315.1
+          }
+        }
+      ]
+    }
+  }
+}

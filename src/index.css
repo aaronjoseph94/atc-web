@@ -1,35 +1,73 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+/*
+ * Global styles. Tailwind v4 utilities do the heavy lifting; this file only
+ * defines design tokens (`@theme`), base resets, keyframes, and a couple of
+ * MapLibre control tweaks.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @import 'maplibre-gl/dist/maplibre-gl.css';
 
 @theme {
   --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+
   --color-atc-yellow: #f5c518;
   --color-atc-purple: #7c5cfc;
+  --color-atc-card: #5b3df5;
+  --color-atc-card-deep: #4a2fd6;
   --color-atc-bg: #0a0e14;
+  --color-atc-panel: #121821;
   --color-atc-map: #0b1220;
   --color-atc-live: #ef4444;
   --color-atc-muted: #9aa3b5;
+
+  --animate-wave: wave 0.75s ease-in-out infinite alternate;
+  --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
+  --animate-rise: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade: fade 0.25s ease both;
+
+  @keyframes wave {
+    from {
+      transform: scaleY(0.25);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.8);
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }
 
 :root {
-  --yellow: #f5c518;
-  --purple: #7c5cfc;
-  --live: #ef4444;
-  --map-bg: #0b1220;
-  --chrome: rgba(10, 14, 20, 0.78);
-  --text: #f4f6fb;
-  --muted: #9aa3b5;
-  --font: 'Outfit', system-ui, sans-serif;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   color-scheme: dark;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
 }
 
 html,
@@ -39,10 +77,11 @@ body,
   width: 100%;
   height: 100%;
   min-height: 100dvh;
-  font-family: var(--font);
-  background: var(--map-bg);
-  color: var(--text);
   overflow: hidden;
+  background: var(--color-atc-map);
+  color: #f4f6fb;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
@@ -53,570 +92,32 @@ button {
   background: none;
 }
 
-.app-shell {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  isolation: isolate;
+/* Keep the (required) attribution unobtrusive on a dark map. */
+.maplibregl-ctrl-attrib {
+  background: rgba(10, 14, 20, 0.6) !important;
+  color: #9aa3b5 !important;
+  font-size: 10px !important;
+  border-radius: 6px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: #c4cbd8 !important;
+}
+.maplibregl-ctrl-bottom-right {
+  bottom: calc(8.25rem + var(--safe-bottom));
 }
-
-.map-fallback {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at 30% 20%, #1a2740 0%, transparent 50%),
-    linear-gradient(160deg, #0b1220, #121a2c);
-}
-
-.top-chrome {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 5;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: max(12px, env(safe-area-inset-top)) 14px 0;
-  pointer-events: none;
-}
-
-.top-chrome > * {
-  pointer-events: auto;
-}
-
-.top-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.live-badge {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
-}
-
-.live-badge.on {
-  color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.7);
-}
-
-.live-badge.on::before {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: var(--live);
-  box-shadow: 0 0 8px var(--live);
-  animation: pulse-dot 1.4s ease-in-out infinite;
-}
-
-.live-badge.off {
-  color: var(--yellow);
-  box-shadow: inset 0 0 0 1px rgba(245, 197, 24, 0.5);
-}
-
-.airport-trigger {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--chrome);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  max-width: min(72vw, 320px);
-}
-
-.airport-code {
-  font-weight: 700;
-  color: var(--yellow);
-}
-
-.airport-name-short {
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.chev {
-  transition: transform 0.25s ease;
-  opacity: 0.7;
-}
-.chev.open {
-  transform: rotate(180deg);
-}
-
-.picker-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  background: rgba(0, 0, 0, 0.45);
-  animation: fade-in 0.2s ease;
-}
-
-.airport-sheet {
-  position: fixed;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  z-index: 21;
-  width: min(100%, 480px);
-  max-height: min(72dvh, 640px);
-  overflow: auto;
-  background: #121821;
-  border-radius: 18px 18px 0 0;
-  padding: 16px 16px max(20px, env(safe-area-inset-bottom));
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
-  animation: sheet-up 0.28s ease;
-}
-
-.airport-sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.airport-sheet-head h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.airport-group h3 {
-  margin: 14px 0 8px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.airport-group ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-}
-
-.airport-option {
-  width: 100%;
-  text-align: left;
-  display: grid;
-  grid-template-columns: 52px 1fr;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-.airport-option:hover {
-  background: rgba(124, 92, 252, 0.15);
-}
-.airport-option.active {
-  background: rgba(245, 197, 24, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(245, 197, 24, 0.45);
-}
-.airport-option .code {
-  font-weight: 700;
-  color: var(--yellow);
-}
-.airport-option .name {
-  color: var(--text);
-  font-size: 14px;
-}
-
-.icon-btn {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: transparent;
-}
-.icon-btn.chrome {
-  background: var(--chrome);
-  backdrop-filter: blur(12px);
-}
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.bottom-chrome {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 12px max(12px, env(safe-area-inset-bottom));
-  pointer-events: none;
-}
-.bottom-chrome > * {
-  pointer-events: auto;
-}
-
-.station-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: linear-gradient(90deg, #f5c518 0%, #e8b40a 100%);
-  color: #1a1400;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  transition: box-shadow 0.35s ease, transform 0.35s ease;
-}
-.station-bar.live-tx {
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.35),
-    0 0 0 2px rgba(124, 92, 252, 0.55);
-}
-
-.station-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-.station-icao {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.station-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.station-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  font-size: 14px;
-}
-.station-status {
-  font-size: 12px;
-  opacity: 0.85;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 48vw;
-  transition: opacity 0.3s ease;
-}
-.station-status.tx {
-  font-weight: 600;
-}
-
-.waveform {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 28px;
-  opacity: 0.35;
-  transition: opacity 0.3s ease;
-}
-.waveform.active {
-  opacity: 1;
-}
-.waveform span {
-  width: 3px;
-  height: 6px;
-  border-radius: 2px;
-  background: #1a1400;
-}
-.waveform.active span {
-  animation: wave 0.7s ease-in-out infinite alternate;
-}
-
-.karaoke {
-  align-self: center;
-  max-width: min(92vw, 560px);
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: rgba(10, 14, 20, 0.72);
-  backdrop-filter: blur(10px);
-  text-align: center;
-  transition: opacity 0.35s ease, transform 0.35s ease;
-}
-.karaoke.idle {
-  opacity: 0.7;
-  font-size: 13px;
-  color: var(--muted);
-}
-.karaoke.active p {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.35;
-}
-.karaoke .spoken {
-  color: #fff;
-  font-weight: 600;
-}
-.karaoke .rest {
-  color: var(--muted);
-}
-.karaoke-cs {
-  display: inline-block;
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--yellow);
-  letter-spacing: 0.04em;
-}
-.karaoke.fade {
-  animation: fade-in 0.35s ease;
-}
-
-.scrubber {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--chrome);
-  backdrop-filter: blur(12px);
-}
-.scrubber input[type='range'] {
-  flex: 1;
-  accent-color: var(--yellow);
-}
-.scrubber .time {
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.text-btn {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--yellow);
-  padding: 6px 8px;
-}
-
-.flight-sheet,
-.transcripts-view {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  transform: translate(-50%, 110%);
-  z-index: 15;
-  width: min(100%, 480px);
-  background: #121821;
-  border-radius: 18px 18px 0 0;
-  padding: 10px 16px max(20px, env(safe-area-inset-bottom));
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
-  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.flight-sheet.open,
-.transcripts-view.open {
-  transform: translate(-50%, 0);
-}
-.sheet-handle {
-  width: 42px;
-  height: 4px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 4px auto 12px;
-}
-.flight-sheet header,
-.transcripts-view header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-.flight-sheet h2,
-.transcripts-view h2 {
-  margin: 0;
-  font-size: 22px;
-}
-.muted {
-  color: var(--muted);
-  margin: 4px 0 0;
-  font-size: 13px;
-}
-.pad {
-  padding: 12px 0 24px;
-}
-.flight-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 0;
-}
-.flight-stats dt {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.flight-stats dd {
-  margin: 2px 0 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-.now-line {
-  margin: 0 0 8px;
-  padding: 12px;
-  border-radius: 10px;
-  background: rgba(124, 92, 252, 0.12);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.menu-panel {
-  position: absolute;
-  top: 48px;
-  right: 0;
-  z-index: 22;
-  list-style: none;
-  margin: 0;
-  padding: 8px;
-  min-width: 220px;
-  border-radius: 12px;
-  background: #161d2a;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-}
-.menu-panel button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 8px;
-  text-align: left;
-}
-.menu-panel button:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-.overflow-menu {
-  position: relative;
-}
-
-.cue-list {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 12px;
-  max-height: 55dvh;
-  overflow: auto;
-}
-.cue-list button {
-  width: 100%;
-  text-align: left;
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  gap: 4px 10px;
-  padding: 12px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-.cue-list .t {
-  grid-row: span 2;
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.cue-list .cs {
-  color: var(--yellow);
-  font-size: 12px;
-  font-weight: 700;
-}
-.cue-list .txt {
-  grid-column: 2;
-  font-size: 14px;
-}
-
-.toast {
-  position: absolute;
-  top: max(72px, calc(env(safe-area-inset-top) + 56px));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: rgba(20, 24, 32, 0.92);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  font-size: 13px;
-  max-width: 90vw;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  border: 0;
-}
-
-.fade {
-  animation: fade-in 0.3s ease;
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes sheet-up {
-  from {
-    transform: translate(-50%, 40px);
-    opacity: 0.6;
-  }
-  to {
-    transform: translate(-50%, 0);
-    opacity: 1;
-  }
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-
-@keyframes wave {
-  from {
-    height: 5px;
-  }
-  to {
-    height: 24px;
-  }
-}
-
 @media (min-width: 768px) {
-  .airport-sheet,
-  .flight-sheet,
-  .transcripts-view {
-    border-radius: 18px;
-    bottom: 24px;
+  .maplibregl-ctrl-bottom-right {
+    bottom: 0.5rem;
   }
-  .flight-sheet.open,
-  .transcripts-view.open {
-    transform: translate(-50%, 0);
-  }
-  .station-icao {
-    font-size: 32px;
+}
+
+/* Honour OS-level reduced motion in addition to the in-app setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

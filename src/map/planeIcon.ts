@@ -1,8 +1,9 @@
 import type { Map as MapLibreMap } from 'maplibre-gl'
 
 /**
- * Self-authored CC0 top-down airliner silhouette (nose-up / north).
- * Rendered to an SDF image for MapLibre icon-color / halo styling.
+ * Self-authored CC0 top-down airliner silhouette (nose-up / north), drawn
+ * with canvas paths and registered as an SDF image so MapLibre can tint it
+ * (`icon-color`) and outline it (`icon-halo-*`) per feature.
  */
 export function ensurePlaneIcon(map: MapLibreMap, id = 'plane-icon') {
   if (map.hasImage(id)) return

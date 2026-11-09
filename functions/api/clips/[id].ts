@@ -1,53 +1,26 @@
+/**
+ * GET /api/clips/:id
+ *
+ * Serves a clip pack manifest. The manifest and audio live in the static
+ * asset bundle (`public/clips/<id>/`); this route reads the manifest through
+ * the Pages `ASSETS` binding so the id can be validated and headers set.
+ */
 import { jsonResponse } from '../../../src/api/aircraftHandler'
 import type { ClipPack } from '../../../src/api/types'
 
-/** Manifest only — audio lives under /clips/... as static assets. */
-const CLIP_META: Record<string, Omit<ClipPack, 'cues' | 'tracks'> & { manifestPath: string }> = {
-  'ord-tower-demo': {
-    id: 'ord-tower-demo',
-    stationId: 'ord-tower-28r',
-    audioUrl: '/clips/ord-tower-demo/audio.wav',
-    durationMs: 45000,
-    title: 'ORD Tower demo',
-    manifestPath: '/clips/ord-tower-demo/manifest.json',
-  },
-}
+/** Allow-list of bundled clips. */
+const CLIPS = new Set(['ord-tower-demo'])
 
-type PagesContext = {
-  params: { id: string }
-  request: Request
-}
+type Env = { ASSETS: { fetch: (req: Request | string) => Promise<Response> } }
 
-export async function onRequestGet(context: PagesContext): Promise<Response> {
-  const id = context.params.id
-  const meta = CLIP_META[id]
-  if (!meta) {
-    return jsonResponse({ error: 'not found' }, 404, 'no-store')
-  }
+export const onRequestGet: PagesFunction<Env> = async ({ params, request, env }) => {
+  const id = String(params.id ?? '')
+  if (!CLIPS.has(id)) return jsonResponse({ error: 'not found' }, 404, 'no-store')
 
-  // Prefer bundling full pack statically; function returns redirect-style meta + fetch path
-  try {
-    const origin = new URL(context.request.url).origin
-    const res = await fetch(`${origin}${meta.manifestPath}`)
-    if (res.ok) {
-      const pack = (await res.json()) as ClipPack
-      return jsonResponse(pack, 200, 'public, max-age=3600')
-    }
-  } catch {
-    /* fall through */
-  }
+  const manifestUrl = new URL(`/clips/${id}/manifest.json`, request.url)
+  const res = await env.ASSETS.fetch(new Request(manifestUrl.toString()))
+  if (!res.ok) return jsonResponse({ error: 'manifest missing' }, 500, 'no-store')
 
-  return jsonResponse(
-    {
-      id: meta.id,
-      stationId: meta.stationId,
-      audioUrl: meta.audioUrl,
-      durationMs: meta.durationMs,
-      title: meta.title,
-      cues: [],
-      tracks: {},
-    } satisfies ClipPack,
-    200,
-    'public, max-age=60',
-  )
+  const pack = (await res.json()) as ClipPack
+  return jsonResponse(pack, 200, 'public, max-age=3600')
 }

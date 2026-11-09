@@ -1,6 +1,7 @@
-import { STATIONS } from '../../src/api/stations'
+/** GET /api/stations — static catalog of controller positions for every airport. */
 import { jsonResponse } from '../../src/api/aircraftHandler'
+import { allStations } from '../../src/api/airports'
 
-export async function onRequestGet(): Promise<Response> {
-  return jsonResponse(STATIONS, 200, 'public, max-age=3600')
+export const onRequestGet: PagesFunction = async () => {
+  return jsonResponse(allStations(), 200, 'public, max-age=3600')
 }

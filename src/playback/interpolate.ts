@@ -1,4 +1,4 @@
-import type { TrackSample, TranscriptCue } from '../api/types'
+import type { Aircraft, ClipPack, TrackSample, TranscriptCue } from '../api/types'
 
 export function interpolateTrack(
   samples: TrackSample[],
@@ -30,6 +30,38 @@ export function interpolateTrack(
         ? Math.round(lerp(a.speedKt, b.speedKt, u))
         : (b.speedKt ?? a.speedKt),
   }
+}
+
+/** Aircraft positions (and the active trail) at one moment in a clip. */
+export function positionsAt(
+  clip: ClipPack | null,
+  tMs: number,
+  activeCallsign: string | null,
+  selectedIcao: string | null,
+): { aircraft: Aircraft[]; trail: [number, number][] } {
+  if (!clip) return { aircraft: [], trail: [] }
+  const aircraft: Aircraft[] = []
+  let trail: [number, number][] = []
+  for (const [cs, samples] of Object.entries(clip.tracks)) {
+    const p = interpolateTrack(samples, tMs)
+    if (!p) continue
+    const icao = cs.toLowerCase()
+    aircraft.push({
+      icao24: icao,
+      callsign: cs,
+      lat: p.lat,
+      lon: p.lon,
+      heading: p.heading,
+      altitudeFt: p.altitudeFt ?? null,
+      speedKt: p.speedKt ?? null,
+      onGround: (p.altitudeFt ?? 0) < 50,
+    })
+    if (activeCallsign === cs || selectedIcao === icao) {
+      trail = samples.filter((s) => s.tMs <= tMs).map((s) => [s.lon, s.lat] as [number, number])
+      trail.push([p.lon, p.lat])
+    }
+  }
+  return { aircraft, trail }
 }
 
 export function getActiveCue(cues: TranscriptCue[], tMs: number): TranscriptCue | null {

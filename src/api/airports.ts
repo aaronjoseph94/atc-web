@@ -1,7 +1,14 @@
-import type { Station } from './types'
+/**
+ * Static airport catalog. Each entry drives the map camera (center/zoom),
+ * the traffic query area (radius for readsb providers, bbox for OpenSky)
+ * and the list of controller stations shown in the station bar.
+ */
+import { getFrequency } from './airportData'
+import type { Station, StationKind } from './types'
 
 export type AirportGroup = 'US' | 'Canada'
 
+/** Lat/lon bounding box in OpenSky parameter naming. */
 export type AirportBbox = {
   lamin: number
   lomin: number
@@ -10,22 +17,49 @@ export type AirportBbox = {
 }
 
 export type AirportConfig = {
+  /** IATA-style 3-letter code used throughout the UI (ORD, YYZ, …). */
   icao: string
   name: string
   group: AirportGroup
+  /** `[lon, lat]` — MapLibre ordering. */
   center: [number, number]
   zoom: number
   bbox: AirportBbox
+  /** Query radius in nautical miles for point-based providers. */
+  radiusNm: number
   stations: Station[]
 }
 
-function station(airport: string, name: string, suffix: string, label: string): Station {
+/** Optional per-airport sizing for busy or sprawling fields. */
+type AirportPad = { dLat?: number; dLon?: number; radiusNm?: number }
+
+/** Build a station; the published frequency is looked up from OurAirports data. */
+function station(airport: string, name: string, suffix: string, label: string, kind?: StationKind): Station {
+  // Ground positions are the only hand-listed ones that aren't towers.
+  const resolved: StationKind = kind ?? (suffix.startsWith('ground') ? 'GND' : 'TWR')
   return {
     id: `${airport.toLowerCase()}-${suffix}`,
     airport,
     name,
     label,
+    kind: resolved,
+    frequencyMhz: getFrequency(airport, resolved)?.mhz,
   }
+}
+
+/**
+ * Approach / Departure / ATIS positions exist at every airport in the
+ * catalog but aren't worth hand-listing; add them when a frequency is known.
+ */
+function autoStations(airport: string, name: string): Station[] {
+  const extra: [StationKind, string, string][] = [
+    ['APP', 'approach', 'Approach'],
+    ['DEP', 'departure', 'Departure'],
+    ['ATIS', 'atis', 'ATIS (weather)'],
+  ]
+  return extra
+    .filter(([kind]) => getFrequency(airport, kind))
+    .map(([kind, suffix, label]) => station(airport, name, suffix, label, kind))
 }
 
 function bboxAround(lat: number, lon: number, dLat = 0.06, dLon = 0.08): AirportBbox {
@@ -45,7 +79,7 @@ function apt(
   lon: number,
   zoom: number,
   stations: Station[],
-  pad?: { dLat?: number; dLon?: number },
+  pad?: AirportPad,
 ): AirportConfig {
   return {
     icao,
@@ -54,11 +88,12 @@ function apt(
     center: [lon, lat],
     zoom,
     bbox: bboxAround(lat, lon, pad?.dLat, pad?.dLon),
-    stations,
+    radiusNm: pad?.radiusNm ?? 12,
+    stations: [...stations, ...autoStations(icao, stations[0]?.name ?? name)],
   }
 }
 
-/** Static free airport catalog — bbox/center for OpenSky + map camera. */
+/** All supported airports, in display order (US first, then Canada). */
 export const AIRPORTS: AirportConfig[] = [
   apt('ATL', 'Hartsfield–Jackson Atlanta', 'US', 33.6407, -84.4277, 12.2, [
     station('ATL', 'Atlanta', 'tower', 'Tower'),
@@ -71,11 +106,11 @@ export const AIRPORTS: AirportConfig[] = [
   apt('DFW', 'Dallas/Fort Worth International', 'US', 32.8998, -97.0403, 11.8, [
     station('DFW', 'Dallas/Fort Worth', 'tower-e', 'Tower (East)'),
     station('DFW', 'Dallas/Fort Worth', 'ground', 'Ground'),
-  ], { dLat: 0.08, dLon: 0.1 }),
+  ], { dLat: 0.08, dLon: 0.1, radiusNm: 15 }),
   apt('DEN', 'Denver International', 'US', 39.8561, -104.6737, 11.7, [
     station('DEN', 'Denver', 'tower', 'Tower'),
     station('DEN', 'Denver', 'ground', 'Ground'),
-  ], { dLat: 0.08, dLon: 0.1 }),
+  ], { dLat: 0.08, dLon: 0.1, radiusNm: 15 }),
   apt('ORD', "Chicago O'Hare International", 'US', 41.9742, -87.9073, 12.3, [
     station('ORD', "Chicago O'Hare", 'tower-28r', 'Tower (Rwy 10L-28R)'),
     station('ORD', "Chicago O'Hare", 'ground-south', 'Ground (South Secondary)'),
@@ -150,6 +185,7 @@ export const DEFAULT_AIRPORT = 'ORD'
 
 const byIcao = new Map(AIRPORTS.map((a) => [a.icao, a]))
 
+/** Case-insensitive lookup; unknown codes resolve to the default airport. */
 export function getAirport(icao: string): AirportConfig {
   return byIcao.get(icao.toUpperCase()) ?? byIcao.get(DEFAULT_AIRPORT)!
 }
@@ -167,4 +203,9 @@ export function airportsByGroup(): Record<AirportGroup, AirportConfig[]> {
 
 export function allStations(): Station[] {
   return AIRPORTS.flatMap((a) => a.stations)
+}
+
+/** Find the airport that owns a station id (e.g. `ord-tower-28r` → ORD). */
+export function airportForStation(stationId: string): AirportConfig | undefined {
+  return AIRPORTS.find((a) => a.stations.some((s) => s.id === stationId))
 }
