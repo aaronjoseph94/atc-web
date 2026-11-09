@@ -13,6 +13,11 @@ export type Aircraft = {
   lon: number
   /** True track in degrees (0–360, clockwise from north). */
   heading: number
+  /**
+   * False when the feed sent no track or heading at all (common for parked
+   * aircraft). The icon then shouldn't pretend to point north.
+   */
+  headingKnown?: boolean
   altitudeFt: number | null
   speedKt: number | null
   onGround: boolean
@@ -22,6 +27,23 @@ export type Aircraft = {
   registration?: string | null
   /** Barometric vertical rate in ft/min (positive = climbing). */
   verticalRateFpm?: number | null
+  /** ADS-B emitter category (`A1` light … `A5` heavy, `A7` rotorcraft, `C1`/`C2` ground vehicles). */
+  category?: string | null
+  /** Transponder code as four octal digits. */
+  squawk?: string | null
+  /** Declared emergency (`general`, `nordo`, `minfuel`, …); null when none. */
+  emergency?: string | null
+  /** Altitude dialled into the autopilot, when broadcast. */
+  selectedAltitudeFt?: number | null
+}
+
+/** What `/api/aircraft` resolved to, including which feed answered. */
+export type AircraftSnapshot = {
+  aircraft: Aircraft[]
+  /** Name of the feed that answered, or null when every feed failed. */
+  provider: string | null
+  /** Upstream failure summary when every feed failed. */
+  error: string | null
 }
 
 /** One timed transcript line inside a clip pack. */
@@ -42,6 +64,8 @@ export type TrackSample = {
   heading: number
   altitudeFt?: number
   speedKt?: number
+  /** Explicit surface flag; when absent, altitude below 50 ft counts as ground. */
+  onGround?: boolean
 }
 
 /**
@@ -54,9 +78,25 @@ export type ClipPack = {
   audioUrl: string
   durationMs: number
   title: string
+  /** One-sentence scene description for the clip picker. */
+  description?: string
+  /** Catalog airport code the clip takes place at. */
+  airport?: string
   cues: TranscriptCue[]
-  /** Keyed by callsign. */
+  /** Keyed by callsign. An aircraft is drawn only between its first and last sample. */
   tracks: Record<string, TrackSample[]>
+  /** Optional details per callsign, for silhouettes and the flight card. */
+  aircraft?: Record<string, { type?: string; registration?: string }>
+}
+
+/** Entry in `/clips/index.json`. */
+export type ClipSummary = {
+  id: string
+  title: string
+  description?: string
+  airport: string
+  stationId: string
+  durationMs: number
 }
 
 /** Controller position kind; maps onto OurAirports frequency types. */
@@ -71,4 +111,81 @@ export type Station = {
   kind: StationKind
   /** Published VHF frequency in MHz (from OurAirports), when known. */
   frequencyMhz?: number
+}
+
+// ---------------------------------------------------------------------------
+// Weather
+// ---------------------------------------------------------------------------
+
+export type FlightCategory = 'VFR' | 'MVFR' | 'IFR' | 'LIFR'
+
+/** Decoded surface observation (METAR) for an airport. */
+export type Metar = {
+  raw: string
+  /** ISO timestamp of the observation. */
+  observedAt: string
+  /** Degrees true the wind blows FROM; null when calm or variable. */
+  windDirDeg: number | null
+  windVariable: boolean
+  windKt: number | null
+  gustKt: number | null
+  /** Statute miles; `visibilityPlus` marks "10 or more". */
+  visibilitySm: number | null
+  visibilityPlus: boolean
+  tempC: number | null
+  dewpointC: number | null
+  /** Altimeter setting in inches of mercury. */
+  altimeterInHg: number | null
+  flightCategory: FlightCategory | null
+  clouds: { cover: string; baseFt: number | null }[]
+  /** Present-weather codes such as `-RA BR`. */
+  weather: string | null
+}
+
+/** One digital ATIS broadcast (US airports that publish D-ATIS). */
+export type Atis = {
+  /** Information letter (A–Z). */
+  code: string
+  kind: 'combined' | 'arrival' | 'departure'
+  text: string
+  updatedAt: string | null
+}
+
+export type Weather = {
+  airport: string
+  icao: string
+  metar: Metar | null
+  atis: Atis[]
+  fetchedAt: string
+}
+
+// ---------------------------------------------------------------------------
+// Flight details (route, airframe, photo)
+// ---------------------------------------------------------------------------
+
+export type RouteAirport = {
+  iata: string | null
+  icao: string | null
+  name: string | null
+  city: string | null
+  lat: number | null
+  lon: number | null
+}
+
+export type FlightInfo = {
+  callsign: string | null
+  airline: string | null
+  origin: RouteAirport | null
+  destination: RouteAirport | null
+  /** Marketing type name, e.g. `A321 231SL`. */
+  typeName: string | null
+  manufacturer: string | null
+  registration: string | null
+  owner: string | null
+  photo: {
+    thumbnail: string
+    /** Page to link to; photo sites require the link back. */
+    link: string | null
+    photographer: string | null
+  } | null
 }

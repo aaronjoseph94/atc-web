@@ -29,7 +29,23 @@ export function interpolateTrack(
       a.speedKt != null && b.speedKt != null
         ? Math.round(lerp(a.speedKt, b.speedKt, u))
         : (b.speedKt ?? a.speedKt),
+    // Wheels leave or touch the ground at the sample boundary, not halfway.
+    onGround: u < 1 ? a.onGround : b.onGround,
   }
+}
+
+/** Grace period either side of a track during which the aircraft stays drawn. */
+const TRACK_EDGE_MS = 250
+
+/** True while `tMs` falls inside the span a track covers (aircraft is "on stage"). */
+export function trackVisibleAt(samples: TrackSample[], tMs: number): boolean {
+  if (!samples.length) return false
+  return tMs >= samples[0].tMs - TRACK_EDGE_MS && tMs <= samples[samples.length - 1].tMs + TRACK_EDGE_MS
+}
+
+/** A sample's surface state: the explicit flag, else "below 50 ft". */
+export function sampleOnGround(p: TrackSample): boolean {
+  return p.onGround ?? (p.altitudeFt ?? 0) < 50
 }
 
 /** Aircraft positions (and the active trail) at one moment in a clip. */
@@ -43,9 +59,12 @@ export function positionsAt(
   const aircraft: Aircraft[] = []
   let trail: [number, number][] = []
   for (const [cs, samples] of Object.entries(clip.tracks)) {
+    // Arrivals enter and departures leave: only draw a track inside its own span.
+    if (!trackVisibleAt(samples, tMs)) continue
     const p = interpolateTrack(samples, tMs)
     if (!p) continue
     const icao = cs.toLowerCase()
+    const extra = clip.aircraft?.[cs]
     aircraft.push({
       icao24: icao,
       callsign: cs,
@@ -54,7 +73,9 @@ export function positionsAt(
       heading: p.heading,
       altitudeFt: p.altitudeFt ?? null,
       speedKt: p.speedKt ?? null,
-      onGround: (p.altitudeFt ?? 0) < 50,
+      onGround: sampleOnGround(p),
+      type: extra?.type ?? null,
+      registration: extra?.registration ?? null,
     })
     if (activeCallsign === cs || selectedIcao === icao) {
       trail = samples.filter((s) => s.tMs <= tMs).map((s) => [s.lon, s.lat] as [number, number])
@@ -83,6 +104,6 @@ function lerp(a: number, b: number, u: number) {
 }
 
 function lerpAngle(a: number, b: number, u: number) {
-  let d = ((b - a + 540) % 360) - 180
+  const d = ((b - a + 540) % 360) - 180
   return (a + d * u + 360) % 360
 }

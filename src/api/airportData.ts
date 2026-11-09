@@ -22,16 +22,28 @@ export type RunwayEnd = {
   lon: number
   /** True heading in degrees, when published. */
   hdg: number | null
+  /** Distance the landing threshold is moved in from the pavement end, feet. */
+  displacedFt?: number
 }
 
 export type Runway = {
   lengthFt: number | null
   widthFt: number | null
+  /** Surface as published (`ASP`, `CON`, …). */
+  surface?: string | null
   le: RunwayEnd
   he: RunwayEnd
 }
 
-type AirportRecord = { icao: string; frequencies: Frequency[]; runways: Runway[] }
+type AirportRecord = {
+  icao: string
+  /** Airport reference point. */
+  lat: number | null
+  lon: number | null
+  elevationFt: number | null
+  frequencies: Frequency[]
+  runways: Runway[]
+}
 
 const DATA = raw as { source: string; fetchedAt: string; airports: Record<string, AirportRecord> }
 
@@ -80,6 +92,50 @@ export function getFrequency(iata: string, type: FrequencyType): Frequency | und
 
 export function getRunways(iata: string): Runway[] {
   return record(iata)?.runways ?? []
+}
+
+/** Field elevation in feet above sea level (0 when unknown). */
+export function getElevationFt(iata: string): number {
+  return record(iata)?.elevationFt ?? 0
+}
+
+/** Published airport reference point as `[lon, lat]`, when known. */
+export function getReferencePoint(iata: string): [number, number] | null {
+  const r = record(iata)
+  return r?.lat != null && r.lon != null ? [r.lon, r.lat] : null
+}
+
+/**
+ * Box around every runway end as `[[west, south], [east, north]]`: the area
+ * the camera should frame to show the whole airfield.
+ */
+export function getRunwayBounds(iata: string): [[number, number], [number, number]] | null {
+  const runways = getRunways(iata)
+  if (!runways.length) return null
+  let w = Infinity
+  let s = Infinity
+  let e = -Infinity
+  let n = -Infinity
+  for (const r of runways) {
+    for (const end of [r.le, r.he]) {
+      w = Math.min(w, end.lon)
+      e = Math.max(e, end.lon)
+      s = Math.min(s, end.lat)
+      n = Math.max(n, end.lat)
+    }
+  }
+  return [
+    [w, s],
+    [e, n],
+  ]
+}
+
+/**
+ * Runway designator as painted on the pavement. US runways drop the leading
+ * zero ("4L"); everywhere else keeps it ("05").
+ */
+export function paintedDesignator(ident: string, icao: string | undefined): string {
+  return icao?.startsWith('K') || icao?.startsWith('P') ? ident.replace(/^0/, '') : ident
 }
 
 /** Format MHz the way controllers say it: three decimals max, no trailing zeros past two. */

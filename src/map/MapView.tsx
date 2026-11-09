@@ -74,8 +74,8 @@ export function MapView() {
       setLive('error')
       setToast('Live traffic unavailable — playback still works')
     } else if (query.data) {
-      liveBuffer.push(query.data)
-      setLive('ok', query.data.length)
+      liveBuffer.push(query.data.aircraft)
+      setLive('ok', query.data.aircraft.length)
     } else if (query.isPending) {
       setLive('loading')
     }

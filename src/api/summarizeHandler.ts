@@ -11,8 +11,8 @@
  *   AI_API_KEY   – provider key. Absent → rules mode.
  *   AI_BASE_URL  – default https://openrouter.ai/api/v1 (OpenAI-compatible).
  *                  Use https://api.anthropic.com for the native Anthropic API.
- *   AI_MODEL     – default anthropic/claude-3.5-haiku (OpenRouter id) or
- *                  claude-3-5-haiku-latest for native Anthropic.
+ *   AI_MODEL     – default anthropic/claude-haiku-5.5 (OpenRouter id) or
+ *                  claude-haiku-5-5 for native Anthropic.
  */
 import { summarizeExchange, type Transmission } from '../flight/describe'
 
@@ -50,8 +50,13 @@ const MAX_CHARS = 1800
 const AI_TIMEOUT_MS = 9000
 
 const DEFAULT_OPENAI_BASE = 'https://openrouter.ai/api/v1'
-const DEFAULT_OPENAI_MODEL = 'anthropic/claude-3.5-haiku'
-const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-haiku-latest'
+const DEFAULT_OPENAI_MODEL = 'anthropic/claude-haiku-5.5'
+const DEFAULT_ANTHROPIC_MODEL = 'claude-haiku-5-5'
+/**
+ * Current models think before answering and that counts toward the cap, so it
+ * is sized for thinking plus a two-sentence reply rather than the reply alone.
+ */
+const MAX_OUTPUT_TOKENS = 1024
 
 const SYSTEM_PROMPT =
   'You explain air traffic control radio calls to curious members of the public with no aviation background. ' +
@@ -137,8 +142,7 @@ async function callOpenAiCompatible(env: AiEnv, req: SummarizeRequest, signal: A
     },
     body: JSON.stringify({
       model,
-      max_tokens: 120,
-      temperature: 0.2,
+      max_tokens: MAX_OUTPUT_TOKENS,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt(req) },
@@ -165,14 +169,16 @@ async function callAnthropic(env: AiEnv, req: SummarizeRequest, signal: AbortSig
     },
     body: JSON.stringify({
       model,
-      max_tokens: 120,
-      temperature: 0.2,
+      // No sampling parameters: current Claude models reject non-default values.
+      max_tokens: MAX_OUTPUT_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt(req) }],
     }),
   })
   if (!res.ok) throw new Error(`AI HTTP ${res.status}`)
-  const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+  const data = (await res.json()) as { stop_reason?: string; content?: { type: string; text?: string }[] }
+  if (data.stop_reason === 'refusal') throw new Error('AI declined the request')
+  // Replies can open with thinking blocks, so pick the text block by type.
   const text = data.content?.find((c) => c.type === 'text')?.text?.trim()
   if (!text) throw new Error('AI returned no content')
   return text

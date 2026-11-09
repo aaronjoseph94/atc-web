@@ -3,7 +3,7 @@
  * the traffic query area (radius for readsb providers, bbox for OpenSky)
  * and the list of controller stations shown in the station bar.
  */
-import { getFrequency } from './airportData'
+import { getElevationFt, getFrequency, getReferencePoint, getRunwayBounds } from './airportData'
 import type { Station, StationKind } from './types'
 
 export type AirportGroup = 'US' | 'Canada'
@@ -27,6 +27,10 @@ export type AirportConfig = {
   bbox: AirportBbox
   /** Query radius in nautical miles for point-based providers. */
   radiusNm: number
+  /** Field elevation, feet above sea level. */
+  elevationFt: number
+  /** `[[west, south], [east, north]]` framing every runway. */
+  bounds: [[number, number], [number, number]]
   stations: Station[]
 }
 
@@ -89,8 +93,34 @@ function apt(
     zoom,
     bbox: bboxAround(lat, lon, pad?.dLat, pad?.dLon),
     radiusNm: pad?.radiusNm ?? 12,
+    elevationFt: getElevationFt(icao),
+    bounds: getRunwayBounds(icao) ?? [
+      [lon - 0.03, lat - 0.02],
+      [lon + 0.03, lat + 0.02],
+    ],
     stations: [...stations, ...autoStations(icao, stations[0]?.name ?? name)],
   }
+}
+
+/**
+ * Catalog entry positioned from the OurAirports snapshot (centre of the
+ * runway complex), with the standard Tower + Ground pair.
+ */
+function std(icao: string, name: string, short: string, group: AirportGroup, zoom = 12.2, pad?: AirportPad): AirportConfig {
+  const b = getRunwayBounds(icao)
+  const ref = getReferencePoint(icao) ?? [0, 0]
+  const lon = b ? (b[0][0] + b[1][0]) / 2 : ref[0]
+  const lat = b ? (b[0][1] + b[1][1]) / 2 : ref[1]
+  return apt(
+    icao,
+    name,
+    group,
+    Math.round(lat * 1e4) / 1e4,
+    Math.round(lon * 1e4) / 1e4,
+    zoom,
+    [station(icao, short, 'tower', 'Tower'), station(icao, short, 'ground', 'Ground')],
+    pad,
+  )
 }
 
 /** All supported airports, in display order (US first, then Canada). */
@@ -159,6 +189,19 @@ export const AIRPORTS: AirportConfig[] = [
     station('LGA', 'LaGuardia New York', 'tower', 'Tower'),
     station('LGA', 'LaGuardia New York', 'ground', 'Ground'),
   ]),
+  std('BOS', 'Boston Logan International', 'Boston', 'US', 12.4),
+  std('MSP', 'Minneapolis–Saint Paul International', 'Minneapolis', 'US'),
+  std('DTW', 'Detroit Metropolitan Wayne County', 'Detroit', 'US', 12.0),
+  std('PHL', 'Philadelphia International', 'Philadelphia', 'US'),
+  std('SLC', 'Salt Lake City International', 'Salt Lake City', 'US'),
+  std('DCA', 'Ronald Reagan Washington National', 'Washington National', 'US', 13.0),
+  std('IAD', 'Washington Dulles International', 'Dulles', 'US', 11.8, { dLat: 0.08, dLon: 0.1, radiusNm: 15 }),
+  std('SAN', 'San Diego International', 'San Diego', 'US', 13.0),
+  std('FLL', 'Fort Lauderdale–Hollywood International', 'Fort Lauderdale', 'US', 12.6),
+  std('MDW', 'Chicago Midway International', 'Chicago Midway', 'US', 13.2),
+  std('PDX', 'Portland International', 'Portland', 'US'),
+  std('AUS', 'Austin–Bergstrom International', 'Austin', 'US'),
+  std('BNA', 'Nashville International', 'Nashville', 'US'),
   apt('YYZ', 'Toronto Pearson International', 'Canada', 43.6777, -79.6248, 12.2, [
     station('YYZ', 'Toronto Pearson', 'tower', 'Tower'),
     station('YYZ', 'Toronto Pearson', 'ground', 'Ground'),
@@ -179,6 +222,9 @@ export const AIRPORTS: AirportConfig[] = [
     station('YEG', 'Edmonton', 'tower', 'Tower'),
     station('YEG', 'Edmonton', 'ground', 'Ground'),
   ]),
+  std('YOW', 'Ottawa Macdonald–Cartier International', 'Ottawa', 'Canada'),
+  std('YWG', 'Winnipeg Richardson International', 'Winnipeg', 'Canada'),
+  std('YHZ', 'Halifax Stanfield International', 'Halifax', 'Canada'),
 ]
 
 export const DEFAULT_AIRPORT = 'ORD'

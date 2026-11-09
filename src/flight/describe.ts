@@ -179,10 +179,21 @@ const NUM_WORDS: Record<string, string> = {
   nine: '9', niner: '9',
 }
 
-/** Convert spoken digits ("two eight right") into "28R"; leaves other words alone. */
-function digitsFromWords(s: string): string {
+const TENS: Record<string, number> = {
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70,
+  eighty: 80, ninety: 90,
+}
+
+/**
+ * Convert spoken numbers into digits and leave other words alone:
+ * "two eight right" → "28R", "one two five point zero" → "125.0",
+ * "two thousand five hundred" → "2500", "flight level two three zero" → "flight level 230".
+ */
+export function digitsFromWords(s: string): string {
   const out: string[] = []
-  const words = s.toLowerCase().split(/\s+/)
+  // Punctuation would otherwise glue itself to a number word ("eight," ≠ "eight").
+  const words = s.toLowerCase().replace(/[,;:!?]/g, ' ').replace(/\.(?=\s|$)/g, ' ').split(/\s+/).filter(Boolean)
   let buf = ''
   for (const w of words) {
     const d = NUM_WORDS[w]
@@ -190,26 +201,39 @@ function digitsFromWords(s: string): string {
       buf += d
       continue
     }
+    // "two thousand", "five hundred": scale the digits just read.
+    if ((w === 'thousand' || w === 'hundred') && buf) {
+      out.push(String(Number(buf) * (w === 'thousand' ? 1000 : 100)))
+      buf = ''
+      continue
+    }
     if (buf) {
       out.push(buf)
       buf = ''
     }
     if (w === 'point' || w === 'decimal') out.push('.')
+    else if (TENS[w] != null) out.push(String(TENS[w]))
     else out.push(w)
   }
   if (buf) out.push(buf)
-  // Join and glue runway suffixes / decimal points: "28 right" → "28R", "126 . 47" → "126.47"
   return out
     .join(' ')
+    // "2000 500" → "2500"
+    .replace(/\b(\d+000) (\d00)\b/g, (_, a: string, b: string) => String(Number(a) + Number(b)))
+    // Runway suffixes and decimal points: "28 right" → "28R", "126 . 47" → "126.47"
     .replace(/(\d+) (left|right|center|centre)\b/g, (_, n: string, side: string) => `${n}${side[0].toUpperCase()}`)
     .replace(/(\d+) \. (\d+)/g, '$1.$2')
 }
 
 type Rule = { re: RegExp; say: (m: RegExpMatchArray) => string }
 
-/** Runway designator mentioned anywhere in the (already normalized) call. */
+/**
+ * Runway designator mentioned anywhere in the (already normalized) call:
+ * "runway 28R", "runway 9", or a bare "28R" in a clipped readback.
+ */
 function runwayIn(m: RegExpMatchArray): string | undefined {
-  return /runway (\d+[LRC])/.exec(m.input ?? '')?.[1]
+  const text = m.input ?? ''
+  return (/runway (\d{1,2}[LRC]?)\b/.exec(text) ?? /\b(\d{1,2}[LRC])\b/.exec(text))?.[1]
 }
 
 const RULES: Rule[] = [
@@ -221,10 +245,15 @@ const RULES: Rule[] = [
     re: /cleared to land/,
     say: (m) => (runwayIn(m) ? `Cleared to land on runway ${runwayIn(m)}.` : 'Cleared to land.'),
   },
-  { re: /line up and wait(?: runway)? ?(\d+[LRC]?)?/, say: (m) => `Move onto runway ${m[1] ?? ''} and wait there for takeoff clearance.`.replace('  ', ' ') },
-  { re: /hold short(?: of)?(?: runway)? (\d+[LRC]?)/, say: (m) => `Stop and wait before runway ${m[1]} — do not enter it.` },
-  { re: /go around/, say: () => 'Abort the landing and climb away for another attempt.' },
-  { re: /contact (departure|tower|ground|approach|center|centre)(?: on)? ([\d.]+)/, say: (m) => `Switch your radio to ${cap(m[1])} on ${m[2]}.` },
+  {
+    re: /line up and wait/,
+    say: (m) => `Move onto ${runwayIn(m) ? `runway ${runwayIn(m)}` : 'the runway'} and wait there for takeoff clearance.`,
+  },
+  { re: /hold short(?: of)?(?: runway)? (\d+[LRC]?)/, say: (m) => `Stop and wait before runway ${m[1]}; do not enter it.` },
+  { re: /go(?:ing)? around/, say: () => 'Abort the landing and climb away for another attempt.' },
+  { re: /continue\b/, say: () => 'Keep flying the approach; landing clearance will follow.' },
+  { re: /caution wake turbulence/, say: () => 'Watch out for rough air left behind by the larger aircraft ahead.' },
+  { re: /contact (?:\w+ )?(departure|tower|ground|approach|center|centre)(?: on)? ([\d.]+)/, say: (m) => `Switch your radio to ${cap(m[1])} on ${m[2]}.` },
   { re: /monitor (tower|ground|departure|approach)(?: on)? ([\d.]+)/, say: (m) => `Tune to ${cap(m[1])} on ${m[2]} and listen.` },
   { re: /turn (left|right) heading (\d{1,3})/, say: (m) => `Turn ${m[1]} to point ${m[2]}° (${compassDirection(Number(m[2]))}).` },
   { re: /fly heading (\d{1,3})/, say: (m) => `Fly toward ${m[1]}° (${compassDirection(Number(m[1]))}).` },

@@ -3,6 +3,7 @@ import {
   aircraftTypeName,
   compassDirection,
   describeCallsign,
+  digitsFromWords,
   explainTransmission,
   flightPhase,
   friendlyFlightName,
@@ -40,7 +41,29 @@ describe('plain language helpers', () => {
   })
 })
 
+describe('digitsFromWords', () => {
+  it('reads runways, frequencies and altitudes through punctuation', () => {
+    expect(digitsFromWords('runway two eight right, cleared for takeoff.')).toBe('runway 28R cleared for takeoff')
+    expect(digitsFromWords('contact departure one two five point zero')).toBe('contact departure 125.0')
+    expect(digitsFromWords('climb and maintain two thousand')).toBe('climb and maintain 2000')
+    expect(digitsFromWords('maintain two thousand five hundred')).toBe('maintain 2500')
+    expect(digitsFromWords('descend and maintain one zero thousand')).toBe('descend and maintain 10000')
+  })
+})
+
 describe('explainTransmission', () => {
+  it('finds the runway whether it comes before or after the instruction', () => {
+    expect(explainTransmission({ text: 'American five forty, runway two eight right, line up and wait.' })).toBe(
+      'Move onto runway 28R and wait there for takeoff clearance.',
+    )
+    expect(explainTransmission({ speaker: 'Pilot', text: 'Cleared to land two two left, Delta four eighteen.' })).toContain('22L')
+  })
+
+  it('explains a go-around and an altitude in thousands', () => {
+    expect(explainTransmission({ text: 'Speedbird one seven three heavy, go around. Traffic still on the runway.' })).toMatch(/Abort the landing/)
+    expect(explainTransmission({ text: 'climb and maintain two thousand' })).toBe('Climb to 2,000 ft.')
+  })
+
   it('translates a takeoff clearance', () => {
     const s = explainTransmission({
       speaker: 'Tower',

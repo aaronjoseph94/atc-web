@@ -22,12 +22,25 @@ describe('airports catalog', () => {
     const g = airportsByGroup()
     expect(g.US.every((a) => a.group === 'US')).toBe(true)
     expect(g.Canada.every((a) => a.group === 'Canada')).toBe(true)
-    expect(g.US).toHaveLength(16)
-    expect(g.Canada).toHaveLength(5)
+    expect(g.US).toHaveLength(29)
+    expect(g.Canada).toHaveLength(8)
+  })
+
+  it('positions snapshot-driven airports on their runway complex', () => {
+    const bos = getAirport('BOS')
+    expect(bos.center[1]).toBeCloseTo(42.36, 1)
+    expect(bos.center[0]).toBeCloseTo(-71.01, 1)
+    expect(bos.elevationFt).toBe(20)
+    expect(bos.stations.find((s) => s.kind === 'TWR')?.frequencyMhz).toBeGreaterThan(118)
   })
 
   it('each airport has bbox, center, zoom, and ≥1 station', () => {
     for (const a of AIRPORTS) {
+      expect(a.bounds[1][0]).toBeGreaterThan(a.bounds[0][0])
+      expect(a.bounds[1][1]).toBeGreaterThan(a.bounds[0][1])
+      // The camera frame must contain the traffic query centre.
+      expect(a.center[0]).toBeGreaterThan(a.bounds[0][0] - 0.05)
+      expect(a.center[0]).toBeLessThan(a.bounds[1][0] + 0.05)
       expect(a.bbox.lamax).toBeGreaterThan(a.bbox.lamin)
       expect(a.bbox.lomax).toBeGreaterThan(a.bbox.lomin)
       expect(a.center).toHaveLength(2)

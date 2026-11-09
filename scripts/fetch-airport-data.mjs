@@ -1,8 +1,10 @@
 /**
  * Pulls public-domain airport data from OurAirports and writes a compact
  * JSON file for the airports in our catalog:
+ *   - reference point and field elevation
  *   - voice frequencies (Tower, Ground, Approach, Departure, ATIS, Clearance)
- *   - runways with threshold coordinates and true headings
+ *   - runways with threshold coordinates, true headings, surface and
+ *     displaced-threshold distances (used to paint the runway markings)
  *
  * Run `npm run data:airports` whenever you want to refresh. The output is
  * committed so builds are reproducible and need no network access.
@@ -20,7 +22,10 @@ const IDENTS = {
   ATL: 'KATL', LAX: 'KLAX', DFW: 'KDFW', DEN: 'KDEN', ORD: 'KORD', JFK: 'KJFK',
   MCO: 'KMCO', LAS: 'KLAS', CLT: 'KCLT', MIA: 'KMIA', SEA: 'KSEA', EWR: 'KEWR',
   SFO: 'KSFO', PHX: 'KPHX', IAH: 'KIAH', LGA: 'KLGA',
+  BOS: 'KBOS', MSP: 'KMSP', DTW: 'KDTW', PHL: 'KPHL', SLC: 'KSLC', DCA: 'KDCA',
+  IAD: 'KIAD', SAN: 'KSAN', FLL: 'KFLL', MDW: 'KMDW', PDX: 'KPDX', AUS: 'KAUS', BNA: 'KBNA',
   YYZ: 'CYYZ', YVR: 'CYVR', YUL: 'CYUL', YYC: 'CYYC', YEG: 'CYEG',
+  YOW: 'CYOW', YWG: 'CYWG', YHZ: 'CYHZ',
 }
 const WANTED_FREQ_TYPES = new Set(['TWR', 'GND', 'APP', 'DEP', 'ATIS', 'CLD', 'ARR'])
 
@@ -52,11 +57,23 @@ async function csv(name) {
 
 const num = (v) => (v === '' || v == null ? null : Number(v))
 
-const [freqs, runways] = await Promise.all([csv('airport-frequencies.csv'), csv('runways.csv')])
+const [airports, freqs, runways] = await Promise.all([
+  csv('airports.csv'),
+  csv('airport-frequencies.csv'),
+  csv('runways.csv'),
+])
 const byIdent = Object.fromEntries(Object.entries(IDENTS).map(([iata, icao]) => [icao, iata]))
 
 const out = {}
-for (const iata of Object.keys(IDENTS)) out[iata] = { icao: IDENTS[iata], frequencies: [], runways: [] }
+for (const iata of Object.keys(IDENTS)) out[iata] = { icao: IDENTS[iata], lat: null, lon: null, elevationFt: null, frequencies: [], runways: [] }
+
+for (const a of airports) {
+  const iata = byIdent[a.ident]
+  if (!iata) continue
+  out[iata].lat = num(a.latitude_deg)
+  out[iata].lon = num(a.longitude_deg)
+  out[iata].elevationFt = num(a.elevation_ft)
+}
 
 for (const f of freqs) {
   const iata = byIdent[f.airport_ident]
@@ -69,12 +86,12 @@ for (const f of freqs) {
 for (const r of runways) {
   const iata = byIdent[r.airport_ident]
   if (!iata || r.closed === '1') continue
-  const le = { ident: r.le_ident, lat: num(r.le_latitude_deg), lon: num(r.le_longitude_deg), hdg: num(r.le_heading_degT) }
-  const he = { ident: r.he_ident, lat: num(r.he_latitude_deg), lon: num(r.he_longitude_deg), hdg: num(r.he_heading_degT) }
+  const le = { ident: r.le_ident, lat: num(r.le_latitude_deg), lon: num(r.le_longitude_deg), hdg: num(r.le_heading_degT), displacedFt: num(r.le_displaced_threshold_ft) ?? 0 }
+  const he = { ident: r.he_ident, lat: num(r.he_latitude_deg), lon: num(r.he_longitude_deg), hdg: num(r.he_heading_degT), displacedFt: num(r.he_displaced_threshold_ft) ?? 0 }
   if (le.lat == null || he.lat == null || !le.ident || !he.ident) continue
   // Skip helipads / waterways
   if (/^H/.test(le.ident) || r.surface === 'WATER') continue
-  out[iata].runways.push({ lengthFt: num(r.length_ft), widthFt: num(r.width_ft), le, he })
+  out[iata].runways.push({ lengthFt: num(r.length_ft), widthFt: num(r.width_ft), surface: r.surface || null, le, he })
 }
 
 for (const a of Object.values(out)) {
@@ -86,4 +103,6 @@ fs.writeFileSync(
   OUT,
   JSON.stringify({ source: 'OurAirports (public domain) — https://ourairports.com/data/', fetchedAt: new Date().toISOString().slice(0, 10), airports: out }, null, 2) + '\n',
 )
+const missing = Object.entries(out).filter(([, a]) => a.lat == null || a.runways.length === 0).map(([k]) => k)
+if (missing.length) throw new Error(`no reference point or runways for: ${missing.join(', ')}`)
 console.log(`wrote ${OUT}: ${Object.keys(out).length} airports, ${Object.values(out).reduce((n, a) => n + a.runways.length, 0)} runways`)

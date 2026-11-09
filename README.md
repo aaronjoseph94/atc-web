@@ -93,6 +93,6 @@ Functions under `functions/` are picked up automatically; no environment variabl
 | --- | --- |
 | `AI_API_KEY` | your OpenRouter or Anthropic key |
 | `AI_BASE_URL` | `https://openrouter.ai/api/v1` (default) or `https://api.anthropic.com` |
-| `AI_MODEL` | `anthropic/claude-3.5-haiku` or `claude-3-5-haiku-latest` |
+| `AI_MODEL` | `anthropic/claude-haiku-5.5` (default) or `claude-haiku-5-5` |
 
 The key never reaches the browser. Identical requests are cached at the edge.

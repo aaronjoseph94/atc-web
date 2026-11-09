@@ -14,7 +14,7 @@ import { formatMhz } from '../api/airportData'
 import { getAirport } from '../api/airports'
 import { getAircraft, summarizeTransmissions } from '../api/client'
 import type { Aircraft, TrackSample, TranscriptCue } from '../api/types'
-import { interpolateTrack } from '../playback/interpolate'
+import { interpolateTrack, sampleOnGround } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, useSettings } from '../settings/settingsStore'
 import {
@@ -66,11 +66,11 @@ export function FlightSheet() {
         heading: p.heading,
         altitudeFt: p.altitudeFt ?? null,
         speedKt: p.speedKt ?? null,
-        onGround: (p.altitudeFt ?? 0) < 50,
+        onGround: sampleOnGround(p),
         verticalRateFpm: climbRate(clip.tracks[key], tMs),
       }
     }
-    return live?.find((a) => a.icao24 === selectedIcao) ?? null
+    return live?.aircraft.find((a) => a.icao24 === selectedIcao) ?? null
   }, [selectedIcao, mode, clip, tMs, live])
 
   // Radio calls for this flight up to the playhead (playback only; live feeds carry no audio).
