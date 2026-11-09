@@ -8,26 +8,28 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Activity, RotateCcw } from 'lucide-react'
-import { type ReactNode } from 'react'
 import { AIRPORTS } from '../api/airports'
 import { getAiStatus, getHealth } from '../api/client'
 import { usePlayhead } from '../playback/playheadStore'
-import { FullPanel, SectionLabel } from '../ui/Panel'
-import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, useSettings, type Settings } from './settingsStore'
+import { FullPanel, Row, SectionLabel, Segmented, Toggle } from '../ui/Panel'
+import { DEFAULT_SETTINGS, useSettings, type Settings } from './settingsStore'
 
 export function SettingsView() {
   const open = usePlayhead((s) => s.panel === 'settings')
   const setPanel = usePlayhead((s) => s.setPanel)
   const setToast = usePlayhead((s) => s.setToast)
+  const setCameraMode = usePlayhead((s) => s.setCameraMode)
   const settings = useSettings()
-
-  if (!open) return null
 
   const set = <K extends keyof Settings>(key: K) => (value: Settings[K]) => settings.update(key, value)
 
   const resetAll = () => {
+    const before = { ...settings }
     settings.reset()
-    setToast('Settings restored to defaults')
+    setToast({
+      message: 'Settings restored to defaults',
+      action: { label: 'Undo', run: () => (Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]).forEach((k) => settings.update(k, before[k] as never)) },
+    })
   }
 
   const clearCaches = async () => {
@@ -35,17 +37,18 @@ export function SettingsView() {
       const keys = await caches.keys()
       await Promise.all(keys.map((k) => caches.delete(k)))
     }
-    setToast('Offline caches cleared')
+    setToast('Saved map tiles and clips cleared')
   }
 
   return (
     <FullPanel
+      open={open}
       title="Settings"
       onClose={() => setPanel(null)}
       headerExtra={
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium transition hover:bg-white/20"
+          className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs font-semibold transition hover:bg-white/20 active:scale-95"
           onClick={resetAll}
         >
           <RotateCcw className="size-3.5" /> Reset
@@ -54,22 +57,19 @@ export function SettingsView() {
     >
       <SectionLabel>Startup</SectionLabel>
       <Row label="Default airport" hint="Shown when the app opens">
-        <select
-          className={selectCls}
-          value={settings.defaultAirport}
-          onChange={(e) => set('defaultAirport')(e.target.value)}
-        >
+        <select className={selectCls} value={settings.defaultAirport} aria-label="Default airport" onChange={(e) => set('defaultAirport')(e.target.value)}>
           {AIRPORTS.map((a) => (
             <option key={a.icao} value={a.icao}>
-              {a.icao} — {a.name}
+              {a.icao} {a.name}
             </option>
           ))}
         </select>
       </Row>
 
       <SectionLabel>Live traffic</SectionLabel>
-      <Row label="Poll interval" hint="How often positions refresh">
+      <Row label="Refresh every" hint="How often new positions are fetched">
         <Segmented
+          label="Refresh interval"
           value={settings.pollSeconds}
           options={[
             [5, '5 s'],
@@ -79,11 +79,9 @@ export function SettingsView() {
           onChange={set('pollSeconds')}
         />
       </Row>
-      <Row label="Hide ground traffic" hint="Only show airborne aircraft">
-        <Toggle checked={settings.hideGround} onChange={set('hideGround')} />
-      </Row>
-      <Row label="Trail length" hint="Points kept behind the selected aircraft">
+      <Row label="Trail length" hint="How much path is kept behind the selected aircraft">
         <Segmented
+          label="Trail length"
           value={settings.trailLength}
           options={[
             [24, 'Short'],
@@ -94,35 +92,30 @@ export function SettingsView() {
         />
       </Row>
 
-      <SectionLabel>Map</SectionLabel>
-      <Row label="Callsign labels" hint="Auto shows labels when zoomed in">
-        <Segmented
-          value={settings.labels}
-          options={[
-            ['auto', 'Auto'],
-            ['always', 'Always'],
-            ['never', 'Never'],
-          ]}
-          onChange={set('labels')}
+      <SectionLabel>Camera and motion</SectionLabel>
+      <Row label="Automatic map" hint="Move to whoever just took off, landed or is talking">
+        <Toggle
+          checked={settings.autoCamera}
+          label="Automatic map"
+          onChange={(v) => {
+            set('autoCamera')(v)
+            setCameraMode(v ? 'auto' : 'manual')
+          }}
         />
       </Row>
-      <Row label="Map theme">
-        <Segmented
-          value={settings.mapTheme}
-          options={[
-            ['navy', 'Navy'],
-            ['graphite', 'Graphite'],
-          ]}
-          onChange={set('mapTheme')}
-        />
+      <Row label="Reduce motion" hint="No pulses, pings or camera glides">
+        <Toggle checked={settings.reduceMotion} onChange={set('reduceMotion')} label="Reduce motion" />
       </Row>
-      <Row label="Reduce motion" hint="Disable pulse and camera easing">
-        <Toggle checked={settings.reduceMotion} onChange={set('reduceMotion')} />
+      <Row label="Map style and overlays">
+        <button type="button" className={buttonCls} onClick={() => setPanel('layers')}>
+          Map layers
+        </button>
       </Row>
 
       <SectionLabel>Units</SectionLabel>
       <Row label="Altitude">
         <Segmented
+          label="Altitude unit"
           value={settings.altitudeUnit}
           options={[
             ['ft', 'Feet'],
@@ -133,6 +126,7 @@ export function SettingsView() {
       </Row>
       <Row label="Speed">
         <Segmented
+          label="Speed unit"
           value={settings.speedUnit}
           options={[
             ['kt', 'Knots'],
@@ -146,19 +140,16 @@ export function SettingsView() {
       <SectionLabel>Radio explanations</SectionLabel>
       <AiStatus />
 
-      <SectionLabel>Backend</SectionLabel>
+      <SectionLabel>Data feed</SectionLabel>
       <BackendStatus />
 
       <SectionLabel>Storage</SectionLabel>
-      <Row label="Offline caches" hint="Map tiles and demo clips cached by the service worker">
+      <Row label="Saved map tiles and clips" hint="Kept on this device so revisits load fast">
         <button type="button" className={buttonCls} onClick={() => void clearCaches()}>
           Clear
         </button>
       </Row>
-      <p className="mt-4 text-[11px] leading-relaxed text-atc-muted">
-        Preferences are stored locally in this browser under <code className="rounded bg-white/10 px-1">{SETTINGS_STORAGE_KEY}</code>.
-        Defaults: {DEFAULT_SETTINGS.pollSeconds}s polling, {DEFAULT_SETTINGS.defaultAirport}, feet/knots.
-      </p>
+      <p className="mt-4 text-[11px] leading-relaxed text-atc-muted">Settings, pinned airports and history stay in this browser. Nothing is sent to a server.</p>
     </FullPanel>
   )
 }
@@ -168,11 +159,13 @@ export function SettingsView() {
 // ---------------------------------------------------------------------------
 
 function AiStatus() {
+  const open = usePlayhead((s) => s.panel === 'settings')
   const status = useQuery({
     queryKey: ['ai-status'],
     queryFn: getAiStatus,
     staleTime: 60_000,
     retry: 0,
+    enabled: open,
   })
   const s = status.data
   const on = s?.configured
@@ -182,28 +175,31 @@ function AiStatus() {
       <div className="flex items-center gap-2">
         <span className={`size-2 rounded-full ${on ? 'bg-atc-purple' : 'bg-atc-yellow'}`} />
         <span className="text-sm font-semibold">
-          {status.isPending ? 'Checking…' : on ? 'AI summaries on' : 'Built-in explanations'}
+          {status.isPending ? 'Checking…' : on ? 'AI summaries are on' : 'Built-in phrasebook'}
         </span>
       </div>
       <p className="mt-2 text-xs leading-relaxed text-atc-muted">
         {on
-          ? `Tapping a plane asks ${s.model} for a plain-English summary of its latest radio calls.`
-          : 'Tapping a plane explains the latest radio call in everyday language using a built-in phrasebook. To use your own Claude or OpenRouter key, set AI_API_KEY on the server (optional AI_BASE_URL and AI_MODEL). OpenRouter: base https://openrouter.ai/api/v1. Claude direct: base https://api.anthropic.com.'}
+          ? `In a replay, tapping a plane asks ${s.model} for a plain-English summary of its latest radio calls.`
+          : 'In a replay, tapping a plane explains its latest radio call in everyday language using a built-in phrasebook. To have a model write it instead, set AI_API_KEY on the server (see the README).'}
       </p>
     </div>
   )
 }
 
 function BackendStatus() {
+  const open = usePlayhead((s) => s.panel === 'settings')
   const airportIcao = usePlayhead((s) => s.airportIcao)
   const liveStatus = usePlayhead((s) => s.liveStatus)
   const liveUpdatedAt = usePlayhead((s) => s.liveUpdatedAt)
+  const liveProvider = usePlayhead((s) => s.liveProvider)
 
   const health = useQuery({
     queryKey: ['health', airportIcao],
     queryFn: () => getHealth(airportIcao),
     refetchInterval: 15000,
     retry: 0,
+    enabled: open,
   })
 
   const h = health.data
@@ -214,22 +210,22 @@ function BackendStatus() {
       <div className="flex items-center gap-2">
         <Activity className={`size-4 ${ok ? 'text-emerald-400' : health.isPending ? 'text-atc-muted' : 'text-atc-live'}`} />
         <span className="text-sm font-semibold">
-          {health.isPending ? 'Checking edge functions…' : ok ? 'Edge functions healthy' : 'Edge functions unreachable'}
+          {health.isPending ? 'Checking the feed…' : ok ? 'Feed is answering' : 'Feed isn’t answering'}
         </span>
         {h && <span className="ml-auto text-xs text-atc-muted">{h.region ?? ''}</span>}
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-        <KV k="Traffic provider" v={h?.provider ?? '—'} />
-        <KV k="Upstream latency" v={h ? `${h.latencyMs} ms` : '—'} />
+        <KV k="Answering now" v={h?.provider ?? '—'} />
+        <KV k="Response time" v={h ? `${h.latencyMs} ms` : '—'} />
         <KV k={`Aircraft near ${airportIcao}`} v={h ? String(h.aircraft) : '—'} />
-        <KV k="Client feed" v={liveStatus} />
+        <KV k="This session" v={liveStatus === 'ok' ? `live via ${liveProvider ?? 'feed'}` : liveStatus} />
         <KV k="Last update" v={liveUpdatedAt ? new Date(liveUpdatedAt).toLocaleTimeString() : '—'} />
-        <KV k="Runtime" v={h?.runtime ?? '—'} />
+        <KV k="Served from" v={h?.runtime ?? '—'} />
       </dl>
       {h?.error && <p className="mt-2 break-words text-xs text-atc-live">{h.error}</p>}
       <p className="mt-3 text-[11px] text-atc-muted">
-        Traffic is fetched server-side from free ADS-B feeds (adsb.lol → adsb.fi → OpenSky) and cached at the edge for a few
-        seconds. No accounts or API keys are used.
+        Traffic comes from free community ADS-B feeds, tried in this order: adsb.lol, adsb.fi, OpenSky. Answers are shared
+        at the edge for a few seconds. No accounts or API keys are used.
       </p>
     </div>
   )
@@ -250,59 +246,4 @@ function KV({ k, v }: { k: string; v: string }) {
 
 const selectCls =
   'rounded-lg bg-white/10 px-2.5 py-1.5 text-sm outline-none ring-1 ring-white/10 focus:ring-atc-yellow/60 max-w-[14rem]'
-const buttonCls = 'rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium transition hover:bg-white/20'
-
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-white/5 py-3 last:border-0">
-      <div className="min-w-0">
-        <div className="text-sm font-medium">{label}</div>
-        {hint && <div className="text-xs text-atc-muted">{hint}</div>}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  )
-}
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      className={`relative h-7 w-12 rounded-full transition ${checked ? 'bg-atc-yellow' : 'bg-white/15'}`}
-      onClick={() => onChange(!checked)}
-    >
-      <span
-        className={`absolute top-1 size-5 rounded-full bg-white shadow transition-[left] ${checked ? 'left-6' : 'left-1'}`}
-      />
-    </button>
-  )
-}
-
-function Segmented<T extends string | number>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T
-  options: [T, string][]
-  onChange: (v: T) => void
-}) {
-  return (
-    <div role="radiogroup" className="flex rounded-lg bg-white/10 p-0.5 text-xs font-medium">
-      {options.map(([v, label]) => (
-        <button
-          key={String(v)}
-          type="button"
-          role="radio"
-          aria-checked={v === value}
-          className={`rounded-md px-2.5 py-1.5 transition ${v === value ? 'bg-atc-yellow text-black' : 'text-white/75 hover:text-white'}`}
-          onClick={() => onChange(v)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  )
-}
+const buttonCls = 'rounded-xl bg-white/10 px-3 py-1.5 text-sm font-semibold transition hover:bg-white/20 active:scale-95'

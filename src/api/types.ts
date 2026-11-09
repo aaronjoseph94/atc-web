@@ -74,6 +74,10 @@ export type TrackSample = {
  */
 export type ClipPack = {
   id: string
+  /** `scene`: a bundled clip with audio. `rewind`: live traffic recorded this session (no audio). */
+  kind?: 'scene' | 'rewind'
+  /** Epoch milliseconds of `tMs = 0`, for replays of real traffic. */
+  startedAt?: number
   stationId: string
   audioUrl: string
   durationMs: number
@@ -83,10 +87,13 @@ export type ClipPack = {
   /** Catalog airport code the clip takes place at. */
   airport?: string
   cues: TranscriptCue[]
-  /** Keyed by callsign. An aircraft is drawn only between its first and last sample. */
+  /**
+   * Keyed by callsign (scenes) or transponder address (rewinds); cues refer to
+   * the same key. An aircraft is drawn only between its first and last sample.
+   */
   tracks: Record<string, TrackSample[]>
-  /** Optional details per callsign, for silhouettes and the flight card. */
-  aircraft?: Record<string, { type?: string; registration?: string }>
+  /** Optional details per track key, for silhouettes and the flight card. */
+  aircraft?: Record<string, { callsign?: string; type?: string; registration?: string; category?: string }>
 }
 
 /** Entry in `/clips/index.json`. */
@@ -99,17 +106,21 @@ export type ClipSummary = {
   durationMs: number
 }
 
-/** Controller position kind; maps onto OurAirports frequency types. */
-export type StationKind = 'TWR' | 'GND' | 'APP' | 'DEP' | 'ATIS' | 'CLD'
+/** Controller position kind (`CLB` = Class B/C airspace advisories, `OTH` = everything else). */
+export type StationKind = 'TWR' | 'GND' | 'APP' | 'DEP' | 'ATIS' | 'CLD' | 'CLB' | 'OTH'
 
-/** A controller position (Tower, Ground, …) at an airport. */
+/** A controller position (Tower for one runway, a Ground sector, …) at an airport. */
 export type Station = {
   id: string
   airport: string
+  /** Short airport name, e.g. `Chicago O'Hare`. */
   name: string
+  /** Full label for the station bar, e.g. `Tower (Rwy 10L-28R)`. */
   label: string
+  /** Just the position, as listed inside its group: `Rwy 10L-28R`, `Center Inbound`. */
+  position: string
   kind: StationKind
-  /** Published VHF frequency in MHz (from OurAirports), when known. */
+  /** Published VHF frequency in MHz, when known. */
   frequencyMhz?: number
 }
 

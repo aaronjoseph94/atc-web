@@ -7,12 +7,15 @@
  */
 import raw from './airportData.json'
 
-export type FrequencyType = 'TWR' | 'GND' | 'APP' | 'ARR' | 'DEP' | 'ATIS' | 'CLD'
+export type FrequencyType = 'TWR' | 'GND' | 'APP' | 'DEP' | 'ATIS' | 'CLD' | 'CLB' | 'OTH'
 
 export type Frequency = {
   type: FrequencyType
+  /** Position name: `Rwy 10L-28R`, `Center Inbound`, `South (150°–219°)`. */
   description: string
   mhz: number
+  /** False for secondary/backup frequencies. */
+  primary?: boolean
 }
 
 export type RunwayEnd = {
@@ -45,20 +48,26 @@ type AirportRecord = {
   runways: Runway[]
 }
 
-const DATA = raw as { source: string; fetchedAt: string; airports: Record<string, AirportRecord> }
+const DATA = raw as { source: string; fetchedAt: string; faaCycle?: string | null; airports: Record<string, AirportRecord> }
 
 export const AIRPORT_DATA_SOURCE = DATA.source
 export const AIRPORT_DATA_DATE = DATA.fetchedAt
+/** Effective date of the FAA data cycle the US frequencies came from. */
+export const FAA_CYCLE_DATE = DATA.faaCycle ?? null
+
+/** Display order of the groups in the channel switcher. */
+export const FREQUENCY_ORDER: FrequencyType[] = ['TWR', 'GND', 'CLD', 'APP', 'DEP', 'CLB', 'ATIS', 'OTH']
 
 /** Friendly names for frequency types, for non-aviation readers. */
 export const FREQUENCY_LABEL: Record<FrequencyType, string> = {
   TWR: 'Tower',
   GND: 'Ground',
   APP: 'Approach',
-  ARR: 'Approach',
   DEP: 'Departure',
-  ATIS: 'Weather (ATIS)',
+  ATIS: 'ATIS',
   CLD: 'Clearance',
+  CLB: 'Airspace advisories',
+  OTH: 'Other',
 }
 
 /** One-line explanation of what each controller position does. */
@@ -66,10 +75,11 @@ export const FREQUENCY_ROLE: Record<FrequencyType, string> = {
   TWR: 'Clears aircraft to take off and land',
   GND: 'Guides aircraft between gates and runways',
   APP: 'Sequences arriving aircraft toward the runway',
-  ARR: 'Sequences arriving aircraft toward the runway',
   DEP: 'Guides departing aircraft away from the airport',
   ATIS: 'Recorded weather and runway information',
   CLD: 'Issues the route clearance before pushback',
+  CLB: 'Advises small aircraft crossing the busy airspace',
+  OTH: 'Special-purpose frequency',
 }
 
 function record(iata: string): AirportRecord | undefined {

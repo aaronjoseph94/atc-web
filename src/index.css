@@ -3,36 +3,45 @@
  * defines design tokens (`@theme`), base resets, keyframes, and a couple of
  * MapLibre control tweaks.
  */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @import 'maplibre-gl/dist/maplibre-gl.css';
 
 @theme {
   --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  /* Heavy condensed face for airport codes and callsigns, like airfield signage. */
+  --font-display: 'Anton', 'Outfit', ui-sans-serif, system-ui, sans-serif;
 
-  --color-atc-yellow: #f5c518;
+  --color-atc-yellow: #ffb800;
+  --color-atc-yellow-deep: #f2a900;
+  --color-atc-yellow-press: #d99700;
   --color-atc-purple: #7c5cfc;
+  --color-atc-magenta: #b517c8;
   --color-atc-card: #5b3df5;
   --color-atc-card-deep: #4a2fd6;
+  --color-atc-blue: #2f80ff;
   --color-atc-bg: #0a0e14;
   --color-atc-panel: #121821;
-  --color-atc-map: #0b1220;
-  --color-atc-live: #ef4444;
+  --color-atc-raised: #1a2230;
+  --color-atc-map: #0b1322;
+  --color-atc-live: #ff3b30;
   --color-atc-muted: #9aa3b5;
 
-  --animate-wave: wave 0.75s ease-in-out infinite alternate;
-  --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
-  --animate-rise: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-fade: fade 0.25s ease both;
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
-  @keyframes wave {
-    from {
-      transform: scaleY(0.25);
-    }
-    to {
-      transform: scaleY(1);
-    }
-  }
+  --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
+  --animate-rise: rise 0.34s var(--ease-out-quint) both;
+  --animate-fade: fade 0.22s ease both;
+  --animate-fade-out: fade-out 0.2s ease both;
+  --animate-sheet-in: sheet-in 0.38s var(--ease-out-quint) both;
+  --animate-sheet-out: sheet-out 0.24s cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-pop: pop 0.22s var(--ease-spring) both;
+  --animate-pop-out: pop-out 0.14s ease-in both;
+  --animate-caption: caption 0.3s var(--ease-out-quint) both;
+  --animate-sweep: sweep 2.8s linear infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
   @keyframes pulse-dot {
     0%,
     100% {
@@ -47,7 +56,7 @@
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(16px);
+      transform: translateY(14px);
     }
     to {
       opacity: 1;
@@ -60,6 +69,73 @@
     }
     to {
       opacity: 1;
+    }
+  }
+  @keyframes fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes sheet-out {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+  @keyframes pop-out {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  @keyframes caption {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes sweep {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
     }
   }
 }
@@ -82,14 +158,63 @@ body,
   color: #f4f6fb;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  /* The map handles its own gestures; nothing else should rubber-band or zoom the page. */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  border: none;
-  background: none;
+/*
+ * Element resets live in the base layer. Outside a layer they would outrank
+ * every utility class, silently stripping backgrounds and font sizes from
+ * any button styled with Tailwind.
+ */
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    border: none;
+    background: none;
+  }
+}
+
+/*
+ * One visible focus style for keyboard users, everywhere. In the base layer
+ * so a component can still opt out (`outline-none` on dialog containers that
+ * take focus only to anchor the tab order).
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+  .on-yellow :focus-visible {
+    outline-color: #000;
+  }
+}
+
+/* Skeleton placeholder while remote details load. */
+.skeleton {
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 25%, rgba(255, 255, 255, 0.18) 50%, rgba(255, 255, 255, 0.08) 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Thin, unobtrusive scrollbars inside panels. */
+.scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.on-yellow .scroll-quiet,
+.scroll-quiet.on-yellow {
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Keep the (required) attribution unobtrusive on a dark map. */
@@ -97,13 +222,18 @@ button {
   background: rgba(10, 14, 20, 0.6) !important;
   color: #9aa3b5 !important;
   font-size: 10px !important;
-  border-radius: 6px !important;
+  border-radius: 8px !important;
 }
 .maplibregl-ctrl-attrib a {
   color: #c4cbd8 !important;
 }
+.maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+  opacity: 0.6;
+}
 .maplibregl-ctrl-bottom-right {
-  bottom: calc(8.25rem + var(--safe-bottom));
+  bottom: calc(var(--bottom-stack, 8.25rem) + 0.25rem);
+  transition: bottom 0.3s var(--ease-out-quint);
 }
 @media (min-width: 768px) {
   .maplibregl-ctrl-bottom-right {
@@ -120,4 +250,11 @@ button {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }

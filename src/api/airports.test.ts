@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AIRPORTS, DEFAULT_AIRPORT, getAirport, getAirportBbox, airportsByGroup } from './airports'
+import { AIRPORTS, DEFAULT_AIRPORT, airportForStation, airportsByGroup, defaultStation, getAirport, getAirportBbox, resolveStation } from './airports'
 
 describe('airports catalog', () => {
   it('defaults to ORD', () => {
@@ -50,11 +50,31 @@ describe('airports catalog', () => {
     }
   })
 
-  it('attaches a published tower frequency', () => {
-    const tower = getAirport('ORD').stations.find((s) => s.kind === 'TWR')
-    expect(tower?.frequencyMhz).toBe(126.9)
-    const ground = getAirport('ORD').stations.find((s) => s.kind === 'GND')
-    expect(ground?.frequencyMhz).toBe(121.675)
+  it('lists one tower per runway where the FAA publishes them', () => {
+    const ord = getAirport('ORD')
+    const tower = ord.stations.find((s) => s.kind === 'TWR' && s.position.includes('10L-28R'))
+    expect(tower).toMatchObject({ frequencyMhz: 132.7, label: 'Tower (Rwy 10L-28R)' })
+    expect(ord.stations.find((s) => s.position === 'Center Inbound')).toMatchObject({ kind: 'GND', frequencyMhz: 121.9 })
+    expect(new Set(ord.stations.map((s) => s.id)).size).toBe(ord.stations.length)
+    // Groups come out in channel-switcher order: towers first.
+    expect(ord.stations[0].kind).toBe('TWR')
+    expect(defaultStation(ord)?.kind).toBe('TWR')
+  })
+
+  it('resolves legacy and unknown station ids', () => {
+    const ord = getAirport('ORD')
+    expect(resolveStation(ord, 'ord-tower-28r')?.position).toContain('28R')
+    expect(resolveStation(ord, 'ord-ground-south')?.kind).toBe('GND')
+    expect(resolveStation(ord, 'nonsense')?.kind).toBe('TWR')
+    expect(resolveStation(getAirport('JFK'), 'jfk-tower')?.kind).toBe('TWR')
+    expect(airportForStation('sfo-tower')?.icao).toBe('SFO')
+    expect(airportForStation(ord.stations[3].id)?.icao).toBe('ORD')
+  })
+
+  it('still gives airports outside the FAA data a tower and ground', () => {
+    const yyz = getAirport('YYZ')
+    expect(yyz.stations.some((s) => s.kind === 'TWR')).toBe(true)
+    expect(yyz.stations.some((s) => s.kind === 'GND')).toBe(true)
   })
 
   it('resolves bbox by icao', () => {
