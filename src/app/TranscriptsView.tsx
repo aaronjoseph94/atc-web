@@ -26,6 +26,7 @@ import { useNow } from '../hooks/useNow'
 import { findClip, loadClipIndex, playClip, startClipCapture, stopClip, useClips } from '../live/history/clips'
 import { callsignSuggestions, groupByTime, highlight, NO_FILTERS, PHRASES, search, type Filters, type Hit, type Range, type SearchItem } from '../live/history/search'
 import { startHistory, useHistory, type HistoryEntry } from '../live/history/store'
+import { Terms } from '../learn/Terms'
 import { useRadio } from '../live/radio/radioStore'
 import { releaseFocus } from '../live/radio/transcriber'
 import { liveBuffer } from '../live/session'
@@ -170,7 +171,7 @@ function Chip({ active, onClick, children, label, tone = 'plain', disabled }: { 
 }
 
 function Marked({ text, ranges }: { text: string; ranges: Range[] }) {
-  if (!ranges.length) return <>{text}</>
+  if (!ranges.length) return <Terms text={text} />
   return (
     <>
       {highlight(text, ranges).map((r, i) =>
@@ -179,7 +180,9 @@ function Marked({ text, ranges }: { text: string; ranges: Range[] }) {
             {r.text}
           </mark>
         ) : (
-          <span key={i}>{r.text}</span>
+          <span key={i}>
+            <Terms text={r.text} />
+          </span>
         ),
       )}
     </>

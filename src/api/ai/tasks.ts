@@ -8,7 +8,14 @@
  * list it in `TASKS` below.
  */
 import type { RunAiArgs } from './run'
+import { airportBriefing } from './tasks/airportBriefing'
+import { catchUp } from './tasks/catchUp'
+import { explainAlert } from './tasks/explainAlert'
+import { explainTerm } from './tasks/explainTerm'
+import { flightFacts } from './tasks/flightFacts'
+import { flightStory } from './tasks/flightStory'
 import { ping } from './tasks/ping'
+import { weatherBrief } from './tasks/weatherBrief'
 
 export type AiTask<In = unknown> = {
   name: string
@@ -28,5 +35,12 @@ export type AiTask<In = unknown> = {
 }
 
 export const TASKS: Record<string, AiTask<never>> = {
+  [airportBriefing.name]: airportBriefing as AiTask<never>,
+  [catchUp.name]: catchUp as AiTask<never>,
+  [explainAlert.name]: explainAlert as AiTask<never>,
+  [explainTerm.name]: explainTerm as AiTask<never>,
+  [flightFacts.name]: flightFacts as AiTask<never>,
+  [flightStory.name]: flightStory as AiTask<never>,
   [ping.name]: ping as AiTask<never>,
+  [weatherBrief.name]: weatherBrief as AiTask<never>,
 }

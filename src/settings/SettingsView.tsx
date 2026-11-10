@@ -11,6 +11,7 @@ import { getAiStatus, getHealth } from '../api/client'
 import { usePlayhead } from '../playback/playheadStore'
 import { supportsHaptics } from '../ui/haptics'
 import { Group, Row, SectionLabel, Segmented, Sheet, Toggle } from '../ui/Panel'
+import { InsightSettingsGroup } from '../insights/InsightSettingsGroup'
 import { AiSettingsGroup } from './AiSettingsGroup'
 import { DEFAULT_SETTINGS, useSettings, type Settings } from './settingsStore'
 
@@ -101,6 +102,8 @@ export function SettingsView() {
           />
         </Row>
       </Group>
+
+      <InsightSettingsGroup />
 
       <AiSettingsGroup />
 

@@ -16,6 +16,7 @@ import { PanelRightClose } from 'lucide-react'
 import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { FlightDetail } from '../flight/FlightSheet'
+import { BriefingCard } from '../insights/Briefing'
 import { useFlight } from '../flight/useFlight'
 import { usePlayhead } from '../playback/playheadStore'
 import { WeatherPanel } from '../weather/WeatherPanel'
@@ -170,6 +171,7 @@ export function DesktopPanel() {
           <Tooltip label="Hide panel" shortcut="]" side="left" />
         </button>
       </div>
+      <BriefingCard docked />
       <div className="mx-3 h-px shrink-0 bg-white/[0.08]" />
       <div className="relative grid min-h-0 flex-1" style={{ ['--pane-dir' as string]: swap.dir }}>
         {body.mounted &&

@@ -198,6 +198,11 @@ export class Stubs {
       const last = body.transmissions?.at(-1)?.text ?? ''
       return send({ summary: last ? `Last call: ${last}` : 'No calls yet.', source: 'rules' })
     }
+    if (p === '/api/ai') {
+      // No AI key in the tests: every AI feature shows its built-in version.
+      if (req.method() === 'GET') return send({ configured: false, provider: null, model: null, keySource: null, server: { anthropic: false, openrouter: false } })
+      return send({ ok: false, task: '', error: 'No AI key set.', status: 401 }, 401)
+    }
     if (p === '/api/transcribe') {
       const next = this.transcribeQueue.shift()
       if (!next) return send({ text: '', segments: [] })

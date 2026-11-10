@@ -32,6 +32,8 @@ import { useSheetDrag } from '../ui/useSheetDrag'
 import { AircraftPanel } from '../aircraft/AircraftPanel'
 import { aircraftTypeName, PHASE_LABEL } from './describe'
 import { FlightSummary } from './FlightSummary'
+import { FlightInsights } from '../insights/FlightInsights'
+import { Terms } from '../learn/Terms'
 import { FlightTimeline } from './FlightTimeline'
 import { formatDistance, routeProgress } from './route'
 import { Sparkline } from './Sparkline'
@@ -188,7 +190,9 @@ export function FlightCard() {
             Now
           </span>
           {flight.now ? (
-            <span className="mt-0.5 line-clamp-2 block text-[15px] font-medium leading-snug">{flight.now}</span>
+            <span className="mt-0.5 line-clamp-2 block text-[15px] font-medium leading-snug">
+              <Terms text={flight.now} />
+            </span>
           ) : (
             <span className="mt-1.5 block space-y-1.5" aria-label="Loading">
               <span className="skeleton block h-3.5 w-11/12" />
@@ -341,6 +345,9 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
         <div className="scroll-quiet scroll-fade @container min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,var(--safe-bottom))] pt-4">
           {/* The flight: number, route and progress, its live numbers */}
           <FlightSummary flight={flight} info={info} infoLoading={infoQuery.isLoading} />
+
+          {/* Its story so far, and a few facts about the route and aircraft */}
+          <FlightInsights flight={flight} info={info} />
 
           {/* The aircraft: its type from the side, with what it is */}
           <AircraftPanel

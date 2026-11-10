@@ -48,8 +48,8 @@ test.describe('screenshots', () => {
     await app.settled(detail)
     await expect(detail.getByRole('img', { name: /^Side view of / })).toBeVisible()
     await detail.evaluate((el) => el.querySelector('.overflow-y-auto')?.scrollTo(0, 0))
-    // The timeline is in clock time; its chart grows as the flight is watched.
-    await expect(detail).toHaveScreenshot('flight-detail.png', { timeout: 60_000, mask: [detail.getByRole('region', { name: 'Flight timeline' })] })
+    // The timeline is in clock time; its chart grows as the flight is watched. The story so far tells those times too.
+    await expect(detail).toHaveScreenshot('flight-detail.png', { timeout: 60_000, mask: [detail.getByRole('region', { name: 'Flight timeline' }), detail.getByRole('region', { name: 'Story so far' })] })
     await detail.getByRole('button', { name: 'Close flight' }).click()
 
     await page.getByRole('button', { name: 'Menu' }).click()

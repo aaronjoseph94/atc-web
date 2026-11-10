@@ -12,6 +12,9 @@ import { icaoCode } from '../api/airportData'
 import { getAirport } from '../api/airports'
 import type { Atis, Metar } from '../api/types'
 import { useNow } from '../hooks/useNow'
+import { BriefingBlock } from '../insights/Briefing'
+import { WeatherMeaning } from '../insights/WeatherMeaning'
+import { Terms } from '../learn/Terms'
 import { useAirfield } from '../live/airfield'
 import { runwayEnds } from '../map/airportDiagram'
 import { sunElevation, SUNSET_ELEVATION } from '../map/lighting/sun'
@@ -251,7 +254,7 @@ function AtisCard({ atis, speech, now }: { atis: Atis; speech: ReturnType<typeof
         )}
       </div>
       <div className="px-3.5 pb-1.5">
-        <p className={`text-subhead text-white/85 ${raw ? 'break-words font-mono text-footnote' : ''} ${open ? '' : 'line-clamp-3 [mask-image:linear-gradient(to_bottom,#000_55%,transparent)]'}`}>{text}</p>
+        <p className={`text-subhead text-white/85 ${raw ? 'break-words font-mono text-footnote' : ''} ${open ? '' : 'line-clamp-3 [mask-image:linear-gradient(to_bottom,#000_55%,transparent)]'}`}>{raw ? text : <Terms text={text} />}</p>
       </div>
       <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
         <button type="button" aria-expanded={open} className="pressable flex min-h-10 items-center gap-1 rounded-full px-2 text-footnote font-semibold text-[#C9BCFF] hover:text-white" onClick={() => setOpen(!open)}>
@@ -315,9 +318,11 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
               Couldn’t refresh just now; showing the last report.
             </p>
           )}
+          <BriefingBlock />
           {metar ? (
             <>
               <Hero metar={metar} ageMs={now - Date.parse(metar.observedAt)} night={night} heights={heights} />
+              <WeatherMeaning airport={airport.icao} metar={metar} taf={taf} atis={atis} active={active} ends={ends} />
               <div className="mt-2">
                 <WindCard metar={metar} ends={ends} active={active} />
               </div>
