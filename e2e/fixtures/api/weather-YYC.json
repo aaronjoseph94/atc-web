@@ -1,0 +1,33 @@
+{
+ "airport": "YYC",
+ "icao": "CYYC",
+ "metar": {
+  "raw": "CYYC 100800Z 26006KT 220V280 15SM BKN080 06/M05 A2984 RMK AC7 SLP132",
+  "observedAt": "2026-11-10T08:00:00.000Z",
+  "windDirDeg": 260,
+  "windVariable": false,
+  "windKt": 6,
+  "gustKt": null,
+  "visibilitySm": 15,
+  "visibilityPlus": false,
+  "tempC": 6,
+  "dewpointC": -5,
+  "altimeterInHg": 29.84,
+  "flightCategory": "VFR",
+  "clouds": [
+   {
+    "cover": "BKN",
+    "baseFt": 8000
+   }
+  ],
+  "weather": null
+ },
+ "taf": "TAF CYYC 100840Z 1009/1106 25005KT P6SM BKN080 BKN220 FM101400 25008KT P6SM SKC FM102000 27012G22KT P6SM SCT140 BKN220 FM110000 25008KT P6SM SCT240 RMK NXT FCST BY 101200Z",
+ "atis": [],
+ "sources": {
+  "metar": "aviationweather.gov",
+  "taf": "aviationweather.gov",
+  "atis": null
+ },
+ "fetchedAt": "2026-11-10T08:54:36.505Z"
+}

@@ -86,7 +86,13 @@ export function AirportPicker() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && results[0] && setAirport(results[0].icao)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || !results[0]) return
+              // Closing the sheet hands focus back to the "Change airport" button before this
+              // Enter's keypress arrives, which would press that button and reopen the picker.
+              e.preventDefault()
+              setAirport(results[0].icao)
+            }}
             placeholder="Code, airport or city"
             aria-label="Search airports"
             className="h-10 min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-atc-muted"

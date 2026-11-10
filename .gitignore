@@ -20,6 +20,10 @@ dist-ssr
 .wrangler
 .dev.vars
 
+# End-to-end test output
+test-results
+playwright-report
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

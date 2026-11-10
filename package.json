@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "vite build && playwright test",
+    "test:e2e:update": "vite build && playwright test --update-snapshots",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
     "clips:build": "python3 scripts/clips/build_clips.py",
     "clips:verify": "python3 scripts/clips/verify_clips.py",
@@ -32,6 +34,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@cloudflare/workers-types": "^5.20261109.1",
     "@tailwindcss/vite": "^4.3.5",
     "@testing-library/react": "^16.3.0",
