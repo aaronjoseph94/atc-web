@@ -12,15 +12,16 @@ import type { LiveEvent } from '../live/events'
 import { trackId } from '../playback/interpolate'
 import { formatClock } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
-import { FullPanel } from '../ui/Panel'
+import { PanelFrame } from '../ui/Panel'
 
 const EVENT_ICON: Record<LiveEvent['kind'], typeof ArrowUp> = { departed: ArrowUp, landed: ArrowDown, goaround: RotateCcw, lineup: ArrowUpFromLine, emergency: Siren }
 
-export function TranscriptsView() {
-  const open = usePlayhead((s) => s.panel === 'transcripts')
+/** `docked`: rendered in the desktop side panel instead of as a sheet. */
+export function TranscriptsView({ docked = false }: { docked?: boolean }) {
+  const open = usePlayhead((s) => s.panel === 'transcripts') || docked
   const clip = usePlayhead((s) => s.clip)
   // The clock only matters while the transcript is showing; closed, it shouldn't re-render on every tick.
-  const tMs = usePlayhead((s) => (s.panel === 'transcripts' ? s.tMs : 0))
+  const tMs = usePlayhead((s) => (docked || s.panel === 'transcripts' ? s.tMs : 0))
   const mode = usePlayhead((s) => s.mode)
   const events = usePlayhead((s) => s.events)
   const airportIcao = usePlayhead((s) => s.airportIcao)
@@ -45,7 +46,7 @@ export function TranscriptsView() {
   const close = () => setPanel(null)
 
   return (
-    <FullPanel open={open} title={playback ? 'Transcript' : 'Tower log'} onClose={close} tone="black">
+    <PanelFrame docked={docked} open={open} title={playback ? 'Transcript' : 'Tower log'} onClose={close} tone="black">
       <p className="-mt-1.5 mb-4 px-1 text-footnote text-white/55">
         {airport.icao} {station?.label}
         {station?.frequencyMhz != null ? `, ${formatMhz(station.frequencyMhz)}` : ''}
@@ -126,6 +127,6 @@ export function TranscriptsView() {
         </ol>
       )}
       {playback && cues.length > 0 && <p className="py-6 text-center text-caption text-white/35">Tap a line to jump the replay there.</p>}
-    </FullPanel>
+    </PanelFrame>
   )
 }

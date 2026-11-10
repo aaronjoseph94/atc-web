@@ -13,7 +13,8 @@ import { runwaysInUse } from '../live/events'
 import { runwayEnds, type RunwayEndGeometry } from '../map/airportDiagram'
 import { usePlayhead } from '../playback/playheadStore'
 import { CATEGORY_COLOR, useWeather } from '../station/StationBar'
-import { FullPanel, SectionLabel } from '../ui/Panel'
+import { PanelFrame, SectionLabel } from '../ui/Panel'
+import { EmptyState, OfflineArt, StateAction, WeatherSkeleton } from '../ui/States'
 import { ceilingFt, phonetic, readableAtis, runwayWinds, sentenceCase } from './atis'
 
 const CATEGORY_TEXT = {
@@ -84,8 +85,9 @@ function useSpeech() {
   }
 }
 
-export function WeatherPanel() {
-  const open = usePlayhead((s) => s.panel === 'weather')
+/** `docked`: rendered in the desktop side panel instead of as a sheet. */
+export function WeatherPanel({ docked = false }: { docked?: boolean }) {
+  const open = usePlayhead((s) => s.panel === 'weather') || docked
   const airportIcao = usePlayhead((s) => s.airportIcao)
   const events = usePlayhead((s) => s.events)
   const setPanel = usePlayhead((s) => s.setPanel)
@@ -138,20 +140,21 @@ export function WeatherPanel() {
   }
 
   return (
-    <FullPanel open={open} title={`Weather at ${airport.icao}`} onClose={close}>
+    <PanelFrame docked={docked} open={open} title={`Weather at ${airport.icao}`} onClose={close}>
       {query.isPending ? (
-        <div className="space-y-3">
-          <div className="skeleton h-36 w-full rounded-2xl" />
-          <div className="skeleton h-24 w-full rounded-2xl" />
-        </div>
+        <WeatherSkeleton />
       ) : !metar && atis.length === 0 ? (
-        <div className="py-10 text-center">
-          <p className="text-body font-semibold">Weather isn’t available right now</p>
-          <p className="mt-2 text-footnote text-atc-muted">The weather service didn’t answer for {icao}.</p>
-          <button type="button" className="pressable mt-4 rounded-full bg-atc-yellow px-4 py-2 text-subhead font-semibold text-black" onClick={() => void query.refetch()}>
-            Try again
-          </button>
-        </div>
+        <EmptyState
+          art={<OfflineArt />}
+          title="Weather isn’t available right now"
+          actions={
+            <StateAction primary busy={query.isFetching} onClick={() => void query.refetch()}>
+              {query.isFetching ? 'Trying…' : 'Try again'}
+            </StateAction>
+          }
+        >
+          The weather service didn’t answer for {icao}.
+        </EmptyState>
       ) : (
         <>
           {metar && (
@@ -173,7 +176,7 @@ export function WeatherPanel() {
                 </div>
               </div>
 
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-2 @xl:grid-cols-4">
                 <Fact label="Visibility" value={metar.visibilitySm != null ? `${metar.visibilitySm}${metar.visibilityPlus ? '+' : ''} mi` : '—'} hint={metar.weather ?? undefined} />
                 <Fact label="Cloud ceiling" value={ceiling != null ? `${ceiling.toLocaleString()} ft` : 'None'} hint={metar.clouds[0] ? metar.clouds.map((c) => c.cover).join(' ') : 'clear'} />
                 <Fact label="Temperature" value={metar.tempC != null ? `${Math.round(metar.tempC)}°C` : '—'} hint={metar.tempC != null ? `${Math.round((metar.tempC * 9) / 5 + 32)}°F, dew point ${metar.dewpointC != null ? Math.round(metar.dewpointC) : '—'}°C` : undefined} />
@@ -193,7 +196,7 @@ export function WeatherPanel() {
                     {winds.length > 0 && (
                       <>
                         <p className="mb-2 text-caption text-atc-muted">Aircraft land and take off into the wind. Best aligned right now:</p>
-                        <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        <ul className="grid grid-cols-1 gap-1.5 @xl:grid-cols-2">
                           {winds.slice(0, 4).map((w) => (
                             <li key={w.ident} className="flex items-center gap-3 rounded-xl bg-white/[0.06] px-3 py-2">
                               <span className="rounded-md bg-[#C8102E] px-1.5 py-0.5 text-caption font-bold text-white ring-1 ring-white/70">{w.ident}</span>
@@ -234,7 +237,7 @@ export function WeatherPanel() {
           )}
 
           <SectionLabel>More about {airport.icao}</SectionLabel>
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-1.5 @xl:grid-cols-3">
             {[
               ['Live tower radio', 'liveatc.net', `https://www.liveatc.net/search/?icao=${icao}`],
               ['Official airport diagram', 'airnav.com', `https://www.airnav.com/airport/${icao}`],
@@ -252,6 +255,6 @@ export function WeatherPanel() {
           <p className="mt-4 px-1 text-caption text-atc-muted">Weather from aviationweather.gov (US National Weather Service); ATIS text via atis.info. For interest only, not for flight planning.</p>
         </>
       )}
-    </FullPanel>
+    </PanelFrame>
   )
 }

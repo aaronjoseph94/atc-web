@@ -49,7 +49,7 @@ export function StationBar() {
       <div className="flex items-center gap-3 px-4 pb-1 pt-3">
         <button
           type="button"
-          className="shrink-0 rounded-lg font-display text-[3.4rem] leading-[0.95] tracking-tight transition active:scale-95"
+          className="display-tight shrink-0 rounded-lg font-display text-[3.4rem] leading-[0.95] transition active:scale-95"
           onClick={() => setPanel('airports')}
           aria-label={`Change airport. Showing ${airport.name}`}
         >

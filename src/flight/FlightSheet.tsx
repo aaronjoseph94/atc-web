@@ -19,6 +19,7 @@ import { Waveform } from '../station/Waveform'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '../settings/settingsStore'
 import { Grabber, useDialog } from '../ui/Panel'
+import { RouteSkeleton } from '../ui/States'
 import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
 import { AircraftPanel } from '../aircraft/AircraftPanel'
@@ -51,7 +52,7 @@ function Identity({ flight, info, big = false }: { flight: FlightView; info: Fli
       {/* The airline's mark, about as tall as the callsign's capitals, as in the reference. */}
       <AirlineLogo callsign={flight.callsign} icao24={flight.icao24} height={big ? 24 : 21} maxWidth={big ? 40 : 36} className="shrink-0" />
       <div className="flex min-w-0 items-baseline gap-2">
-        <h2 className={`truncate font-display leading-none tracking-wide ${big ? 'text-[2.6rem]' : 'text-[1.9rem]'}`}>{flight.callsign}</h2>
+        <h2 className={`display-tight truncate font-display leading-none ${big ? 'text-[2.6rem]' : 'text-[1.9rem]'}`}>{flight.callsign}</h2>
         {type && (
           <span className="shrink-0 text-sm font-medium text-white/70" title={info?.typeName ?? aircraftTypeName(type) ?? undefined}>
             {type}
@@ -229,7 +230,8 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   )
 }
 
-export function FlightDetail() {
+/** `docked`: rendered in the desktop side panel (no backdrop, no drag, no focus trap) instead of as a sheet. */
+export function FlightDetail({ docked = false }: { docked?: boolean }) {
   const sheet = usePlayhead((s) => s.sheet)
   const setSheet = usePlayhead((s) => s.setSheet)
   const select = usePlayhead((s) => s.select)
@@ -237,12 +239,13 @@ export function FlightDetail() {
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
   const flight = useFlight()
-  const info = useFlightInfo(flight).data
-  const open = sheet === 'full' && !!flight
+  const infoQuery = useFlightInfo(flight)
+  const info = infoQuery.data
+  const open = (docked || sheet === 'full') && !!flight
   const collapse = () => setSheet('card')
   const { mounted, closing } = usePresence(open, 240)
-  const ref = useDialog(open, collapse)
-  const drag = useSheetDrag({ onDown: collapse, threshold: 90 })
+  const ref = useDialog(open && !docked, collapse)
+  const drag = useSheetDrag({ onDown: collapse, threshold: 90, enabled: () => !docked })
 
   if (!mounted || !flight) return null
   const d = flight.detail
@@ -253,18 +256,22 @@ export function FlightDetail() {
   const comparison = d?.onGround ? null : altitudeComparison(d?.altitudeFt)
 
   return (
-    <div className="absolute inset-0 z-40 flex items-end justify-center md:items-center md:p-6">
-      <button type="button" tabIndex={-1} aria-label="Collapse" className={`absolute inset-0 bg-black/55 ${closing ? 'animate-fade-out' : 'animate-fade'}`} onClick={collapse} />
+    <div className={docked ? 'flex h-full flex-col' : 'absolute inset-0 z-40 flex items-end justify-center md:items-center md:p-6'}>
+      {!docked && <button type="button" tabIndex={-1} aria-label="Collapse" className={`absolute inset-0 bg-black/55 ${closing ? 'animate-fade-out' : 'animate-fade'}`} onClick={collapse} />}
       <div
         ref={ref}
-        role="dialog"
-        aria-modal="true"
+        role={docked ? 'region' : 'dialog'}
+        aria-modal={docked ? undefined : 'true'}
         aria-label={`Flight ${flight.callsign}`}
         tabIndex={-1}
         style={drag.dragging || drag.style.transform ? drag.style : undefined}
-        className={`relative flex h-[calc(100dvh-max(2.75rem,var(--safe-top)))] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-[#15181F] shadow-2xl ring-1 ring-white/10 outline-none md:h-auto md:max-h-[88dvh] md:w-[min(94vw,36rem)] md:rounded-[1.75rem] ${
-          closing ? 'animate-sheet-out md:animate-pop-out' : 'animate-sheet-in md:animate-pop'
-        }`}
+        className={
+          docked
+            ? 'flex min-h-0 flex-1 flex-col outline-none'
+            : `grain relative flex h-[calc(100dvh-max(2.75rem,var(--safe-top)))] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-[#15181F] shadow-2xl ring-1 ring-white/10 outline-none md:h-auto md:max-h-[88dvh] md:w-[min(94vw,36rem)] md:rounded-[1.75rem] ${
+                closing ? 'animate-sheet-out md:animate-pop-out' : 'animate-sheet-in md:animate-pop'
+              }`
+        }
       >
         <div {...drag.handlers} className="shrink-0 cursor-grab touch-none border-b border-white/10 active:cursor-grabbing md:cursor-default">
           <div className="md:hidden">
@@ -272,7 +279,7 @@ export function FlightDetail() {
           </div>
           <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-3">
             <div className="min-w-0">
-              <Identity flight={flight} info={info} big />
+              <Identity flight={flight} info={info} big={!docked} />
               <p className="mt-1 truncate text-sm text-white/60">
                 {who && flightNumber
                   ? `${who} flight ${flightNumber}`
@@ -290,11 +297,12 @@ export function FlightDetail() {
           </div>
         </div>
 
-        <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,var(--safe-bottom))] pt-4">
+        <div className="scroll-quiet scroll-fade @container min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,var(--safe-bottom))] pt-4">
           {/* The aircraft: its type drawn from above, with what it is */}
           <AircraftPanel type={d?.type} category={d?.category} registration={info?.registration ?? d?.registration ?? null} dbName={info?.typeName} dbManufacturer={info?.manufacturer} />
 
           {/* Route */}
+          {infoQuery.isLoading && <RouteSkeleton />}
           {(info?.origin || info?.destination) && (
             <div className="mb-4 rounded-2xl bg-white/[0.06] px-4 py-3">
               <div className="flex items-center gap-3">
@@ -329,7 +337,7 @@ export function FlightDetail() {
           )}
 
           {d && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
               <Stat label="Speed" value={formatSpeed(d.speedKt, speedUnit)} hint={d.speedKt != null && speedUnit === 'kt' ? `${Math.round(d.speedKt * 1.15078)} mph` : null} />
               <Stat label="Altitude" value={d.onGround ? 'On the ground' : formatAltitude(d.altitudeFt, altitudeUnit)} hint={comparison} />
               <Stat

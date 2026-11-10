@@ -2,6 +2,7 @@
  * Everything currently in view, searchable. Hovering a row lights the
  * aircraft up on the map; tapping selects it and closes the list.
  */
+import { useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
@@ -15,7 +16,8 @@ import { runwayEnds } from '../map/airportDiagram'
 import { positionsAt } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, useSettings } from '../settings/settingsStore'
-import { FullPanel, SectionLabel } from '../ui/Panel'
+import { PanelFrame, SectionLabel } from '../ui/Panel'
+import { EmptyState, ListSkeleton, OfflineArt, QuietArt, StateAction } from '../ui/States'
 
 type Group = 'Arriving' | 'Departing' | 'Passing through' | 'Taxiing' | 'Parked'
 const ORDER: Group[] = ['Arriving', 'Departing', 'Taxiing', 'Passing through', 'Parked']
@@ -28,8 +30,9 @@ function groupOf(phase: Phase, onFinal: boolean): Group {
   return 'Passing through'
 }
 
-export function TrafficPanel() {
-  const open = usePlayhead((s) => s.panel === 'traffic')
+/** `docked`: rendered in the desktop side panel instead of as a sheet. */
+export function TrafficPanel({ docked = false }: { docked?: boolean }) {
+  const open = usePlayhead((s) => s.panel === 'traffic') || docked
   const mode = usePlayhead((s) => s.mode)
   const airportIcao = usePlayhead((s) => s.airportIcao)
   const selectedIcao = usePlayhead((s) => s.selectedIcao)
@@ -41,6 +44,7 @@ export function TrafficPanel() {
   const speedUnit = useSettings((s) => s.speedUnit)
   const [query, setQuery] = useState('')
   const [list, setList] = useState<Aircraft[]>([])
+  const queryClient = useQueryClient()
 
   // Refresh once a second while open; the map keeps its own 60 fps copy.
   useEffect(() => {
@@ -84,7 +88,7 @@ export function TrafficPanel() {
   }
 
   return (
-    <FullPanel open={open} title={`Traffic at ${airport.icao}`} onClose={close}>
+    <PanelFrame docked={docked} open={open} title={`Traffic at ${airport.icao}`} onClose={close}>
       <label className="sticky top-0 z-10 flex items-center gap-2 rounded-xl bg-[#232c3b] px-3 shadow-[0_6px_12px_-6px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-transparent transition-shadow duration-[var(--duration-fast)] focus-within:ring-atc-yellow/70">
         <Search className="size-4 shrink-0 text-atc-muted" />
         <input
@@ -99,9 +103,27 @@ export function TrafficPanel() {
       </label>
 
       {total === 0 ? (
-        <p className="py-10 text-center text-subhead text-atc-muted">
-          {q ? `Nothing in view matches “${query}”.` : liveStatus === 'error' ? 'The traffic feed isn’t answering. It retries on its own.' : 'No aircraft in view yet.'}
-        </p>
+        q ? (
+          <EmptyState title="No matches">Nothing in view matches “{query}”.</EmptyState>
+        ) : mode === 'live' && liveStatus === 'error' ? (
+          <EmptyState
+            art={<OfflineArt />}
+            title="Live traffic is offline"
+            actions={
+              <StateAction primary onClick={() => void queryClient.invalidateQueries({ queryKey: ['aircraft', airportIcao] })}>
+                Try again
+              </StateAction>
+            }
+          >
+            The tracking feeds aren’t answering. It keeps retrying by itself.
+          </EmptyState>
+        ) : mode === 'live' && liveStatus !== 'ok' ? (
+          <ListSkeleton />
+        ) : (
+          <EmptyState art={<QuietArt className="rounded-[22px] ring-1 ring-white/10" />} title={`All quiet at ${airport.icao}`}>
+            No aircraft in view right now. New ones appear here as they come within range.
+          </EmptyState>
+        )
       ) : (
         ORDER.map((g) => {
           const rows = groups.get(g)
@@ -111,7 +133,7 @@ export function TrafficPanel() {
               <SectionLabel>
                 {g} <span className="font-normal tabular-nums text-white/30">{rows.length}</span>
               </SectionLabel>
-              <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              <ul className="grid grid-cols-1 gap-1.5 @xl:grid-cols-2">
                 {rows.map(({ a, phase, note }) => (
                   <li key={a.icao24}>
                     <button
@@ -131,7 +153,7 @@ export function TrafficPanel() {
                         <AirlineLogo callsign={a.callsign} icao24={a.icao24} height={22} maxWidth={34} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-display text-[22px] leading-tight">{a.callsign}</span>
+                        <span className="display-tight block truncate font-display text-[22px] leading-tight">{a.callsign}</span>
                         <span className="block truncate text-caption text-white/60">{note ?? aircraftTypeName(a.type) ?? PHASE_LABEL[phase]}</span>
                       </span>
                       <span className="shrink-0 text-right text-caption tabular-nums text-white/65">
@@ -146,6 +168,6 @@ export function TrafficPanel() {
           )
         })
       )}
-    </FullPanel>
+    </PanelFrame>
   )
 }

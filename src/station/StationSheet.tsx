@@ -45,14 +45,14 @@ export function StationSheet() {
         aria-label={`Channels at ${airport.name}`}
         tabIndex={-1}
         style={drag.dragging || drag.style.transform ? drag.style : undefined}
-        className={`on-yellow relative flex max-h-[84dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-atc-yellow text-black shadow-[0_-16px_50px_rgba(0,0,0,0.5)] outline-none md:mb-6 md:w-[min(92vw,40rem)] md:rounded-[1.75rem] ${
+        className={`on-yellow grain relative flex max-h-[84dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-atc-yellow text-black shadow-[0_-16px_50px_rgba(0,0,0,0.5)] outline-none md:mb-6 md:w-[min(92vw,40rem)] md:rounded-[1.75rem] ${
           closing ? 'animate-sheet-out' : 'animate-sheet-in'
         }`}
       >
         <div {...drag.handlers} className="shrink-0 cursor-grab touch-none border-b border-black/10 active:cursor-grabbing">
           <Grabber dark />
           <div className="flex items-center gap-3 px-4 pb-3 pt-1">
-            <div className="shrink-0 font-display text-[3.4rem] leading-[0.95] tracking-tight">{airport.icao}</div>
+            <div className="display-tight shrink-0 font-display text-[3.4rem] leading-[0.95]">{airport.icao}</div>
             <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
               <div className="max-w-full truncate text-[17px] font-bold leading-tight">{airport.stations[0]?.name ?? airport.name}</div>
               <button
