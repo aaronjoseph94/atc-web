@@ -1,16 +1,61 @@
 /*
  * Global styles. Tailwind v4 utilities do the heavy lifting; this file only
- * defines design tokens (`@theme`), base resets, keyframes, and a couple of
- * MapLibre control tweaks.
+ * defines design tokens (`@theme`), base resets, the shared motion classes,
+ * keyframes, and a couple of MapLibre control tweaks.
+ *
+ * Fonts are linked from index.html (Inter for UI text where the system has no
+ * SF Pro, Archivo for the big condensed codes and callsigns).
  */
-@import url('https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @import 'maplibre-gl/dist/maplibre-gl.css';
 
-@theme {
-  --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
-  /* Heavy condensed face for airport codes and callsigns, like airfield signage. */
-  --font-display: 'Anton', 'Outfit', ui-sans-serif, system-ui, sans-serif;
+/* `static`: emit every token, so motion classes and script can read them even when no utility does. */
+@theme static {
+  /*
+   * Type. SF Pro on Apple devices, Inter (its closest free match, with the same
+   * optical sizes) everywhere else. Display: Archivo at 66% width and black
+   * weight, which matches the proportions and colour of the reference's heavy
+   * condensed "YYC" / "KLM678" within a couple of percent.
+   */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, sans-serif;
+  /* The linked face is declared at 66% width and weight 900 only, so any element using it gets exactly that cut. */
+  --font-display: 'Archivo', 'Arial Narrow', 'Roboto Condensed', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /*
+   * The type scale, after Apple's text styles. Use these names in new code;
+   * tracking tightens as size grows, as SF Pro does.
+   */
+  --text-caption2: 11px;
+  --text-caption2--line-height: 14px;
+  --text-caption2--letter-spacing: 0.005em;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-caption--letter-spacing: 0em;
+  --text-footnote: 13px;
+  --text-footnote--line-height: 18px;
+  --text-footnote--letter-spacing: -0.004em;
+  --text-subhead: 15px;
+  --text-subhead--line-height: 20px;
+  --text-subhead--letter-spacing: -0.009em;
+  --text-body: 17px;
+  --text-body--line-height: 22px;
+  --text-body--letter-spacing: -0.014em;
+  --text-title3: 20px;
+  --text-title3--line-height: 25px;
+  --text-title3--letter-spacing: -0.017em;
+  --text-title2: 22px;
+  --text-title2--line-height: 28px;
+  --text-title2--letter-spacing: -0.019em;
+  --text-title1: 28px;
+  --text-title1--line-height: 34px;
+  --text-title1--letter-spacing: -0.021em;
+  /* Tailwind's own sizes get the same size-dependent tracking, so older markup matches. */
+  --text-xs--letter-spacing: 0em;
+  --text-sm--letter-spacing: -0.006em;
+  --text-base--letter-spacing: -0.011em;
+  --text-lg--letter-spacing: -0.014em;
+  --text-xl--letter-spacing: -0.017em;
+  --text-2xl--letter-spacing: -0.019em;
 
   --color-atc-yellow: #f5b93d;
   --color-atc-yellow-deep: #ebac2f;
@@ -26,22 +71,57 @@
   --color-atc-map: #0b1322;
   --color-atc-live: #ff3b30;
   --color-atc-muted: #9aa3b5;
+  /* Floating controls over the map: a dark, slightly blue glass. */
+  --color-atc-glass: #1b2333;
+  --color-atc-glass-hover: #263043;
 
+  --radius-sheet: 1.75rem;
+
+  --shadow-float: 0 6px 18px -4px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-sheet: 0 -10px 36px rgb(0 0 0 / 0.45);
+  --shadow-pop: 0 18px 50px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.35);
+
+  /*
+   * Motion. One vocabulary for the whole app (mirrored in src/ui/motion.ts):
+   *  - out:    things arriving or responding: fast start, soft landing;
+   *  - sheet:  iOS sheet curve, for anything that slides in from an edge;
+   *  - spring: a small overshoot for pops, toggles and press release;
+   *  - exit:   leaving: quicker, and accelerating away.
+   */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 0.7, 0.2);
+  /* Kept for older markup. */
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --duration-press: 90ms;
+  --duration-release: 260ms;
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-sheet: 460ms;
+  --duration-exit: 220ms;
+  --duration-exit-fast: 160ms;
 
   --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
-  --animate-rise: rise 0.34s var(--ease-out-quint) both;
-  --animate-fade: fade 0.22s ease both;
-  --animate-fade-out: fade-out 0.2s ease both;
-  --animate-sheet-in: sheet-in 0.38s var(--ease-out-quint) both;
-  --animate-sheet-out: sheet-out 0.24s cubic-bezier(0.4, 0, 1, 1) both;
-  --animate-pop: pop 0.22s var(--ease-spring) both;
-  --animate-pop-out: pop-out 0.14s ease-in both;
-  --animate-caption: caption 0.3s var(--ease-out-quint) both;
+  --animate-rise: rise var(--duration-base) var(--ease-out) both;
+  --animate-fade: fade var(--duration-fast) var(--ease-out) both;
+  --animate-fade-out: fade-out var(--duration-exit-fast) var(--ease-exit) both;
+  --animate-sheet-in: sheet-in var(--duration-sheet) var(--ease-sheet) both;
+  --animate-sheet-out: sheet-out var(--duration-exit) var(--ease-exit) both;
+  --animate-pop: pop var(--duration-base) var(--ease-spring) both;
+  --animate-pop-out: pop-out var(--duration-exit-fast) var(--ease-exit) both;
+  --animate-caption: caption 0.3s var(--ease-out) both;
   --animate-sweep: sweep 2.8s linear infinite;
   --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-ripple: ripple 0.6s var(--ease-out) both;
 
+  /*
+   * Entrances only name where they start and exits only where they end: the
+   * other end is wherever the element already is. So a card dragged half-way
+   * down and let go carries on from under the finger instead of jumping back.
+   */
   @keyframes pulse-dot {
     0%,
     100% {
@@ -56,25 +136,15 @@
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(14px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
+      transform: translateY(10px);
     }
   }
   @keyframes fade {
     from {
       opacity: 0;
     }
-    to {
-      opacity: 1;
-    }
   }
   @keyframes fade-out {
-    from {
-      opacity: 1;
-    }
     to {
       opacity: 0;
     }
@@ -83,14 +153,8 @@
     from {
       transform: translateY(100%);
     }
-    to {
-      transform: translateY(0);
-    }
   }
   @keyframes sheet-out {
-    from {
-      transform: translateY(0);
-    }
     to {
       transform: translateY(100%);
     }
@@ -98,18 +162,10 @@
   @keyframes pop {
     from {
       opacity: 0;
-      transform: scale(0.94) translateY(-4px);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1) translateY(0);
+      transform: scale(0.95) translateY(-4px);
     }
   }
   @keyframes pop-out {
-    from {
-      opacity: 1;
-      transform: scale(1);
-    }
     to {
       opacity: 0;
       transform: scale(0.96);
@@ -118,11 +174,17 @@
   @keyframes caption {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(6px);
+    }
+  }
+  @keyframes ripple {
+    from {
+      opacity: 0.9;
+      scale: 0.25;
     }
     to {
-      opacity: 1;
-      transform: translateY(0);
+      opacity: 0;
+      scale: 1;
     }
   }
   @keyframes sweep {
@@ -157,10 +219,19 @@ body,
   background: var(--color-atc-map);
   color: #f4f6fb;
   font-family: var(--font-sans);
+  font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
   /* The map handles its own gestures; nothing else should rubber-band or zoom the page. */
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgb(124 92 252 / 0.55);
+  color: #fff;
 }
 
 /*
@@ -175,6 +246,11 @@ body,
     cursor: pointer;
     border: none;
     background: none;
+    /* Double-tap zoom would delay every tap by 300 ms on some browsers. */
+    touch-action: manipulation;
+  }
+  kbd {
+    font-family: var(--font-sans);
   }
 }
 
@@ -193,10 +269,166 @@ body,
   }
 }
 
+/*
+ * Press feedback: a quick squeeze under the finger and a soft spring back on
+ * release, on `scale` so it composes with any translate or transform the
+ * element already has. `pressable` for buttons and chips, `pressable-soft`
+ * for big cards and full-width rows, where a full squeeze would look wobbly.
+ */
+@utility pressable {
+  transition-property: scale, filter, background-color, color, box-shadow, opacity, outline-color;
+  transition-duration: var(--duration-release);
+  transition-timing-function: var(--ease-spring);
+  &:active:not(:disabled, [aria-disabled='true']) {
+    scale: 0.94;
+    filter: brightness(0.9);
+    transition-duration: var(--duration-press);
+    transition-timing-function: var(--ease-out);
+  }
+}
+@utility pressable-soft {
+  transition-property: scale, filter, background-color, color, box-shadow, opacity, outline-color;
+  transition-duration: var(--duration-release);
+  transition-timing-function: var(--ease-out);
+  &:active:not(:disabled, [aria-disabled='true']) {
+    scale: 0.985;
+    filter: brightness(0.94);
+    transition-duration: var(--duration-press);
+  }
+}
+
+/*
+ * Interruptible enter and exit. An element mounts in its resting state and
+ * transitions in from its @starting-style; `data-closing` sends it back out.
+ * Transitions (unlike keyframes) turn round from wherever they are, so a
+ * sheet dismissed half-way up, or reopened half-way down, never jumps.
+ * A drag can set `--motion-ms` inline to carry the finger's speed through.
+ */
+.motion-sheet,
+.motion-modal {
+  transition-property: transform, opacity, scale;
+  transition-duration: var(--motion-ms, var(--duration-sheet));
+  transition-timing-function: var(--ease-sheet);
+}
+.motion-sheet[data-closing],
+.motion-modal[data-closing] {
+  transform: translateY(calc(100% + 2rem));
+  transition-duration: var(--motion-ms, var(--duration-exit));
+  pointer-events: none;
+}
+@starting-style {
+  .motion-sheet,
+  .motion-modal {
+    transform: translateY(calc(100% + 2rem));
+  }
+}
+/* On wide screens a modal is a centred card: it fades and grows a little instead of sliding. */
+@media (min-width: 768px) {
+  .motion-modal {
+    transition-property: opacity, scale, transform;
+    transition-duration: var(--duration-base);
+    transition-timing-function: var(--ease-out);
+  }
+  .motion-modal[data-closing] {
+    transform: none;
+    opacity: 0;
+    scale: 0.96;
+    transition-duration: var(--duration-exit-fast);
+    transition-timing-function: var(--ease-exit);
+  }
+  @starting-style {
+    .motion-modal {
+      transform: none;
+      opacity: 0;
+      scale: 0.96;
+    }
+  }
+}
+
+.motion-pop {
+  transition-property: opacity, scale, translate;
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-spring);
+}
+.motion-pop[data-closing] {
+  opacity: 0;
+  scale: 0.95;
+  transition-duration: var(--duration-exit-fast);
+  transition-timing-function: var(--ease-exit);
+  pointer-events: none;
+}
+@starting-style {
+  .motion-pop {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+
+.motion-rise {
+  transition-property: opacity, transform;
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-out);
+}
+.motion-rise[data-closing] {
+  opacity: 0;
+  transform: translateY(8px);
+  transition-duration: var(--duration-exit-fast);
+  transition-timing-function: var(--ease-exit);
+  pointer-events: none;
+}
+@starting-style {
+  .motion-rise {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.motion-fade {
+  transition-property: opacity;
+  transition-duration: var(--motion-ms, var(--duration-base));
+  transition-timing-function: var(--ease-out);
+}
+.motion-fade[data-closing] {
+  opacity: 0;
+  transition-duration: var(--motion-ms, var(--duration-exit));
+  pointer-events: none;
+}
+@starting-style {
+  .motion-fade {
+    opacity: 0;
+  }
+}
+
+/*
+ * Hover hints for controls (pointer devices only): appear after a short
+ * pause so they don't flicker as the pointer passes, vanish at once.
+ */
+.tooltip {
+  pointer-events: none;
+  opacity: 0;
+  scale: 0.96;
+  transition:
+    opacity var(--duration-exit-fast) var(--ease-out),
+    scale var(--duration-exit-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .has-tooltip:hover > .tooltip,
+  .has-tooltip:focus-visible > .tooltip {
+    opacity: 1;
+    scale: 1;
+    transition-delay: 450ms;
+    transition-duration: var(--duration-fast);
+  }
+}
+.has-tooltip:active > .tooltip {
+  opacity: 0;
+  transition-delay: 0ms;
+}
+
 /* Skeleton placeholder while remote details load. */
 .skeleton {
   border-radius: 6px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 25%, rgba(255, 255, 255, 0.18) 50%, rgba(255, 255, 255, 0.08) 75%);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.07) 25%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.07) 75%);
   background-size: 200% 100%;
   animation: var(--animate-shimmer);
 }
@@ -217,23 +449,38 @@ body,
   display: none;
 }
 
-/* Keep the (required) attribution unobtrusive on a dark map. */
+/* Keep the (required) attribution unobtrusive: a small glass chip like the other map controls. */
 .maplibregl-ctrl-attrib {
-  background: rgba(10, 14, 20, 0.6) !important;
+  background: rgb(27 35 51 / 0.72) !important;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
   color: #9aa3b5 !important;
-  font-size: 10px !important;
-  border-radius: 8px !important;
+  font-family: var(--font-sans);
+  font-size: 11px !important;
+  line-height: 16px;
+  border-radius: 12px !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+}
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  min-height: 24px;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show {
+  padding: 3px 28px 3px 10px;
 }
 .maplibregl-ctrl-attrib a {
   color: #c4cbd8 !important;
 }
 .maplibregl-ctrl-attrib-button {
   filter: invert(1);
-  opacity: 0.6;
+  opacity: 0.55;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.maplibregl-ctrl-attrib-button:hover {
+  opacity: 0.9;
 }
 .maplibregl-ctrl-bottom-right {
   bottom: calc(var(--bottom-stack, 8.25rem) + 0.25rem);
-  transition: bottom 0.3s var(--ease-out-quint);
+  transition: bottom var(--duration-sheet) var(--ease-sheet);
 }
 @media (min-width: 768px) {
   .maplibregl-ctrl-bottom-right {
@@ -249,6 +496,7 @@ body,
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }
 .reduce-motion *,
@@ -257,4 +505,5 @@ body,
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
+  transition-delay: 0ms !important;
 }

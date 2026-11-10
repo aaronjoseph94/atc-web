@@ -28,7 +28,6 @@ export const SRC = {
 } as const
 
 export const LAYER = {
-  buildings3d: 'building-3d',
   buildings: 'building',
   radar: 'weather-radar',
   runwayChip: 'apt-runway-chip',
@@ -74,7 +73,6 @@ type Palette = {
   taxiLine: string
   building: string
   buildingEdge: string
-  buildingTop: string
   roadMinor: string
   roadMajor: string
   motorway: string
@@ -119,7 +117,6 @@ const NAVY: Palette = {
   taxiLine: '#9A852E',
   building: '#2A2D3B',
   buildingEdge: '#3A3E4F',
-  buildingTop: '#32364A',
   roadMinor: '#1D2640',
   roadMajor: '#212A45',
   motorway: '#252F4C',
@@ -160,7 +157,6 @@ const GRAPHITE: Palette = {
   taxiLine: '#8F7F3A',
   building: '#1A1D21',
   buildingEdge: '#2B3036',
-  buildingTop: '#24282D',
   roadMinor: '#1B1E22',
   roadMajor: '#23272C',
   motorway: '#2B3036',
@@ -308,9 +304,6 @@ function layers(p: Palette): LayerSpecification[] {
     { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'kind'], 'threshold', p.paint, 'threshold-bar', p.paint, 'aim', p.paintMid, 'edge', p.paintMid, p.paintDim], 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, 1] } },
     // Runway numbers and letters, as thin stencil strokes with a real-world width.
     { id: 'apt-designator', type: 'line', source: SRC.designators, minzoom: 13.6, layout: { ...vis(paint), 'line-cap': 'square', 'line-join': 'miter' }, paint: { 'line-color': p.paintMid, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, 1], 'line-width': metres(1.8) } },
-
-    // ---- 3D buildings (only when the map is tilted) ------------------------------
-    { id: LAYER.buildings3d, type: 'fill-extrusion', source: 'omt', 'source-layer': 'building', minzoom: 13, layout: vis(false), paint: { 'fill-extrusion-color': p.buildingTop, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.92, 'fill-extrusion-vertical-gradient': true } },
 
     // ---- labels ----------------------------------------------------------------
     { id: 'water-name', type: 'symbol', source: 'omt', 'source-layer': 'water_name', layout: { ...vis(base), 'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']], 'text-font': ['Noto Sans Italic'], 'text-size': 12, 'text-letter-spacing': 0.08, 'symbol-placement': 'point' }, paint: { 'text-color': p.waterLabel, 'text-halo-color': p.labelHalo, 'text-halo-width': 1 } },
@@ -510,7 +503,7 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
 }
 
 /** Layer properties the app toggles at runtime; a theme change must not undo them. */
-const RUNTIME_VISIBILITY = new Set<string>([LAYER.buildings3d, LAYER.buildings, LAYER.approach, LAYER.approachTick, LAYER.trails, LAYER.shadow, LAYER.radar])
+const RUNTIME_VISIBILITY = new Set<string>([LAYER.buildings, LAYER.approach, LAYER.approachTick, LAYER.trails, LAYER.shadow, LAYER.radar])
 
 /** Re-colour the live map for a theme by pushing each layer's paint and visibility. */
 export function applyTheme(map: MapLibreMap, theme: MapTheme) {

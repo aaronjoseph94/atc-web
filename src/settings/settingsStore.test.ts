@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, formatAltitude, formatSpeed, formatVerticalRate, useSettings } from './settingsStore'
+import { DEFAULT_SETTINGS, formatAltitude, formatSpeed, formatVerticalRate, restoreSettings, useSettings } from './settingsStore'
 
 describe('settings store', () => {
   beforeEach(() => useSettings.getState().reset())
@@ -19,6 +19,21 @@ describe('settings store', () => {
     useSettings.getState().reset()
     expect(useSettings.getState().pollSeconds).toBe(8)
     expect(useSettings.getState().mapTheme).toBe('navy')
+  })
+})
+
+describe('restoreSettings', () => {
+  it('keeps known keys with the right kind of value', () => {
+    expect(restoreSettings({ mapTheme: 'graphite', pollSeconds: 15, favourites: ['JFK'] })).toEqual({ mapTheme: 'graphite', pollSeconds: 15, favourites: ['JFK'] })
+  })
+
+  it('drops options that no longer exist, and values of the wrong type', () => {
+    expect(restoreSettings({ tilt: true, buildings3d: true, trails: 'yes', favourites: 'JFK', hideGround: true })).toEqual({ hideGround: true })
+  })
+
+  it('copes with nothing stored', () => {
+    expect(restoreSettings(undefined)).toEqual({})
+    expect(restoreSettings('garbage')).toEqual({})
   })
 })
 

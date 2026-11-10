@@ -81,6 +81,22 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const SETTINGS_STORAGE_KEY = 'atc-web.settings.v1'
 
+/**
+ * Settings read back from storage, keeping only keys this version knows and
+ * values of the right kind. Options that were removed (or stored by a newer
+ * or older build) are dropped quietly instead of leaking into the store.
+ */
+export function restoreSettings(stored: unknown): Partial<Settings> {
+  if (!stored || typeof stored !== 'object') return {}
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(stored)) {
+    if (!(k in DEFAULT_SETTINGS)) continue
+    const def = DEFAULT_SETTINGS[k as keyof Settings]
+    if (Array.isArray(def) ? Array.isArray(v) : typeof v === typeof def) out[k] = v
+  }
+  return out as Partial<Settings>
+}
+
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
@@ -94,6 +110,7 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: SETTINGS_STORAGE_KEY,
+      merge: (stored, current) => ({ ...current, ...restoreSettings(stored) }),
       // Only persist the data fields, not the actions.
       partialize: (s) =>
         Object.fromEntries(

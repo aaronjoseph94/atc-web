@@ -16,44 +16,45 @@ function StatusPill() {
   const count = usePlayhead((s) => s.liveCount)
   const following = usePlayhead((s) => s.following && !!s.selectedIcao)
   const clip = usePlayhead((s) => s.clip)
-  const tMs = usePlayhead((s) => s.tMs)
+  // Only a rewind shows the replay's time ("3 min ago"), and only to the second; a scene's pill never changes.
+  const tMs = usePlayhead((s) => (s.mode === 'playback' && s.clip?.kind === 'rewind' ? Math.floor(s.tMs / 1000) * 1000 : 0))
   const airportIcao = usePlayhead((s) => s.airportIcao)
   const setPanel = usePlayhead((s) => s.setPanel)
   const queryClient = useQueryClient()
   const now = useNow(5000)
 
-  const pill = 'pointer-events-auto flex h-9 items-center gap-2 rounded-full px-3.5 text-xs font-bold shadow-lg transition active:scale-95'
+  const pill = 'pointer-events-auto flex h-9 items-center gap-2 rounded-full px-3.5 text-footnote font-semibold shadow-float'
 
   if (mode === 'playback') {
     const label = clip?.kind === 'rewind' && clip.startedAt != null ? agoLabel(now - (clip.startedAt + tMs)) : 'Replay'
     return (
-      <span className={`${pill} bg-atc-magenta text-white`} role="status">
+      <span className={`${pill} motion-pop bg-atc-magenta text-white tabular-nums`} role="status">
         {label}
       </span>
     )
   }
   if (following) {
     return (
-      <span className={`${pill} animate-pop bg-atc-card tracking-wider text-white`} role="status">
+      <span className={`${pill} motion-pop bg-atc-card font-bold tracking-[0.06em] text-white`} role="status">
         TRACK
       </span>
     )
   }
   if (status === 'error') {
     return (
-      <button type="button" className={`${pill} bg-[#1b2333]/85 text-white ring-1 ring-white/15 backdrop-blur-xl`} onClick={() => void queryClient.invalidateQueries({ queryKey: ['aircraft', airportIcao] })}>
+      <button type="button" className={`${pill} pressable motion-pop bg-atc-glass/85 text-white ring-1 ring-white/[0.13] backdrop-blur-xl`} onClick={() => void queryClient.invalidateQueries({ queryKey: ['aircraft', airportIcao] })}>
         <span className="size-2 rounded-full bg-atc-muted" />
         Feed offline. Tap to retry
       </button>
     )
   }
   return (
-    <button type="button" className={`${pill} bg-[#1b2333]/75 text-white ring-1 ring-white/15 backdrop-blur-xl hover:bg-[#263043]/85`} onClick={() => setPanel('traffic')} aria-label={`Live. ${count} aircraft. Open traffic list`}>
-      <span className="rounded bg-atc-live px-1.5 py-0.5 text-[10px] tracking-wider text-white">
-        <span className="mr-1 inline-block size-1.5 animate-pulse-dot rounded-full bg-white align-middle" />
+    <button type="button" className={`${pill} pressable bg-atc-glass/75 pl-2 text-white ring-1 ring-white/[0.13] backdrop-blur-xl hover:bg-atc-glass-hover/90`} onClick={() => setPanel('traffic')} aria-label={`Live. ${count} aircraft. Open traffic list`}>
+      <span className="flex h-5 items-center gap-1 rounded-full bg-atc-live pl-1.5 pr-2 text-caption2 font-bold tracking-[0.06em] text-white">
+        <span className="size-1.5 animate-pulse-dot rounded-full bg-white" />
         LIVE
       </span>
-      <span className="tabular-nums text-white/75">{status === 'ok' ? `${count} aircraft` : 'Connecting…'}</span>
+      <span className="tabular-nums text-white/80">{status === 'ok' ? `${count} aircraft` : 'Connecting…'}</span>
     </button>
   )
 }
@@ -67,24 +68,24 @@ export function TopBar() {
   const exitPlayback = usePlayhead((s) => s.exitPlayback)
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-[max(0.75rem,var(--safe-top))]">
+    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-[max(0.75rem,var(--safe-top))] md:px-4">
       <div className="flex items-center gap-2">
         {selected ? (
-          <GlassButton label="Clear selection" onClick={() => select(null)} className="animate-pop">
+          <GlassButton label="Clear selection" shortcut="Esc" tooltip="right" onClick={() => select(null)} className="motion-pop">
             <X className="size-5" />
           </GlassButton>
         ) : mode === 'playback' ? (
           <button
             type="button"
-            className="pointer-events-auto flex h-11 animate-pop items-center gap-1 rounded-full bg-[#1b2333]/75 pl-2 pr-3 text-white shadow-lg ring-1 ring-white/15 backdrop-blur-xl transition hover:bg-[#263043]/85 active:scale-95"
+            className="motion-pop pressable pointer-events-auto flex h-11 items-center gap-1 rounded-full bg-atc-glass/75 pl-2 pr-3 text-white shadow-float ring-1 ring-white/[0.13] backdrop-blur-xl hover:bg-atc-glass-hover/90"
             onClick={exitPlayback}
             aria-label="Back to live traffic"
           >
             <ChevronLeft className="size-5" />
-            <span className="rounded bg-atc-live px-1.5 py-0.5 text-[10px] font-bold tracking-wider">LIVE</span>
+            <span className="rounded-full bg-atc-live px-2 py-0.5 text-caption2 font-bold tracking-[0.06em]">LIVE</span>
           </button>
         ) : (
-          <GlassButton label="Search traffic" onClick={() => setPanel('traffic')}>
+          <GlassButton label="Search traffic" shortcut="/" tooltip="right" onClick={() => setPanel('traffic')}>
             <Search className="size-5" />
           </GlassButton>
         )}
@@ -93,7 +94,7 @@ export function TopBar() {
       <StatusPill />
 
       <div className="flex justify-end">
-        <GlassButton label="Menu" onClick={() => setPanel(panel === 'menu' ? null : 'menu')} active={panel === 'menu'}>
+        <GlassButton label="Menu" shortcut="M" tooltip={panel === 'menu' ? 'none' : 'left'} onClick={() => setPanel(panel === 'menu' ? null : 'menu')} active={panel === 'menu'}>
           <MoreHorizontal className="size-5" />
         </GlassButton>
       </div>

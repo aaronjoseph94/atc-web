@@ -1,6 +1,6 @@
 /**
  * Full-bleed MapLibre map. Owns the live traffic query, the camera and the
- * map-level toggles (theme, 3D, radar); delegates per-frame drawing to
+ * map-level toggles (theme, radar); delegates per-frame drawing to
  * `AircraftLayer` and the painted airfield to `AirportDiagramLayer`.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
@@ -12,6 +12,7 @@ import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
+import { CAMERA_EASE } from '../ui/motion'
 import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
@@ -25,7 +26,6 @@ const FOCUS_ZOOM_MAX = 15.6
 const UNFOCUS_DELAY_MS = 1600
 /** Time constant of the follow camera; lower is tighter. */
 const FOLLOW_TAU_MS = 260
-const TILT_PITCH = 58
 
 // Lazy so the ~1 MB MapLibre bundle doesn't block first paint. The worker URL
 // must be configured before the first Map is constructed (see maplibreSetup).
@@ -64,7 +64,6 @@ export function MapView() {
 
   const mode = usePlayhead((s) => s.mode)
   const airportIcao = usePlayhead((s) => s.airportIcao)
-  const tilt = usePlayhead((s) => s.tilt)
   const cameraMode = usePlayhead((s) => s.cameraMode)
   const sheet = usePlayhead((s) => s.sheet)
   const select = usePlayhead((s) => s.select)
@@ -125,7 +124,7 @@ export function MapView() {
   const goHome = useCallback(
     (ms = 1100) => {
       if (!map) return
-      map.fitBounds(airport.bounds, { padding: 36, maxZoom: 14.4, duration: duration(ms), essential: true, bearing: usePlayhead.getState().tilt ? map.getBearing() : 0 })
+      map.fitBounds(airport.bounds, { padding: 36, maxZoom: 14.4, duration: duration(ms), easing: CAMERA_EASE, essential: true, bearing: 0 })
     },
     [map, airport, duration],
   )
@@ -182,12 +181,10 @@ export function MapView() {
     map.on('dragstart', takeOver)
     map.on('zoomstart', adjust)
     map.on('rotatestart', adjust)
-    map.on('pitchstart', adjust)
     return () => {
       map.off('dragstart', takeOver)
       map.off('zoomstart', adjust)
       map.off('rotatestart', adjust)
-      map.off('pitchstart', adjust)
     }
   }, [map])
 
@@ -213,6 +210,7 @@ export function MapView() {
             center: [target.lon, target.lat],
             zoom: Math.min(FOCUS_ZOOM_MAX, Math.max(map.getZoom(), airport.zoom + FOCUS_ZOOM_BOOST)),
             duration: duration(900),
+            easing: CAMERA_EASE,
             essential: true,
           })
         } else if (now >= f.settleAt && !map.isZooming() && !map.isRotating()) {
@@ -252,14 +250,13 @@ export function MapView() {
   useEffect(() => {
     if (!map) return
     const show = (id: string, on: boolean) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none')
-    show(LAYER.buildings3d, tilt)
-    show(LAYER.buildings, !tilt && themeHasVectorBase(theme))
+    show(LAYER.buildings, themeHasVectorBase(theme))
     show(LAYER.approach, approachPaths)
     show(LAYER.approachTick, approachPaths)
     show(LAYER.trails, trails)
     show(LAYER.shadow, shadows)
     show(LAYER.radar, weatherRadar)
-  }, [map, theme, tilt, approachPaths, trails, shadows, weatherRadar])
+  }, [map, theme, approachPaths, trails, shadows, weatherRadar])
 
   // Radar mosaics are republished every five minutes.
   useEffect(() => {
@@ -269,15 +266,6 @@ export function MapView() {
     const id = window.setInterval(refresh, 300_000)
     return () => window.clearInterval(id)
   }, [map, weatherRadar])
-
-  // 3D view: tilt and turn slightly so buildings read as solids.
-  useEffect(() => {
-    if (!map) return
-    const pitch = tilt ? TILT_PITCH : 0
-    // Already there (first load, flat): a no-op ease would still cancel the opening camera move.
-    if (Math.abs(map.getPitch() - pitch) < 0.5) return
-    map.easeTo({ pitch, bearing: tilt ? map.getBearing() || -18 : 0, duration: duration(900), essential: true })
-  }, [map, tilt, duration])
 
   useEffect(() => {
     mapHandle.current = map
@@ -310,7 +298,10 @@ export function MapView() {
           initialViewState={initialView}
           style={{ width: '100%', height: '100%' }}
           attributionControl={{ compact: true }}
-          maxPitch={70}
+          // A flat, top-down map only: no tilting by gesture, keyboard or accident.
+          maxPitch={0}
+          pitchWithRotate={false}
+          touchPitch={false}
           minZoom={7}
           maxZoom={19}
           onLoad={(e) => {
