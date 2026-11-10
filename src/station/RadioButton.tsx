@@ -2,7 +2,7 @@
  * Play/pause for the live radio, and the one-line status that goes with it.
  * Lives on the yellow station bar.
  */
-import { Loader2, Pause, Play, RotateCcw, VolumeX } from 'lucide-react'
+import { Loader2, Pause, Play, VolumeX } from 'lucide-react'
 import { useRadio, statusText } from '../live/radio/radioStore'
 import { toggleRadio } from '../live/radio/useLiveRadio'
 
@@ -12,7 +12,8 @@ export function RadioButton({ label }: { label: string }) {
   const status = useRadio((s) => s.status)
   const playing = on && (status === 'live' || status === 'buffering' || status === 'connecting' || status === 'reconnecting' || status === 'offline')
   const waiting = status === 'connecting' || status === 'buffering' || status === 'reconnecting'
-  const Icon = status === 'nofeed' ? VolumeX : status === 'offline' ? RotateCcw : playing ? Pause : Play
+  // An offline feed is still being waited on (the status line counts down to the next try), and tapping stops that wait: so it shows pause, not a retry arrow that would promise the opposite.
+  const Icon = status === 'nofeed' ? VolumeX : playing ? Pause : Play
   const name = status === 'nofeed' ? `No live audio for ${label}` : playing ? `Stop listening to ${label}` : `Listen live to ${label}`
   return (
     <button

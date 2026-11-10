@@ -136,6 +136,9 @@ export function streamInto(media: HTMLAudioElement, url: string, events: Events)
     stop: () => {
       stopped = true
       ctrl.abort()
+      // A stream stopped before the element opened it (a quick channel change) never reaches
+      // `sourceopen`, so its URL would otherwise pin the MediaSource for the life of the page.
+      URL.revokeObjectURL(objectUrl)
       try {
         if (ms.readyState === 'open') ms.endOfStream()
       } catch {

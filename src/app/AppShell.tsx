@@ -109,7 +109,8 @@ export function AppShell() {
           <WaitingStrip />
           {/* The flight card slides up over the station bar and back down to reveal it, as one stack. */}
           {/* Beside the side panel the bars are as wide as the map area allows. */}
-          <div className={`grid w-full justify-items-center ${wide ? 'grid-cols-[minmax(0,1fr)] lg:max-w-[40rem]' : 'md:w-auto'}`}>
+          {/* On a phone the one column is the screen's width: an auto column would grow to fit the bar's untruncated channel name and push the play button off screen. */}
+          <div className={`grid w-full justify-items-center ${wide ? 'grid-cols-[minmax(0,1fr)] lg:max-w-[40rem]' : 'max-md:grid-cols-[minmax(0,1fr)] md:w-auto'}`}>
             <div className={`pointer-events-none flex w-full justify-center self-end *:max-w-full [grid-area:1/1] ${wide ? '' : 'md:w-auto'} ${cardOpen ? 'invisible delay-[var(--duration-sheet)]' : ''} transition-[visibility]`} inert={cardOpen}>
               <StationBar />
             </div>

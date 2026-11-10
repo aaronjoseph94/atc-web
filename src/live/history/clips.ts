@@ -12,7 +12,7 @@
 import { create } from 'zustand'
 import { usePlayhead } from '../../playback/playheadStore'
 import { getAudioContext, resumeAudio } from '../radio/audioGraph'
-import { onSegment } from '../radio/player'
+import { duckRadio, onSegment } from '../radio/player'
 import { resample } from '../radio/wav'
 import { getByIndex, getOne, prune, putAll, STORE } from './db'
 
@@ -56,10 +56,20 @@ export function keepClip(clip: Clip) {
 
 /** Start keeping the audio of each call heard. Returns a stop function. */
 export function startClipCapture(): () => void {
-  return onSegment((seg, _feed, endedAt) => {
+  const offSegments = onSegment((seg, _feed, endedAt) => {
     const ph = usePlayhead.getState()
+    // Cut off by a replay starting: the playhead already names the replay's channel, so it can't be filed correctly.
+    if (ph.mode !== 'live') return
     keepClip({ id: `clip-${endedAt}`, airport: ph.airportIcao, stationId: ph.stationId, start: endedAt - seg.durationMs, end: endedAt, rate: RATE, pcm: toPcm(seg.samples, seg.sampleRate) })
   })
+  // A replay or another airport has its own sound: a saved call still playing would talk over it.
+  const offPlayhead = usePlayhead.subscribe((s, prev) => {
+    if (s.mode !== prev.mode || s.airportIcao !== prev.airportIcao) stopClip()
+  })
+  return () => {
+    offSegments()
+    offPlayhead()
+  }
 }
 
 /** Load the clip index saved by earlier visits (at most fifty small records). */
@@ -99,6 +109,7 @@ export function stopClip() {
   } catch {
     // Already stopped.
   }
+  if (current) duckRadio(false)
   current = null
   useClips.setState({ playing: null })
 }
@@ -127,11 +138,14 @@ export async function playClip(meta: ClipMeta, entryId: string, at: number, dura
   src.onended = () => {
     if (current === src) {
       current = null
+      duckRadio(false)
       useClips.setState({ playing: null })
     }
   }
   current = src
   useClips.setState({ playing: entryId })
+  // The live channel keeps playing underneath, turned down, so the two voices don't talk over each other.
+  duckRadio(true)
   src.start()
   return buf.duration * 1000
 }

@@ -73,7 +73,9 @@ export function useLiveCaptions() {
           if (useRadio.getState().caption?.id === id) useRadio.getState().patch({ caption: null })
         }, RADIO_LINGER_MS)
       }
-      if (r.on !== prev.on && !r.on) window.clearTimeout(radioTimer)
+      // Stopping the radio leaves the last call's fade timer running: the caption line keeps
+      // showing a radio caption while there is one, so cancelling the fade would pin it there
+      // (and hold off the tower log) until the next call, which never comes with the radio off.
     })
 
     return () => {

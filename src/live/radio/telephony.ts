@@ -115,7 +115,9 @@ export const TELEPHONY: Record<string, string[]> = {
   ETD: ['Etihad'],
   QTR: ['Qatari'],
   SVA: ['Saudia'],
-  ELY: ['El Al', 'Elal'],
+  // "Tell Al": how the recogniser wrote El Al at Kennedy.
+  ELY: ['El Al', 'Elal', 'Tell Al'],
+  AIZ: ['Arkia'],
   RJA: ['Jordanian'],
   ETH: ['Ethiopian'],
   RAM: ['Royal Air Maroc'],

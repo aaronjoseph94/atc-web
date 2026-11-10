@@ -15,7 +15,7 @@ import { getAirport, resolveStation } from '../../api/airports'
 import { feedFor } from '../../api/radioFeeds'
 import type { Station } from '../../api/types'
 import { usePlayhead } from '../../playback/playheadStore'
-import { startRadio, stopRadio } from './player'
+import { onMediaPlay, startRadio, stopRadio } from './player'
 import { useRadio } from './radioStore'
 import { clearQueue, releaseFocus, startTranscriber } from './transcriber'
 
@@ -46,6 +46,10 @@ function currentStation() {
 export function useLiveRadio() {
   useEffect(() => {
     const stopTranscriber = startTranscriber()
+    // Play on the lock screen or a headset resumes the channel on screen now, never the one heard before a retune, and never over a replay.
+    onMediaPlay(() => {
+      if (usePlayhead.getState().mode === 'live') tuneRadio(currentStation())
+    })
     const unsubscribe = usePlayhead.subscribe((s, prev) => {
       const radio = useRadio.getState()
       if (s.mode !== prev.mode) {

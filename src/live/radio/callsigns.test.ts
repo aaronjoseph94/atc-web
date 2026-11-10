@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findCallsigns, guessSpeaker, readNumber, splitCalls, tokenize, writtenCallsign } from './callsigns'
+import { matchMentions } from './match'
 
 const signs = (text: string) => findCallsigns(text).map((m) => m.callsign)
 const num = (text: string) => {
@@ -59,6 +60,14 @@ describe('findCallsigns', () => {
     expect(signs('Flair 809, Clearance')).toEqual(['FLE809'])
     expect(signs('Ground, hello, WestJet 1501 exiting D3 for 83')).toEqual(['WJA1501'])
     expect(signs('Uh, Flair 809, gate 16N, uh,')).toEqual(['FLE809'])
+  })
+
+  it('reads airlines the way live Kennedy transcripts spelled them', () => {
+    expect(signs('Tell Al 001.')).toEqual(['ELY1'])
+    expect(matchMentions(findCallsigns('Tell Al 001.'), [{ icao24: '738a1c', callsign: 'ELY001', onGround: true, altitudeFt: null }])[0]?.icao24).toBe('738a1c')
+    expect(signs('Arkia 991 heavy, turn right on Papa')).toEqual(['AIZ991'])
+    // "tell" on its own is just a word.
+    expect(signs('Okay, I will tell you 2 minutes')).toEqual([])
   })
 
   it('reads US registrations', () => {
