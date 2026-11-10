@@ -67,6 +67,8 @@ describe('airports catalog', () => {
     expect(resolveStation(ord, 'ord-ground-south')?.kind).toBe('GND')
     expect(resolveStation(ord, 'nonsense')?.kind).toBe('TWR')
     expect(resolveStation(getAirport('JFK'), 'jfk-tower')?.kind).toBe('TWR')
+    // The JFK replay scene lands on 22L, which has its own tower frequency.
+    expect(resolveStation(getAirport('JFK'), 'jfk-tower-22l')?.position).toContain('22L')
     expect(airportForStation('sfo-tower')?.icao).toBe('SFO')
     expect(airportForStation(ord.stations[3].id)?.icao).toBe('ORD')
   })

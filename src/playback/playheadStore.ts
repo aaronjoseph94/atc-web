@@ -73,6 +73,8 @@ type PlayheadState = {
   events: LiveEvent[]
   /** The event currently shown as a caption in live mode. */
   caption: LiveEvent | null
+  /** Where the user was before a replay took them to another airport. */
+  returnTo: { airportIcao: string; stationId: string } | null
 
   setAirport: (icao: string) => void
   setStationId: (id: string) => void
@@ -136,6 +138,7 @@ export const usePlayhead = create<PlayheadState>((set) => ({
   tilt: false,
   events: [],
   caption: null,
+  returnTo: null,
 
   // Switching airport always returns to live and clears per-airport state.
   setAirport: (icao) => {
@@ -161,6 +164,7 @@ export const usePlayhead = create<PlayheadState>((set) => ({
       following: false,
       events: [],
       caption: null,
+      returnTo: null,
     })
   },
   setStationId: (stationId) => set({ stationId }),
@@ -198,7 +202,9 @@ export const usePlayhead = create<PlayheadState>((set) => ({
   // Playback jumps the map to the clip's airport and starts the clock at 0.
   enterPlayback: (clip) => {
     const airport = airportForStation(clip.stationId) ?? getAirport(clip.airport ?? DEFAULT_AIRPORT)
-    set({
+    set((s) => ({
+      // Remember where we came from the first time; scene-to-scene keeps the original.
+      returnTo: s.returnTo ?? (s.mode === 'live' ? { airportIcao: s.airportIcao, stationId: s.stationId } : null),
       mode: 'playback',
       clip,
       tMs: 0,
@@ -216,11 +222,14 @@ export const usePlayhead = create<PlayheadState>((set) => ({
       cameraMode: 'auto',
       following: false,
       caption: null,
-    })
+    }))
   },
 
+  // Back to live, at the airport and channel the user was on before the replay.
   exitPlayback: () =>
-    set({
+    set((s) => ({
+      ...(s.returnTo && s.returnTo.airportIcao !== s.airportIcao ? { ...s.returnTo, liveStatus: 'loading' as const, liveCount: 0, events: [] } : s.returnTo ? { stationId: s.returnTo.stationId } : {}),
+      returnTo: null,
       mode: 'live',
       playing: false,
       rate: 1,
@@ -232,7 +241,7 @@ export const usePlayhead = create<PlayheadState>((set) => ({
       sheet: 'closed',
       following: false,
       cameraMode: 'auto',
-    }),
+    })),
 }))
 
 /**

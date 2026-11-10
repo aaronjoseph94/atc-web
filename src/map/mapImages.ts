@@ -274,7 +274,8 @@ const PLATES: Record<string, Plate> = {
   // Runway (mandatory instruction) sign: white legend on red.
   'sign-runway': { fill: '#C8102E', stroke: 'rgba(255,255,255,0.9)', strokeWidth: 1.5, radius: 5 },
   tag: { fill: 'rgba(18,24,40,0.88)', stroke: 'rgba(255,255,255,0.14)', strokeWidth: 1, radius: 8 },
-  'tag-active': { fill: '#FFB800', radius: 8 },
+  // The highlighted aircraft's tag takes the flight card's purple.
+  'tag-active': { fill: '#5B3DF5', stroke: 'rgba(255,255,255,0.35)', strokeWidth: 1, radius: 8 },
 }
 
 function plate(p: Plate): { data: ImageData; inset: number } {

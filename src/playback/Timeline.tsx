@@ -113,7 +113,7 @@ export function Timeline({ clip, label }: { clip: ClipPack; label: string }) {
         aria-valuemax={Math.round(dur / 1000)}
         aria-valuenow={Math.round(at / 1000)}
         aria-valuetext={clock}
-        className="relative mt-2 h-9 cursor-ew-resize touch-none select-none"
+        className="relative mt-2 h-9 cursor-ew-resize touch-none select-none rounded-lg outline-offset-4"
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}

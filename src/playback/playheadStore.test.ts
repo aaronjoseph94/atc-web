@@ -93,6 +93,16 @@ describe('playhead store', () => {
     expect(s.activeCallsign).toBeNull()
   })
 
+  it('returns to the airport and channel you were on after a replay elsewhere', () => {
+    usePlayhead.getState().setAirport('YYZ')
+    const before = usePlayhead.getState().stationId
+    usePlayhead.getState().enterPlayback(clip) // an ORD scene
+    usePlayhead.getState().enterPlayback({ ...clip, id: 'second' }) // scene to scene keeps the origin
+    expect(usePlayhead.getState().airportIcao).toBe('ORD')
+    usePlayhead.getState().exitPlayback()
+    expect(usePlayhead.getState()).toMatchObject({ airportIcao: 'YYZ', stationId: before, mode: 'live', returnTo: null })
+  })
+
   it('setLive tracks status, count and last-updated timestamp', () => {
     usePlayhead.getState().setLive('ok', 42)
     const s = usePlayhead.getState()

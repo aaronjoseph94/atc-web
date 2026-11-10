@@ -296,7 +296,7 @@ SCENARIOS: list[Scenario] = [
     ),
     Scenario(
         id="jfk-tower-go-around",
-        station_id="jfk-tower",
+        station_id="jfk-tower-22l",
         airport="JFK",
         elevation_ft=13.0,
         title="Kennedy Tower — arrivals and a go-around",

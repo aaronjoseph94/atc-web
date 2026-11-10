@@ -377,7 +377,7 @@ function layers(p: Palette): LayerSpecification[] {
       source: SRC.aircraft,
       filter: ['==', ['get', 'lbl'], 1],
       layout: {
-        'text-field': ['format', ['get', 'callsign'], {}, ['get', 'sub'], { 'font-scale': 0.82, 'text-color': ['case', ['==', ['get', 'hi'], 1], 'rgba(20,16,4,0.72)', 'rgba(255,255,255,0.62)'] }],
+        'text-field': ['format', ['get', 'callsign'], {}, ['get', 'sub'], { 'font-scale': 0.82, 'text-color': ['case', ['==', ['get', 'hi'], 1], 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0.62)'] }],
         'text-font': FONT_BOLD,
         'text-size': ['interpolate', ['linear'], ['zoom'], 10, 10, 15, 11.5],
         'text-letter-spacing': 0.03,
@@ -396,7 +396,7 @@ function layers(p: Palette): LayerSpecification[] {
         'icon-text-fit-padding': [3, 6, 3, 6],
         'symbol-sort-key': ['get', 'z'],
       },
-      paint: { 'text-color': ['case', ['==', ['get', 'hi'], 1], '#141004', '#FFFFFF'], 'text-opacity': ['get', 'o'], 'icon-opacity': ['get', 'o'] },
+      paint: { 'text-color': '#FFFFFF', 'text-opacity': ['get', 'o'], 'icon-opacity': ['get', 'o'] },
     },
   ]
   return list as LayerSpecification[]

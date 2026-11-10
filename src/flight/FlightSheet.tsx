@@ -286,7 +286,7 @@ export function FlightDetail() {
               <Stat
                 label="Climb"
                 value={d.onGround || vr == null ? '—' : formatVerticalRate(vr, altitudeUnit)}
-                hint={vr != null && !d.onGround && Math.abs(vr) > 200 ? (vr > 0 ? 'climbing' : 'descending') : d.selectedAltitudeFt != null && !d.onGround ? `cleared to ${formatAltitude(d.selectedAltitudeFt, altitudeUnit)}` : null}
+                hint={vr != null && !d.onGround && Math.abs(vr) > 200 ? (vr > 0 ? 'climbing' : 'descending') : d.selectedAltitudeFt != null && !d.onGround ? `autopilot set to ${formatAltitude(Math.round(d.selectedAltitudeFt / 100) * 100, altitudeUnit)}` : null}
               />
               <Stat label="Heading" value={d.headingKnown === false ? '—' : `${Math.round(d.heading).toString().padStart(3, '0')}°`} hint={d.headingKnown === false ? null : `toward the ${compassDirection(d.heading)}`} />
               {d.squawk && <Stat label="Transponder" value={d.squawk} hint={d.emergency ? `emergency: ${d.emergency}` : d.squawk === '1200' ? 'flying visually (VFR)' : 'assigned by ATC'} />}
