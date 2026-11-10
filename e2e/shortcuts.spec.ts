@@ -32,6 +32,9 @@ test('every panel has a key: sheets close with Escape, docked views switch tabs'
     await blur()
     await page.keyboard.press(key)
     await expect(app.dockTab(tab), `${key} shows ${tab}`).toHaveAttribute('aria-selected', 'true')
+    // "/" also moves the cursor into the search box, a moment later; wait for it, or the
+    // next key would be typed into the box instead of reaching the shortcuts.
+    if (key === '/') await expect(app.sidePanel().getByRole('searchbox', { name: 'Search traffic' })).toBeFocused()
   }
   // "/" means search: the cursor lands in the traffic search box.
   await blur()
