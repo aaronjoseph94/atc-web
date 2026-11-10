@@ -317,8 +317,8 @@ type Plate = { fill: string; stroke?: string; strokeWidth?: number; radius: numb
 
 /** Callsign tag plates. */
 const PLATES: Record<string, Plate> = {
-  // Gate numbers on the terminals: small amber chips.
-  'gate-chip': { fill: '#C9982C', radius: 2 },
+  // Gate numbers on the terminals: bright amber chips.
+  'gate-chip': { fill: '#F5B93D', radius: 3 },
   tag: { fill: 'rgba(58,66,90,0.92)', stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, radius: 8 },
   // The highlighted aircraft's tag takes the flight card's purple.
   'tag-active': { fill: '#5B3DF5', stroke: 'rgba(255,255,255,0.35)', strokeWidth: 1, radius: 8 },
