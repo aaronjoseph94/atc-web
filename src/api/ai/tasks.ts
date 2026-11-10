@@ -9,6 +9,7 @@
  */
 import type { RunAiArgs } from './run'
 import { ping } from './tasks/ping'
+import { radioCleanup } from './tasks/radioCleanup'
 
 export type AiTask<In = unknown> = {
   name: string
@@ -29,4 +30,5 @@ export type AiTask<In = unknown> = {
 
 export const TASKS: Record<string, AiTask<never>> = {
   [ping.name]: ping as AiTask<never>,
+  [radioCleanup.name]: radioCleanup as AiTask<never>,
 }

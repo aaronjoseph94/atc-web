@@ -92,6 +92,9 @@ export function RippleLayer({ map, airport, reduceMotion }: Props) {
             if (burst && burst.stopAt == null) burst.stopAt = t - burst.start
             burst = { key: cap.id, target: id, speaker: cap.speaker, start: t, stopAt: liveRippleMs(cap.durationMs) }
           }
+        } else if (cap && burst?.key === cap.id && burst.speaker !== cap.speaker) {
+          // A better idea of who is talking arrived (the AI pass) while the call is still rippling.
+          burst.speaker = cap.speaker
         }
       }
 

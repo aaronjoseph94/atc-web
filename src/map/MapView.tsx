@@ -13,6 +13,7 @@ import { TRAFFIC_ATTRIBUTION } from '../api/credits'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
 import { atOtherField } from '../live/radio/match'
+import { InstructionBadgeLayer } from '../live/radio/understand/InstructionBadgeLayer'
 import { TaxiRouteLayer } from '../live/taxi/TaxiRouteLayer'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
@@ -371,6 +372,7 @@ export function MapView() {
           <RunwayGateLayer map={map} airportIcao={airportIcao} />
           <TaxiRouteLayer map={map} />
           <RippleLayer map={map} airport={airport} reduceMotion={reduceMotion} />
+          <InstructionBadgeLayer map={map} />
           <AircraftLayer
             map={map}
             liveBuffer={liveBuffer}
