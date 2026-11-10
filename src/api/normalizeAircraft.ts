@@ -223,10 +223,6 @@ function fillFrom(win: TimedAircraft, other: TimedAircraft) {
   }
 }
 
-/** Drop the server-only timestamp before a list leaves the API. */
-export function stripTiming(list: TimedAircraft[]): Aircraft[] {
-  return list.map(({ positionTime: _t, ...ac }) => ac)
-}
 
 /** Finite-number guard; everything else becomes `null`. */
 function num(v: unknown): number | null {

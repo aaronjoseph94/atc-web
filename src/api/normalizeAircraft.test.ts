@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import adsbFi from './__fixtures__/adsbfi-jfk.json'
 import adsbLol from './__fixtures__/adsblol-jfk.json'
 import openSky from './__fixtures__/opensky-jfk.json'
-import { mergeAircraft, normalizeOpenSkyStates, normalizeReadsb, stripTiming, type OpenSkyState, type ReadsbAircraft, type TimedAircraft } from './normalizeAircraft'
+import { mergeAircraft, normalizeOpenSkyStates, normalizeReadsb, type OpenSkyState, type ReadsbAircraft, type TimedAircraft } from './normalizeAircraft'
 
 describe('normalizeReadsb', () => {
   it('returns empty for null/empty', () => {
@@ -156,8 +156,9 @@ describe('real feed captures', () => {
   it('the same aircraft looks the same from adsb.fi and adsb.lol', () => {
     const a = normalizeReadsb(adsbFi.ac as ReadsbAircraft[], adsbFi.now).find((x) => x.icao24 === 'a8d845')!
     const b = normalizeReadsb(adsbLol.ac as ReadsbAircraft[], adsbLol.now).find((x) => x.icao24 === 'a8d845')!
-    expect(stripTiming([a])[0]).toMatchObject({ callsign: b.callsign, type: b.type, registration: b.registration, altitudeFt: b.altitudeFt })
-    expect('positionTime' in stripTiming([a])[0]).toBe(false)
+    expect(a).toMatchObject({ callsign: b.callsign, type: b.type, registration: b.registration, altitudeFt: b.altitudeFt })
+    // Each copy keeps when its position was measured: the map dates reports by it.
+    expect(typeof a.positionTime).toBe('number')
   })
 })
 

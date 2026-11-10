@@ -179,13 +179,13 @@ describe('handOver', () => {
 
 describe('smooth motion through a new fix', () => {
   // A jet at 150 kt heading east; the next report puts it a little off the forecast, on a new heading.
-  const ac = (lon: number, heading: number) => ({ icao24: 'abc', callsign: 'TST1', lat: 40, lon, heading, altitudeFt: 2000, speedKt: 150, onGround: false }) as never
+  const jet = (lon: number, heading: number) => ({ icao24: 'abc', callsign: 'TST1', lat: 40, lon, heading, altitudeFt: 2000, speedKt: 150, onGround: false }) as never
   const at = (b: LivePositionBuffer, t: number) => b.get('abc', t)!
 
   it('keeps position and velocity continuous when a fix lands', () => {
     const b = new LivePositionBuffer()
-    b.push([ac(-74, 90)], 0)
-    b.push([ac(-73.995, 100)], 5000)
+    b.push([jet(-74, 90)], 0)
+    b.push([jet(-73.995, 100)], 5000)
     const before = at(b, 4999.9)
     const after = at(b, 5000.1)
     expect(Math.abs(after.lon - before.lon)).toBeLessThan(1e-6)
@@ -200,11 +200,37 @@ describe('smooth motion through a new fix', () => {
 
   it('ends up on the new forecast once the hand-over is done', () => {
     const b = new LivePositionBuffer()
-    b.push([ac(-74, 90)], 0)
-    b.push([ac(-73.99, 90)], 5000)
+    b.push([jet(-74, 90)], 0)
+    b.push([jet(-73.99, 90)], 5000)
     const later = at(b, 9000)
     const fresh = new LivePositionBuffer()
-    fresh.push([ac(-73.99, 90)], 5000)
+    fresh.push([jet(-73.99, 90)], 5000)
     expect(later.lon).toBeCloseTo(at(fresh, 9000).lon, 7)
   })
 })
+
+describe('never moving backwards', () => {
+  const jet = (lon: number, extra = {}) => ({ icao24: 'abc', callsign: 'TST1', lat: 40, lon, heading: 90, altitudeFt: 2000, speedKt: 150, onGround: false, ...extra }) as never
+
+  it('slows instead of reversing when a report lands behind the forecast', () => {
+    const b = new LivePositionBuffer()
+    b.push([jet(-74)], 0)
+    // 5 s at 150 kt is ~0.0045° of longitude here; report it only a third of the way.
+    b.push([jet(-73.9985)], 5000)
+    let last = -Infinity
+    for (let t = 4900; t <= 15000; t += 25) {
+      const lon = b.get('abc', t)!.lon
+      expect(lon).toBeGreaterThanOrEqual(last - 1e-9)
+      last = lon
+    }
+  })
+
+  it('dates a fix by its report time, so the forecast is not behind', () => {
+    const b = new LivePositionBuffer()
+    const now = 10_000
+    // A position measured 4 s ago: by now the aircraft has moved on from it.
+    b.push([jet(-74, { positionTime: Date.now() - 4000 })], now)
+    expect(b.get('abc', now)!.lon).toBeGreaterThan(-74 + 0.002)
+  })
+})
+

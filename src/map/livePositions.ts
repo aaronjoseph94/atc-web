@@ -25,6 +25,13 @@ type Forecast = {
   turnRate: number
   /** The forecast this one is taking over from, while the hand-over lasts. */
   from: Forecast | null
+  /**
+   * Milliseconds the drawn aircraft was ahead of (positive) or behind
+   * (negative) this forecast when it began, along its track. Worked off
+   * gradually so the aircraft never moves backwards (see `leadAt`).
+   */
+  lead: number
+  leadAt: number
 }
 
 type Track = {
@@ -38,6 +45,8 @@ type Track = {
   hdgKnown: boolean
   /** The previous forecast, blended out over `BLEND_MS` after a new fix. */
   from: Forecast | null
+  lead: number
+  leadAt: number
   /** Degrees per second the aircraft was turning between its last two fixes; the icon keeps turning at this rate between fixes. */
   turnRate: number
   /** Polls missed since this aircraft was last seen. Fades out after two. */
@@ -58,6 +67,19 @@ type Track = {
 const BLEND_MS = 2000
 /** Older hand-overs still in progress are kept to this depth (fixes rarely come faster than one a second). */
 const MAX_BLEND_DEPTH = 3
+/**
+ * When a new report shows the aircraft further back than it is drawn (the
+ * forecast ran ahead), it does not move back: it carries on at this share of
+ * its speed until the forecast catches up with it.
+ */
+const CATCH_UP_SHARE = 0.5
+/** When it is drawn behind, it speeds up and closes the gap over this long. */
+const CATCH_UP_MS = 2500
+/** Leads beyond these are not worked off gently (the hand-over blend takes them). */
+const MAX_LEAD_MS = 20_000
+const MAX_LAG_MS = 10_000
+/** A report older than this is treated as this old (clock skew between server and browser). */
+const MAX_FIX_AGE_MS = 12_000
 /** Keep turning at the measured rate for at most this long after a fix (about one poll); after that, hold the heading. */
 const TURN_COAST_MS = 7000
 /** Turn rates (degrees per second) worth acting on, and the most believed: a steep airliner turn is ~3°/s, taxi turns are quicker. */
@@ -91,10 +113,15 @@ export class LivePositionBuffer {
     for (const ac of list) {
       seen.add(ac.icao24)
       const prev = this.tracks.get(ac.icao24)
+      // Reports are seconds old when they arrive (feed delay, shared caches): date the
+      // fix when it was measured, so the forecast says where the aircraft is now.
+      const fixAt = now - fixAge(ac)
       if (!prev) {
         this.tracks.set(ac.icao24, {
           fix: ac,
-          fixAt: now,
+          fixAt,
+          lead: 0,
+          leadAt: now,
           coastKt: movingSpeed(ac, null),
           coastHdg: ac.heading,
           hdgKnown: ac.headingKnown !== false,
@@ -111,7 +138,7 @@ export class LivePositionBuffer {
       const shown = pose(prev, now)
       const jump = separationDeg(shown.lat, shown.lon, ac.lat, ac.lon)
       const parked = isParked(ac)
-      const dt = Math.max(0, now - prev.fixAt)
+      const dt = Math.max(0, fixAt - prev.fixAt)
       const derived = deriveMotion(prev.fix, ac, dt)
       const reportedHdg = ac.headingKnown !== false
 
@@ -128,11 +155,18 @@ export class LivePositionBuffer {
       const turnRate = pin || snap || !reportedHdg || prev.fix.headingKnown === false || parked ? 0 : measureTurn(prev.coastHdg, coastHdg, dt, ac.onGround, prev.turnRate)
 
       // The forecast being drawn until now becomes the one blended away from.
-      const handOver: Forecast | null = snap ? null : freeze(prev, now)
+      const previous: Forecast | null = snap ? null : freeze(prev, now)
 
       prev.fix = fix
-      prev.fixAt = now
-      prev.from = handOver
+      prev.fixAt = pin ? now : fixAt
+      prev.from = previous
+      // How far ahead of (or behind) the new forecast the aircraft is drawn, along its track.
+      prev.lead = 0
+      prev.leadAt = now
+      if (!snap && !pin && coastKt > 3) {
+        const ahead = alongTrackMs(shown, forecast(prev, now), coastHdg, coastKt)
+        prev.lead = ahead > MAX_LEAD_MS || ahead < -MAX_LAG_MS ? 0 : ahead
+      }
       prev.turnRate = turnRate
       prev.coastKt = coastKt
       prev.coastHdg = coastHdg
@@ -218,8 +252,39 @@ function freeze(tr: Forecast, now: number, depth = 0): Forecast {
     coastKt: tr.coastKt,
     coastHdg: tr.coastHdg,
     turnRate: tr.turnRate,
+    lead: tr.lead,
+    leadAt: tr.leadAt,
     from: blending && tr.from ? freeze(tr.from, now, depth + 1) : null,
   }
+}
+
+/**
+ * How much of a forecast's lead (ms along its track) is still to be worked off
+ * at `now`. Ahead: drawn time runs at `CATCH_UP_SHARE` of real time until the
+ * forecast catches up, so the aircraft slows a little instead of reversing.
+ * Behind: the gap closes over `CATCH_UP_MS`, so it speeds up a little.
+ */
+export function leadLeft(tr: { lead: number; leadAt: number }, now: number): number {
+  const t = Math.max(0, now - tr.leadAt)
+  if (tr.lead > 0) return Math.max(0, tr.lead - t * (1 - CATCH_UP_SHARE))
+  if (tr.lead < 0) return Math.min(0, tr.lead + (t / CATCH_UP_MS) * -tr.lead)
+  return 0
+}
+
+/** Age of a report's position in ms, from its own timestamp when the feed gives one. */
+function fixAge(ac: Aircraft): number {
+  const t = (ac as Aircraft & { positionTime?: number }).positionTime
+  if (typeof t !== 'number' || !Number.isFinite(t)) return 0
+  return Math.max(0, Math.min(MAX_FIX_AGE_MS, Date.now() - t))
+}
+
+/** How many ms of travel `drawn` is ahead of `target` along `heading` at `kt` (negative: behind). */
+function alongTrackMs(drawn: { lat: number; lon: number }, target: { lat: number; lon: number }, heading: number, kt: number): number {
+  const rad = (heading * Math.PI) / 180
+  const dLat = drawn.lat - target.lat
+  const dLon = (drawn.lon - target.lon) * Math.cos((target.lat * Math.PI) / 180)
+  const deg = dLat * Math.cos(rad) + dLon * Math.sin(rad)
+  return deg / (kt * DEG_PER_MS_PER_KT)
 }
 
 /** Share of the new forecast in the drawn path `dt` ms after its fix: a smoothstep, flat at both ends. */
@@ -249,7 +314,7 @@ function pose(tr: Forecast, now: number): { lat: number; lon: number; heading: n
 
 /** Dead reckoning from one fix: coast on its speed and heading, turning at the measured rate for a while. */
 function forecast(tr: Forecast, now: number): { lat: number; lon: number; heading: number } {
-  const dt = Math.max(0, now - tr.fixAt)
+  const dt = Math.max(0, now - tr.fixAt + leadLeft(tr, now))
   const coastMs = Math.min(dt, MAX_COAST_MS)
   const turnMs = Math.min(coastMs, TURN_COAST_MS)
   const turned = (tr.turnRate * turnMs) / 1000

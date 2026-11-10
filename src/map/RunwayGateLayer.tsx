@@ -41,18 +41,25 @@ function setData(map: MapLibreMap, id: string, data: FeatureCollection) {
 
 // ---- images ---------------------------------------------------------------
 
+// Google Material Icons "flight_land" and "flight_takeoff" (round style; Apache License 2.0,
+// https://github.com/google/material-design-icons): the familiar airport-signage pictograms.
+const LANDING =
+  'M20.5 19h-17c-.55 0-1 .45-1 1s.45 1 1 1h17c.55 0 1-.45 1-1s-.45-1-1-1zM3.51 11.61l15.83 4.24c.8.21 1.62-.26 1.84-1.06.21-.8-.26-1.62-1.06-1.84l-5.31-1.42-2.58-8.45a1.08 1.08 0 0 0-.75-.73c-.68-.18-1.35.33-1.35 1.04v6.88L5.15 8.95 4.4 7.09a.991.991 0 0 0-.67-.59l-.33-.09a.495.495 0 0 0-.63.48v3.75c0 .46.3.85.74.97z'
+const TAKEOFF =
+  'M20.5 19h-17c-.55 0-1 .45-1 1s.45 1 1 1h17c.55 0 1-.45 1-1s-.45-1-1-1zm1.57-9.36c-.22-.8-1.04-1.27-1.84-1.06L14.92 10 8.46 3.98a1.06 1.06 0 0 0-1.02-.25c-.68.19-1 .97-.65 1.58l3.44 5.96-4.97 1.33-1.57-1.24c-.25-.19-.57-.26-.88-.18l-.33.09c-.32.08-.47.45-.3.73l1.88 3.25c.23.39.69.58 1.12.47L21 11.48c.8-.22 1.28-1.04 1.07-1.84z'
+
 /**
- * Runway-in-use badge: a small, quiet disc beside the runway's designator. A
- * dark centre with a thin ring and a fine arrow in the runway's colour, down
- * for arrivals and up for departures; both discs, slightly overlapped, when
- * the runway does both. Kept small and translucent so it reads as a hint,
- * not as a marker competing with the aircraft.
+ * Runway-in-use badge: a small, quiet disc beside the runway's designator,
+ * with a landing pictogram in green for arrivals or a takeoff pictogram in
+ * blue for departures; two discs, slightly overlapped, when the runway does
+ * both. Small and translucent so it reads as a hint, not a marker.
  */
 function badge(role: 'arrivals' | 'departures' | 'both'): ImageData {
   const s = 2 // drawn at 2× for sharpness
-  const r = 5.5 * s // disc radius: 11 px across on screen
+  const r = 7 * s // disc radius: 14 px across on screen
   const pad = 2 * s // room for the soft shadow
-  const step = r * 1.55 // centre-to-centre when two discs share a badge
+  const step = r * 1.6 // centre-to-centre when two discs share a badge
+  const glyph = 9.5 * s // pictogram size inside the disc
   const roles: ('arrivals' | 'departures')[] = role === 'both' ? ['arrivals', 'departures'] : [role]
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(pad * 2 + r * 2 + (roles.length - 1) * step)
@@ -68,28 +75,22 @@ function badge(role: 'arrivals' | 'departures' | 'both'): ImageData {
     ctx.shadowBlur = 2 * s
     ctx.beginPath()
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(16,20,34,0.82)'
+    ctx.fillStyle = 'rgba(16,20,34,0.85)'
     ctx.fill()
     ctx.restore()
     // Thin ring in the runway's colour.
     ctx.beginPath()
     ctx.arc(cx, cy, r - 0.6 * s, 0, Math.PI * 2)
-    ctx.lineWidth = 1.1 * s
-    ctx.strokeStyle = colour + 'B3'
+    ctx.lineWidth = 1 * s
+    ctx.strokeStyle = colour + '99'
     ctx.stroke()
-    // A fine arrow: short shaft and an open head.
-    const dir = kind === 'departures' ? -1 : 1
-    ctx.strokeStyle = colour
-    ctx.lineWidth = 1.25 * s
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.beginPath()
-    ctx.moveTo(cx, cy - dir * 2.6 * s)
-    ctx.lineTo(cx, cy + dir * 2.6 * s)
-    ctx.moveTo(cx - 2.1 * s, cy + dir * 0.6 * s)
-    ctx.lineTo(cx, cy + dir * 2.7 * s)
-    ctx.lineTo(cx + 2.1 * s, cy + dir * 0.6 * s)
-    ctx.stroke()
+    // The pictogram, centred (the glyphs sit in a 24-unit box with the plane slightly high).
+    ctx.save()
+    ctx.translate(cx - glyph / 2, cy - glyph / 2 - 0.3 * s)
+    ctx.scale(glyph / 24, glyph / 24)
+    ctx.fillStyle = colour
+    ctx.fill(new Path2D(kind === 'arrivals' ? LANDING : TAKEOFF))
+    ctx.restore()
   })
   return ctx.getImageData(0, 0, canvas.width, canvas.height)
 }

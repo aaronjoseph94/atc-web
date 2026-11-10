@@ -7,6 +7,12 @@
 export type Aircraft = {
   /** 24-bit ICAO transponder address, lowercase hex (stable identity). */
   icao24: string
+  /**
+   * When the position was measured (epoch ms, the feed's clock). The map uses
+   * it to date each report, so aircraft are drawn where they are now rather
+   * than where they were when the (seconds-old) report was made.
+   */
+  positionTime?: number
   /** Flight callsign (e.g. `UAL2099`); falls back to the hex when unknown. */
   callsign: string
   lat: number
