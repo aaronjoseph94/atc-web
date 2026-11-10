@@ -133,7 +133,16 @@ export function MapView() {
   // Keep the camera's idea of "centre" clear of the floating chrome.
   useEffect(() => {
     if (!map) return
-    const apply = () => map.setPadding(chromePadding())
+    const apply = () => {
+      const want = chromePadding()
+      const have = map.getPadding()
+      // Setting padding stops any camera move in flight, so only do it for a real change,
+      // and re-frame afterwards if the app is the one steering.
+      if (Math.abs((have.top ?? 0) - want.top) < 2 && Math.abs((have.bottom ?? 0) - want.bottom) < 2) return
+      map.setPadding(want)
+      const s = usePlayhead.getState()
+      if (s.cameraMode === 'auto' && !s.selectedIcao && !focus.id) focus.homeAt = performance.now()
+    }
     apply()
     const stack = document.getElementById('bottom-stack')
     const ro = stack ? new ResizeObserver(apply) : null
@@ -263,7 +272,10 @@ export function MapView() {
   // 3D view: tilt and turn slightly so buildings read as solids.
   useEffect(() => {
     if (!map) return
-    map.easeTo({ pitch: tilt ? TILT_PITCH : 0, bearing: tilt ? map.getBearing() || -18 : 0, duration: duration(900), essential: true })
+    const pitch = tilt ? TILT_PITCH : 0
+    // Already there (first load, flat): a no-op ease would still cancel the opening camera move.
+    if (Math.abs(map.getPitch() - pitch) < 0.5) return
+    map.easeTo({ pitch, bearing: tilt ? map.getBearing() || -18 : 0, duration: duration(900), essential: true })
   }, [map, tilt, duration])
 
   useEffect(() => {
