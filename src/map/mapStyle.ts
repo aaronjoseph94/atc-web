@@ -98,7 +98,8 @@ type Palette = {
 
 const NAVY: Palette = {
   bg: '#1A2238',
-  water: '#111B36',
+  // Near-black navy, as in the reference: coastlines read at a glance.
+  water: '#060F27',
   land: '#1C243B',
   wood: '#27453A',
   grass: '#2A4A3B',
@@ -401,21 +402,22 @@ function layers(p: Palette): LayerSpecification[] {
       layout: {
         'text-field': ['format', ['get', 'callsign'], {}, ['get', 'sub'], { 'font-scale': 0.82, 'text-color': ['case', ['==', ['get', 'hi'], 1], 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0.62)'] }],
         'text-font': FONT_BOLD,
-        'text-size': ['interpolate', ['linear'], ['zoom'], 10, 10, 15, 11.5],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 9, 11.5, 15, 12],
         'text-letter-spacing': 0.03,
         'text-line-height': 1.15,
-        'text-justify': 'left',
+        'text-justify': 'center',
         // Fixed anchor and no collision pass: positions update every frame, and
         // collision-driven placement would make the tags hop between anchors.
-        'text-anchor': 'bottom-left',
-        'text-offset': ['interpolate', ['linear'], ['zoom'], 10, ['literal', [0.9, -0.7]], 15, ['literal', [1.3, -1]], 17, ['literal', [2.8, -2.2]]],
+        // The tag floats centred above the aircraft, as in the reference.
+        'text-anchor': 'bottom',
+        'text-offset': ['interpolate', ['linear'], ['zoom'], 9, ['literal', [0, -1.5]], 14, ['literal', [0, -1.9]], 16, ['literal', [0, -2.6]], 18, ['literal', [0, -4.5]]],
         'text-allow-overlap': true,
         'text-ignore-placement': true,
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
         'icon-image': ['case', ['==', ['get', 'hi'], 1], 'tag-active', 'tag'],
         'icon-text-fit': 'both',
-        'icon-text-fit-padding': [3, 6, 3, 6],
+        'icon-text-fit-padding': [5, 8, 5, 8],
         'symbol-sort-key': ['get', 'z'],
       },
       paint: { 'text-color': '#FFFFFF', 'text-opacity': ['get', 'o'], 'icon-opacity': ['get', 'o'] },

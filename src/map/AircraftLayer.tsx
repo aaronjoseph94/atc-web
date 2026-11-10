@@ -38,6 +38,8 @@ type Props = {
 }
 
 /** Zoom at or above which moving aircraft are labelled in `auto` mode; parked ones need to be closer. */
+/** Airborne aircraft carry a tag even on the wide view; taxiing ones only once the field is legible. */
+const LABEL_AIRBORNE_ZOOM = 9.3
 const LABEL_MOVING_ZOOM = 12.4
 const LABEL_PARKED_ZOOM = 15.2
 /** Background wakes are rebuilt at this interval; they don't need 60 fps. */
@@ -142,7 +144,7 @@ export function AircraftLayer(props: Props) {
         const wantLabel =
           L.labels !== 'never' &&
           icon !== 'ac-vehicle' &&
-          (hi || a.icao24 === hover || L.labels === 'always' || zoom >= (parked ? LABEL_PARKED_ZOOM : LABEL_MOVING_ZOOM))
+          (hi || a.icao24 === hover || L.labels === 'always' || zoom >= (parked ? LABEL_PARKED_ZOOM : a.onGround ? LABEL_MOVING_ZOOM : LABEL_AIRBORNE_ZOOM))
         const alert = a.emergency || a.squawk === '7700' || a.squawk === '7600' || a.squawk === '7500'
 
         features.push({
