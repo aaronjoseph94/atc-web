@@ -18,6 +18,7 @@ import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
 import type { LiveAircraft, LivePositionBuffer } from './livePositions'
 import { ensureMapImages, ICON_SCALE, iconFor } from './mapImages'
 import { LAYER, SRC } from './mapStyle'
+import { attachTagImages, tagKey } from './tagImages'
 
 type Props = {
   /** The loaded MapLibre instance (null until the style has loaded). */
@@ -63,6 +64,8 @@ export function AircraftLayer(props: Props) {
     // A lost WebGL context drops images; MapLibre asks for them again by id.
     const onMissing = () => ensureMapImages(map)
     map.on('styleimagemissing', onMissing)
+    // Callsign tags are bitmaps drawn on demand.
+    const detachTags = attachTagImages(map)
 
     const pick = (e: MapLayerMouseEvent) => {
       const icao = e.features?.[0]?.properties?.icao24
@@ -146,13 +149,15 @@ export function AircraftLayer(props: Props) {
           icon !== 'ac-vehicle' &&
           (hi || a.icao24 === hover || L.labels === 'always' || zoom >= (parked ? LABEL_PARKED_ZOOM : a.onGround ? LABEL_MOVING_ZOOM : LABEL_AIRBORNE_ZOOM))
         const alert = a.emergency || a.squawk === '7700' || a.squawk === '7600' || a.squawk === '7500'
+        const sub = wantLabel && L.dataBlocks && (hi || zoom >= 13.4) ? dataBlock(a, agl) : ''
 
         features.push({
           type: 'Feature',
           properties: {
             icao24: a.icao24,
             callsign: a.callsign,
-            sub: wantLabel && L.dataBlocks && (hi || zoom >= 13.4) ? dataBlock(a, agl) : '',
+            sub,
+            tag: wantLabel ? tagKey(a.callsign, a.icao24, hi, sub, t) : '',
             icon,
             scale: ICON_SCALE[icon],
             heading: icon === 'ac-dot' ? 0 : a.heading,
@@ -230,6 +235,7 @@ export function AircraftLayer(props: Props) {
 
     return () => {
       cancelAnimationFrame(raf)
+      detachTags()
       map.off('styleimagemissing', onMissing)
       map.off('click', LAYER.hit, click)
       map.off('click', mapClick)

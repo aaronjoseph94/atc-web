@@ -4,6 +4,8 @@
  */
 import { Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { AirlineLogo } from '../airline/AirlineLogo'
+import { airlineInfo, brandFor } from '../airline/airlines'
 import { getAirport } from '../api/airports'
 import type { Aircraft } from '../api/types'
 import { aircraftTypeName, flightPhase, friendlyFlightName, PHASE_LABEL, type Phase } from '../flight/describe'
@@ -61,7 +63,9 @@ export function TrafficPanel() {
     for (const a of list) {
       if (a.category?.startsWith('C')) continue
       const name = friendlyFlightName(a.callsign)
-      if (q && !`${a.callsign} ${name} ${a.type ?? ''} ${a.registration ?? ''}`.toLowerCase().includes(q)) continue
+      // The brand too, so "Delta" also finds the Endeavor flights wearing the Delta logo.
+      const brand = airlineInfo(brandFor(a.callsign)?.brand)?.name ?? ''
+      if (q && !`${a.callsign} ${name} ${brand} ${a.type ?? ''} ${a.registration ?? ''}`.toLowerCase().includes(q)) continue
       const rel = runwayRelation(a, ends, airport.elevationFt)
       const phase = flightPhase({ ...a, altitudeFt: a.altitudeFt == null || a.onGround ? a.altitudeFt : a.altitudeFt - airport.elevationFt })
       const g = groupOf(phase, rel?.kind === 'final')
@@ -122,6 +126,10 @@ export function TrafficPanel() {
                         close()
                       }}
                     >
+                      {/* Fixed slot, so callsigns line up whether or not the airline has a logo. */}
+                      <span className="grid h-6 w-9 shrink-0 place-items-center">
+                        <AirlineLogo callsign={a.callsign} icao24={a.icao24} height={22} maxWidth={34} />
+                      </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-display text-xl leading-tight tracking-wide">{a.callsign}</span>
                         <span className="block truncate text-xs text-white/60">{note ?? aircraftTypeName(a.type) ?? PHASE_LABEL[phase]}</span>

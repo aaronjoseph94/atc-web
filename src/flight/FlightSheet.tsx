@@ -11,6 +11,7 @@
  * replayed scene, logged events for live traffic).
  */
 import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
+import { AirlineLogo } from '../airline/AirlineLogo'
 import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
 import { distanceM } from '../map/geo'
 import { FrequencyTuner } from '../station/FrequencyTuner'
@@ -45,13 +46,17 @@ function FollowButton({ tone }: { tone: 'card' | 'dark' }) {
 function Identity({ flight, info, big = false }: { flight: FlightView; info: FlightInfo | undefined; big?: boolean }) {
   const type = flight.detail?.type
   return (
-    <div className="flex min-w-0 items-baseline gap-2">
-      <h2 className={`truncate font-display leading-none tracking-wide ${big ? 'text-[2.6rem]' : 'text-[1.9rem]'}`}>{flight.callsign}</h2>
-      {type && (
-        <span className="shrink-0 text-sm font-medium text-white/70" title={info?.typeName ?? aircraftTypeName(type) ?? undefined}>
-          {type}
-        </span>
-      )}
+    <div className={`flex min-w-0 items-center ${big ? 'gap-3' : 'gap-2.5'}`}>
+      {/* The airline's mark, about as tall as the callsign's capitals, as in the reference. */}
+      <AirlineLogo callsign={flight.callsign} icao24={flight.icao24} height={big ? 24 : 21} maxWidth={big ? 40 : 36} className="shrink-0" />
+      <div className="flex min-w-0 items-baseline gap-2">
+        <h2 className={`truncate font-display leading-none tracking-wide ${big ? 'text-[2.6rem]' : 'text-[1.9rem]'}`}>{flight.callsign}</h2>
+        {type && (
+          <span className="shrink-0 text-sm font-medium text-white/70" title={info?.typeName ?? aircraftTypeName(type) ?? undefined}>
+            {type}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

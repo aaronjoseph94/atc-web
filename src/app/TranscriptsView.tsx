@@ -5,6 +5,7 @@
  */
 import { ArrowDown, ArrowUp, ArrowUpFromLine, RotateCcw, Siren } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { AirlineLogo } from '../airline/AirlineLogo'
 import { getAirport, resolveStation } from '../api/airports'
 import { formatMhz } from '../api/airportData'
 import type { LiveEvent } from '../live/events'
@@ -72,7 +73,10 @@ export function TranscriptsView() {
                     }}
                   >
                     <span className="flex items-center gap-2 text-xs font-medium text-white/45">
-                      <span className="font-semibold text-white/65">{label}</span>
+                      <span className="flex items-center gap-1.5 font-semibold text-white/65">
+                        {c.callsign && <AirlineLogo callsign={label} icao24={trackId(c.callsign)} height={14} maxWidth={24} />}
+                        {label}
+                      </span>
                       {c.speaker && c.speaker !== 'Tower log' && <span>{c.speaker}</span>}
                       <span className="tabular-nums">{clip.startedAt != null ? new Date(clip.startedAt + c.startMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : formatClock(c.startMs)}</span>
                     </span>
@@ -108,7 +112,10 @@ export function TranscriptsView() {
                     <Icon className="size-4" strokeWidth={2.5} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-medium tabular-nums text-white/45">{new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
+                    <span className="flex items-center gap-1.5 text-xs font-medium tabular-nums text-white/45">
+                      <AirlineLogo callsign={e.callsign} icao24={e.icao24} height={14} maxWidth={24} />
+                      {new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+                    </span>
                     <span className="block text-[19px] font-semibold leading-snug">{e.text}</span>
                   </span>
                 </button>
