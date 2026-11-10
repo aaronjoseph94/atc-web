@@ -14,6 +14,7 @@ import { paintPrepared, prepareAircraft, silhouetteRGBA } from '../aircraft/rend
 import { getShape, SHAPE_IDS, type Shape, type ShapeId } from '../aircraft/shapes'
 import { BANK_DRAWN, bankSpanScale } from './fx/geometry'
 import { ensureFxImage } from './fx/sprites'
+import { ART_PX, artTierPx, artTiers } from './mapStyle'
 
 export { maskToSdf }
 
@@ -26,8 +27,10 @@ export type AircraftIcon = ShapeId
  */
 const BOX = 48
 const FILL = 0.78
+/** Half the drawing's longer side in CSS px at `icon-size` 1: how far an aircraft's artwork reaches from its point. */
+export const ICON_REACH_PX = (BOX * FILL) / 2
 /** Pixel size of the shaded artwork. Large, because close in the icons are drawn several times their base size (and twice that on retina). */
-const ART = 384
+const ART = ART_PX
 /** Pixel size of the distance-field silhouettes; shadows are soft, so they can be coarse. */
 const SDF = 96
 
@@ -48,6 +51,12 @@ export const ICON_SCALE = Object.fromEntries(
     return [id, Math.round((fixed[id] ?? Math.max(floor, rel)) * 1000) / 1000]
   }),
 ) as Record<AircraftIcon, number>
+
+/** The artwork sizes to draw for a class: full, and each reduced copy (its suffix appended to every id; see `artTiers`). */
+function artSizes(id: ShapeId): { px: number; suffix: string }[] {
+  const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1
+  return [{ px: ART, suffix: '' }, ...artTiers().map((t) => ({ px: artTierPx(t.below, ICON_SCALE[id], dpr), suffix: t.suffix }))]
+}
 
 /** Rotor frames for helicopters in the air: the blades turn a third of a quarter-turn per frame. */
 export const ROTOR_FRAMES = 3
@@ -74,6 +83,7 @@ function frames(shape: ShapeId): { id: string; angle: number }[] {
 /** Which shape an image id belongs to (`ac-heli-r2-hi` → `ac-heli`, `ac-jet-bL2-sdf` → `ac-jet`), or null if it isn't an aircraft image. */
 export function shapeOfImage(id: string): ShapeId | null {
   const base = id
+    .replace(/~[a-z]$/, '')
     .replace(/-(hi|sdf)$/, '')
     .replace(/-(pk|b[LR][12])$/, '')
     .replace(/-r\d+$/, '')
@@ -82,7 +92,7 @@ export function shapeOfImage(id: string): ShapeId | null {
 
 /** The bank variant an image id asks for (`ac-jet-bR2-hi` → right, steep), or null. */
 export function bankOfImage(id: string): { dir: 'L' | 'R'; level: 1 | 2 } | null {
-  const m = /-b([LR])([12])(?:-(?:hi|sdf))?$/.exec(id)
+  const m = /-b([LR])([12])(?:-(?:hi|sdf))?(?:~[a-z])?$/.exec(id)
   return m ? { dir: m[1] as 'L' | 'R', level: Number(m[2]) as 1 | 2 } : null
 }
 
@@ -96,22 +106,20 @@ function addShape(map: MapLibreMap, id: ShapeId) {
   const shape = getShape(id)
   const maxDim = Math.max(shape.span, shape.length)
   const list = frames(id)
-  const opts = { pixelRatio: ART / BOX }
-  if (list.some((f) => !map.hasImage(f.id) || !map.hasImage(`${f.id}-hi`))) {
-    const prepared = prepareAircraft(shape, { width: ART, height: ART, ppm: (ART * FILL) / maxDim, halo: true })
+  for (const { px, suffix } of artSizes(id)) {
+    const has = (x: string) => map.hasImage(`${x}${suffix}`)
+    const add = (x: string, img: ImageData) => map.addImage(`${x}${suffix}`, img, { pixelRatio: px / BOX })
+    if (list.every((f) => has(f.id) && has(`${f.id}-hi`)) && has(`${id}-pk`)) continue
+    const prepared = prepareAircraft(shape, { width: px, height: px, ppm: (px * FILL) / maxDim, halo: true })
     for (const f of list) {
-      if (!map.hasImage(f.id)) {
+      if (!has(f.id) || (f.id === id && !has(`${id}-pk`))) {
         const white = paintPrepared(prepared, 'white', f.angle)
-        map.addImage(f.id, white, opts)
+        if (!has(f.id)) add(f.id, white)
         // Parked aircraft use a greyer, flatter copy (see `parkedTone`).
-        if (f.id === id && !map.hasImage(`${id}-pk`)) map.addImage(`${id}-pk`, parkedTone(white), opts)
+        if (f.id === id && !has(`${id}-pk`)) add(`${id}-pk`, parkedTone(white))
       }
-      if (!map.hasImage(`${f.id}-hi`)) map.addImage(`${f.id}-hi`, paintPrepared(prepared, 'yellow', f.angle), opts)
+      if (!has(`${f.id}-hi`)) add(`${f.id}-hi`, paintPrepared(prepared, 'yellow', f.angle))
     }
-  }
-  if (!map.hasImage(`${id}-pk`) && list[0]) {
-    const prepared = prepareAircraft(shape, { width: ART, height: ART, ppm: (ART * FILL) / maxDim, halo: true })
-    map.addImage(`${id}-pk`, parkedTone(paintPrepared(prepared, 'white', list[0].angle)), opts)
   }
   for (const f of list) {
     if (map.hasImage(`${f.id}-sdf`)) continue
@@ -175,11 +183,14 @@ function addBank(map: MapLibreMap, id: ShapeId, dir: 'L' | 'R', level: 1 | 2) {
   const deg = BANK_DRAWN[level] * (dir === 'R' ? 1 : -1)
   const shape = bankShape(getShape(id), deg)
   const maxDim = Math.max(getShape(id).span, getShape(id).length)
-  const opts = { pixelRatio: ART / BOX }
-  if (!map.hasImage(vid) || !map.hasImage(`${vid}-hi`)) {
-    const prepared = prepareAircraft(shape, { width: ART, height: ART, ppm: (ART * FILL) / maxDim, halo: true })
-    if (!map.hasImage(vid)) map.addImage(vid, bankLight(paintPrepared(prepared, 'white', Math.PI / 4), deg), opts)
-    if (!map.hasImage(`${vid}-hi`)) map.addImage(`${vid}-hi`, bankLight(paintPrepared(prepared, 'yellow', Math.PI / 4), deg), opts)
+  for (const { px, suffix } of artSizes(id)) {
+    const opts = { pixelRatio: px / BOX }
+    const white = `${vid}${suffix}`
+    const yellow = `${vid}-hi${suffix}`
+    if (map.hasImage(white) && map.hasImage(yellow)) continue
+    const prepared = prepareAircraft(shape, { width: px, height: px, ppm: (px * FILL) / maxDim, halo: true })
+    if (!map.hasImage(white)) map.addImage(white, bankLight(paintPrepared(prepared, 'white', Math.PI / 4), deg), opts)
+    if (!map.hasImage(yellow)) map.addImage(yellow, bankLight(paintPrepared(prepared, 'yellow', Math.PI / 4), deg), opts)
   }
   if (!map.hasImage(`${vid}-sdf`)) {
     const mask = silhouetteRGBA(shape, SDF, SDF, (SDF * FILL) / maxDim)
@@ -222,7 +233,8 @@ export function bankedImage(map: MapLibreMap, image: string, level: number): str
   const dir = level > 0 ? 'R' : 'L'
   const mag = Math.min(2, Math.abs(level)) as 1 | 2
   const vid = `${shape}-b${dir}${mag}`
-  if (map.hasImage(vid) && map.hasImage(`${vid}-hi`) && map.hasImage(`${vid}-sdf`)) return vid
+  const ready = (v: string) => map.hasImage(`${v}-sdf`) && [{ suffix: '' }, ...artTiers()].every((t) => map.hasImage(`${v}${t.suffix}`) && map.hasImage(`${v}-hi${t.suffix}`))
+  if (ready(vid)) return vid
   if (!bankQueue.has(vid)) {
     bankQueue.set(vid, () => {
       // The map may have gone (airport change, unmount) by the time this runs.
@@ -236,7 +248,7 @@ export function bankedImage(map: MapLibreMap, image: string, level: number): str
   }
   // A steep bank that isn't drawn yet can borrow the slight one.
   const slight = `${shape}-b${dir}1`
-  return mag === 2 && map.hasImage(slight) && map.hasImage(`${slight}-hi`) && map.hasImage(`${slight}-sdf`) ? slight : image
+  return mag === 2 && ready(slight) ? slight : image
 }
 
 // ---------------------------------------------------------------------------

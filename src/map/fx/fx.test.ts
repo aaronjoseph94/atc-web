@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { getShape } from '../../aircraft/shapes'
 import { bankedImage, bankOfImage, bankShape, shapeOfImage } from '../mapImages'
-import { arrivalScale, clipToLength, edgeOpacity, litBits } from './aircraftFx'
+import { arrivalScale, clipToLength, edgeOpacity, hideCoveredFins, litBits } from './aircraftFx'
 import { bankAngle, bankLevel, TurnTracker } from './bank'
 import { beaconOn, phaseOf, STROBE_PERIOD_MS, strobeOn } from './blink'
 import { dominantColour } from './brand'
 import { anchorsFor, bankDegrees, bankSpanScale, toIconPx } from './geometry'
 import { lightImage, parseFxImage } from './sprites'
+import { artTiers } from '../mapStyle'
+import type { Feature, Point } from 'geojson'
 
 describe('anchors', () => {
   it('puts the wingtips at the widest point and the tail behind the nose', () => {
@@ -145,6 +147,9 @@ describe('image ids', () => {
     const map = { hasImage: (id: string) => images.has(id), getStyle: () => null } as never
     expect(bankedImage(map, 'ac-jet', 2)).toBe('ac-jet')
     for (const id of ['ac-jet-bR1', 'ac-jet-bR1-hi', 'ac-jet-bR1-sdf']) images.add(id)
+    // The reduced copies for the wider views must be there too.
+    expect(bankedImage(map, 'ac-jet', 2)).toBe('ac-jet')
+    for (const t of artTiers()) for (const id of ['ac-jet-bR1', 'ac-jet-bR1-hi']) images.add(`${id}${t.suffix}`)
     expect(bankedImage(map, 'ac-jet', 2)).toBe('ac-jet-bR1')
     expect(bankedImage(map, 'ac-jet', 0)).toBe('ac-jet')
     expect(bankedImage(map, 'ac-heli-r1', 2)).toBe('ac-heli-r1')
@@ -194,5 +199,28 @@ describe('screen and motion helpers', () => {
     expect(cut).toHaveLength(3)
     expect(cut[0][1]).toBeCloseTo(0.03 - 1600 / 110_540, 5)
     expect(clipToLength(track, 1e6)).toEqual(track)
+  })
+})
+
+describe('hideCoveredFins', () => {
+  const at = (lon: number, z: number, lv = '#c00') => ({ type: 'Feature', properties: { lv, z }, geometry: { type: 'Point', coordinates: [lon, 40] } }) as Feature<Point>
+  // 1 m per pixel; 20 px reach: two aircraft 10 m apart overlap, 100 m apart don't.
+  const run = (fs: Feature<Point>[]) => hideCoveredFins(fs, () => 20, 1)
+  const deg = (m: number) => m / (111_320 * Math.cos((40 * Math.PI) / 180))
+
+  it('keeps fins on aircraft nobody is drawn over', () => {
+    const fs = [at(0, 0), at(deg(100), 0)]
+    run(fs)
+    expect(fs.map((f) => f.properties!.lv)).toEqual(['#c00', '#c00'])
+  })
+
+  it('drops the fin of the one drawn underneath', () => {
+    // Higher z draws on top; at the same z the later feature does.
+    const high = [at(0, 500), at(deg(10), 0)]
+    run(high)
+    expect(high.map((f) => f.properties!.lv)).toEqual(['#c00', ''])
+    const same = [at(0, 0), at(deg(10), 0)]
+    run(same)
+    expect(same.map((f) => f.properties!.lv)).toEqual(['', '#c00'])
   })
 })
