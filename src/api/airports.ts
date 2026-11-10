@@ -132,7 +132,7 @@ function std(icao: string, name: string, short: string, group: AirportGroup, zoo
 /** All supported airports, in display order (US first, then Canada). */
 export const AIRPORTS: AirportConfig[] = [
   apt('ATL', 'Hartsfield–Jackson Atlanta', 'US', 33.6407, -84.4277, 12.2, [
-    station('ATL', 'Atlanta', 'tower', 'Tower'),
+    station('ATL', 'Atlanta Hartsfield', 'tower', 'Tower'),
     station('ATL', 'Atlanta', 'ground', 'Ground'),
   ]),
   apt('LAX', 'Los Angeles International', 'US', 33.9425, -118.4081, 12.1, [

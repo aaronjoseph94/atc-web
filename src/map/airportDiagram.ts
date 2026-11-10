@@ -300,12 +300,13 @@ export function buildAirportDiagram(airport: string): AirportDiagram {
 
     const mine: Feature<Polygon>[] = []
 
-    // Side stripes run the length of the runway, just inside each edge, in
+    // Side stripes run the length of the runway along each edge, in
     // pieces that stop short of any runway crossing it.
-    const edge = Math.max(0.9, widthM * 0.02)
+    const edge = Math.max(1, widthM * 0.022)
     for (const side of [1, -1]) {
-      const t0 = side * (half - 1)
-      const t1 = side * (half - 1 - edge)
+      // A crisp line right on the pavement edge, as in the reference.
+      const t0 = side * (half - 0.25)
+      const t1 = side * (half - 0.25 - edge)
       let runStart: number | null = null
       for (let s = 0; s <= f.lengthM + 1e-6; s += 1) {
         const free = s < f.lengthM && !blocked(f.le.at(s + 0.5, t0), 1.5)

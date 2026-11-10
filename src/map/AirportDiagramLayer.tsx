@@ -15,8 +15,8 @@ import { SRC } from './mapStyle'
 
 /** Distance from runway centreline to the holding position (FAA standard for large airports). */
 const HOLD_OFFSET_M = 280 * M_PER_FT
-/** Half-length of each bar; a little over half a taxiway. */
-const BAR_HALF_M = 13
+/** Half-length of each bar: the bars reach across the taxiway shoulders too. */
+const BAR_HALF_M = 17
 /** Gap between the four lines of the marking (exaggerated so they read as separate lines). */
 const LINE_GAP_M = 2
 const MIN_ZOOM = 13.5
