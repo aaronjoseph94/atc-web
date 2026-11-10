@@ -1,0 +1,28 @@
+{
+  "clips": [
+    {
+      "id": "ord-tower-departures",
+      "title": "O'Hare Tower — evening departure push",
+      "description": "Three airliners take off one after another from runway 28 Right while the tower feeds each one onto the runway behind the last.",
+      "airport": "ORD",
+      "stationId": "ord-tower-28r",
+      "durationMs": 135000
+    },
+    {
+      "id": "jfk-tower-go-around",
+      "title": "Kennedy Tower — arrivals and a go-around",
+      "description": "A Delta jet has only just touched down when a British Airways 777 arrives too close behind it, so the tower orders the 777 to abort its landing and climb away while a JetBlue departs alongside.",
+      "airport": "JFK",
+      "stationId": "jfk-tower",
+      "durationMs": 114000
+    },
+    {
+      "id": "sfo-tower-parallels",
+      "title": "San Francisco Tower — side-by-side arrivals",
+      "description": "Two jets land side by side on San Francisco's close parallel runways while a Southwest 737 waits to take off across their path.",
+      "airport": "SFO",
+      "stationId": "sfo-tower",
+      "durationMs": 133000
+    }
+  ]
+}
