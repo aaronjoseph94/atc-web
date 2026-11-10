@@ -46,6 +46,18 @@ export function LayersPanel() {
 
       <SectionLabel>On the map</SectionLabel>
       <Group>
+        <Row label="Lighting" hint={s.lighting === 'auto' ? 'Follows the sun' : s.lighting === 'day' ? 'Always daylight' : 'Airfield lights on'}>
+          <Segmented
+            label="Lighting"
+            value={s.lighting}
+            options={[
+              ['auto', 'Auto'],
+              ['day', 'Day'],
+              ['night', 'Night'],
+            ]}
+            onChange={(v) => s.update('lighting', v)}
+          />
+        </Row>
         <Row label="Callsigns">
           <Segmented
             label="Callsign labels"
