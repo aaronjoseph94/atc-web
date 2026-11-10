@@ -355,7 +355,30 @@ export function stopRadio(keepIntent = false, status: RadioStatus = 'off') {
     el.load()
   }
   useRadio.getState().patch({ on: keepIntent, status, speaking: false, retryInS: null, ...(status === 'nofeed' ? { feed: null } : {}) })
-  if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused'
+  const ms = navigator.mediaSession
+  if (!ms) return
+  ms.playbackState = 'paused'
+  // Paused for a replay, or tuned to a channel no feed carries: the headset's play button must not
+  // start the old feed over the replay (or under a channel that has none). The next start sets them again.
+  if (keepIntent) {
+    for (const action of ['play', 'pause', 'stop'] as const) {
+      try {
+        ms.setActionHandler(action, null)
+      } catch {
+        // Not supported here.
+      }
+    }
+  }
+}
+
+/** What the headset's play button does: by default the last feed, but the app points it at the channel on screen. */
+let mediaPlay = () => {
+  if (feed) startRadio(feed)
+}
+
+/** Set what the lock screen's or headset's play button starts (the channel being followed may have changed since). */
+export function onMediaPlay(fn: () => void) {
+  mediaPlay = fn
 }
 
 /** Ask the browser's media controls (lock screen, headphones) to drive the radio. */
@@ -365,7 +388,7 @@ function mediaSession(f: RadioFeed) {
   try {
     ms.metadata = new MediaMetadata({ title: f.name, artist: 'LiveATC.net', album: 'Live air traffic control' })
     ms.playbackState = 'playing'
-    ms.setActionHandler('play', () => feed && startRadio(feed))
+    ms.setActionHandler('play', () => mediaPlay())
     ms.setActionHandler('pause', () => stopRadio())
     ms.setActionHandler('stop', () => stopRadio())
   } catch {
