@@ -17,6 +17,7 @@ import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
 import type { LiveAircraft } from './livePositions'
 import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
+import { useRadioCamera } from './useRadioCamera'
 
 /** Extra zoom applied when the camera closes in on a talking/selected aircraft. */
 const FOCUS_ZOOM_BOOST = 1.5
@@ -191,9 +192,12 @@ export function MapView() {
     }
   }, [map])
 
+  // Live radio steers the automatic camera onto whoever is being talked to.
+  const radioCamera = useRadioCamera(map, airport, goHome, reduceMotion)
+
   const onFrame = useCallback(
     (list: LiveAircraft[], dt: number) => {
-      if (!map) return
+      if (!map || radioCamera(list, dt)) return
       const s = usePlayhead.getState()
       const now = performance.now()
       const f = focus
@@ -236,7 +240,7 @@ export function MapView() {
         if (s.cameraMode === 'auto' && !s.selectedIcao) goHome(1300)
       }
     },
-    [map, airport, duration, reduceMotion, goHome],
+    [map, airport, duration, reduceMotion, goHome, radioCamera],
   )
 
   // ---- theme and toggles -------------------------------------------------------

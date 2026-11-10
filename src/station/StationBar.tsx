@@ -1,17 +1,20 @@
 /**
  * The yellow station bar: airport code, airport name and the controller
  * position being followed. Tapping the code or name opens the airport
- * picker; tapping the position opens the channel switcher. In playback the
- * bar turns into the replay timeline.
+ * picker; tapping the position opens the channel switcher; the round button
+ * plays the channel live (LiveATC). In playback the bar turns into the
+ * replay timeline.
  */
 import { ChevronRight, Wind } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { formatMhz } from '../api/airportData'
 import { getAirport, resolveStation } from '../api/airports'
 import { getWeather } from '../api/client'
+import { useRadio } from '../live/radio/radioStore'
 import type { FlightCategory } from '../api/types'
 import { Timeline } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
+import { RadioButton, RadioStatusLine } from './RadioButton'
 import { Waveform } from './Waveform'
 
 /** Flight-category colours as used on every aviation weather map. */
@@ -29,6 +32,7 @@ export function StationBar() {
   const playing = usePlayhead((s) => s.playing)
   const clip = usePlayhead((s) => s.clip)
   const setPanel = usePlayhead((s) => s.setPanel)
+  const radioLive = useRadio((s) => s.on && (s.status === 'live' || s.status === 'buffering'))
 
   const airport = getAirport(airportIcao)
   const station = resolveStation(airport, stationId)
@@ -39,7 +43,7 @@ export function StationBar() {
     return (
       <div className="on-yellow pointer-events-auto w-full overflow-hidden rounded-t-[1.75rem] bg-atc-yellow text-black shadow-[0_-10px_30px_rgba(0,0,0,0.45)] md:w-[min(92vw,40rem)] md:rounded-[1.75rem] md:shadow-2xl">
         <Timeline clip={clip} label={clip.kind === 'rewind' ? `${airport.icao} traffic replay` : `${airport.icao} ${stationText}`} />
-        {clip.audioUrl && <Waveform active={playing} />}
+        {clip.audioUrl && <Waveform active={playing} source="replay" />}
       </div>
     )
   }
@@ -88,9 +92,11 @@ export function StationBar() {
             </span>
           </button>
         )}
+        <RadioButton label={stationText} />
       </div>
+      <RadioStatusLine />
       <div className="pb-[var(--safe-bottom)]">
-        <Waveform active={false} />
+        <Waveform active={radioLive} source="live" />
       </div>
     </div>
   )
