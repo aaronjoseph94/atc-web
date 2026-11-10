@@ -12,7 +12,7 @@ import type { RadioFeed } from '../../api/radioFeeds'
 import type { StationKind } from '../../api/types'
 import { usePlayhead } from '../../playback/playheadStore'
 import { liveBuffer } from '../session'
-import { findCallsigns, guessSpeaker, writtenCallsign } from './callsigns'
+import { findCallsigns, guessSpeaker, splitCalls, writtenCallsign } from './callsigns'
 import { matchMentions } from './match'
 import { onSegment } from './player'
 import { useRadio, type Transmission } from './radioStore'
@@ -98,14 +98,29 @@ async function send(job: Job) {
     useRadio.getState().patch({ transcripts: 'error' })
     return
   }
-  const body = (await res.json().catch(() => null)) as { text?: string; segments?: { start: number; words?: { word: string; start: number; end: number }[] }[] } | null
+  const body = (await res.json().catch(() => null)) as TranscribeBody | null
   useRadio.getState().patch({ transcripts: 'ok' })
   const text = body?.text?.trim() ?? ''
   if (!text) return
   // Calls for a channel the listener has since left still go in that channel's log.
-  const words = body?.segments?.flatMap((s) => s.words ?? [])
-  ingest(text, { stationId: job.stationId, airport: job.airport, kind: job.kind, endedAt: job.endedAt, durationMs: job.seg.durationMs, words: words?.length ? words : undefined })
+  const started = job.endedAt - job.seg.durationMs
+  const meta = { stationId: job.stationId, airport: job.airport, kind: job.kind }
+  const segments = body?.segments?.filter((s) => s.text?.trim()) ?? []
+  // A reply can follow before the squelch closes; give each call its own line.
+  const calls = segments.length > 1 ? splitCalls(segments.map((s) => ({ start: s.start, end: s.end, text: s.text }))) : []
+  if (calls.length > 1) {
+    const words = segments.flatMap((s) => s.words ?? [])
+    for (const c of calls) {
+      const own = words.filter((w) => w.start >= c.start - 0.01 && w.end <= c.end + 0.01).map((w) => ({ word: w.word, start: w.start - c.start, end: w.end - c.start }))
+      ingest(c.text, { ...meta, endedAt: started + c.end * 1000, durationMs: Math.max(300, (c.end - c.start) * 1000), words: own.length ? own : undefined })
+    }
+    return
+  }
+  const words = segments.flatMap((s) => s.words ?? [])
+  ingest(text, { ...meta, endedAt: job.endedAt, durationMs: job.seg.durationMs, words: words.length ? words : undefined })
 }
+
+type TranscribeBody = { text?: string; segments?: { start: number; end: number; text: string; words?: { word: string; start: number; end: number }[] }[] }
 
 export type CallMeta = { stationId: string; airport: string; kind: StationKind | undefined; endedAt: number; durationMs: number; words?: Transmission['words'] }
 

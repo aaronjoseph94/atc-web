@@ -17,6 +17,7 @@
 import { streamUrl, type RadioFeed } from '../../api/radioFeeds'
 import { analysers, getAudioContext, makeAnalyser, resumeAudio } from './audioGraph'
 import { useRadio, type RadioStatus } from './radioStore'
+import { bufferedAhead, canStreamMp3, streamInto, type MseStream } from './mseStream'
 import { Segmenter, type Segment } from './segmenter'
 
 /** Reconnect pauses grow 1 s, 2 s, 4 s… up to this. */
@@ -25,8 +26,10 @@ const MAX_BACKOFF_S = 30
 const OFFLINE_RETRY_S = 60
 /** No new audio for this long while "playing" means the stream has silently died. */
 const STALL_MS = 15_000
-/** How long a first connection may take before it counts as failed. */
+/** How long a connection may go without a byte before it counts as failed. */
 const CONNECT_TIMEOUT_MS = 20_000
+/** More audio than this buffered ahead means playback has drifted behind live: skip forward. */
+const MAX_LAG_S = 8
 
 /** Audio worklet that batches the stream's samples and posts them to the page. */
 const TAP_WORKLET = `
@@ -71,6 +74,10 @@ let watchdog = 0
 let lastProgress = 0
 let lastTime = -1
 let connectStarted = 0
+/** The MSE feed into the element, when that is how this browser plays the stream. */
+let stream: MseStream | null = null
+/** MSE failed once in this browser: use plain `src` from then on. */
+let mseBroken = false
 const listeners = new Set<SegmentListener>()
 
 const set = (status: RadioStatus, extra: Parameters<ReturnType<typeof useRadio.getState>['patch']>[0] = {}) => useRadio.getState().patch({ status, ...extra })
@@ -190,14 +197,33 @@ function connect() {
   const media = element()
   if (!feed) return
   clearTimers()
+  stream?.stop()
+  stream = null
   segmenter?.reset()
   useRadio.getState().patch({ speaking: false })
   connectStarted = performance.now()
   lastProgress = performance.now()
   lastTime = -1
   // A fresh URL each time so nothing serves a stale buffer.
-  media.src = `${streamUrl(mountNow() ?? feed.mount)}?nocache=${Date.now()}`
-  media.load()
+  const url = `${streamUrl(mountNow() ?? feed.mount)}?nocache=${Date.now()}`
+  if (canStreamMp3() && !mseBroken) {
+    const owner = feed.mount
+    stream = streamInto(media, url, {
+      // Bytes flowing count as progress while the first second of audio builds up.
+      onData: () => {
+        if (useRadio.getState().status === 'connecting') connectStarted = performance.now()
+      },
+      onHttpError: (status) => want && feed?.mount === owner && void fail(status === 404 ? false : null),
+      onEnd: () => want && feed?.mount === owner && void fail(),
+      onUnsupported: () => {
+        mseBroken = true
+        if (want && feed?.mount === owner) connect()
+      },
+    })
+  } else {
+    media.src = url
+    media.load()
+  }
   resumeAudio()
   media.play().catch((err: unknown) => {
     if (!want) return
@@ -215,6 +241,8 @@ function startWatchdog() {
     const now = performance.now()
     if (st === 'connecting' && now - connectStarted > CONNECT_TIMEOUT_MS) void fail()
     else if ((st === 'live' || st === 'buffering') && now - lastProgress > STALL_MS) void fail()
+    // Fell behind live (a stall, a slow tab): jump to the newest audio.
+    if (stream && st === 'live' && bufferedAhead(el) > MAX_LAG_S) el.currentTime += bufferedAhead(el) - 1.5
     // Phones suspend audio in the background; nudge it back when we can.
     if (st === 'live' && getAudioContext()?.state === 'suspended') resumeAudio()
   }, 2500)
@@ -236,18 +264,23 @@ async function mountExists(mount: string): Promise<boolean | null> {
   }
 }
 
-/** The stream failed: work out why, then schedule another try. */
-async function fail() {
+/**
+ * The stream failed: work out why, then schedule another try. `known` is
+ * whether the mount exists, when the failure already told us (an HTTP 404).
+ */
+async function fail(known?: boolean | null) {
   if (!want || !feed || retryTimer) return
   const owner = feed.mount
   const mount = mountNow() ?? owner
+  stream?.stop()
+  stream = null
   el?.pause()
   segmenter?.flush()
   useRadio.getState().patch({ speaking: false })
   set('reconnecting', { retryInS: null })
   // Placeholder so a burst of error events schedules only one retry.
   retryTimer = -1
-  const exists = await mountExists(mount)
+  const exists = known === false ? false : await mountExists(mount)
   if (!want || feed?.mount !== owner) return
   // This mount is gone but the same channel has another: switch straight away.
   if (exists === false && mountIndex < (feed.alt?.length ?? 0)) {
@@ -302,6 +335,8 @@ export function stopRadio(keepIntent = false, status: RadioStatus = 'off') {
   window.clearInterval(watchdog)
   const tail = segmenter?.flush()
   if (tail && feed) for (const fn of listeners) fn(tail, feed, Date.now())
+  stream?.stop()
+  stream = null
   if (el) {
     el.pause()
     // Drop the connection rather than buffering a live stream nobody hears.

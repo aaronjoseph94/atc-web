@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findCallsigns, guessSpeaker, readNumber, tokenize, writtenCallsign } from './callsigns'
+import { findCallsigns, guessSpeaker, readNumber, splitCalls, tokenize, writtenCallsign } from './callsigns'
 
 const signs = (text: string) => findCallsigns(text).map((m) => m.callsign)
 const num = (text: string) => {
@@ -127,5 +127,27 @@ describe('writtenCallsign', () => {
     expect(writtenCallsign('BAW14K')).toBe('Speedbird 14K')
     expect(writtenCallsign('N1818C')).toBe('N1818C')
     expect(writtenCallsign('XYZ12')).toBeNull()
+  })
+})
+
+describe('splitCalls', () => {
+  const seg = (start: number, end: number, text: string) => ({ start, end, text })
+  it('separates back-to-back calls in one upload', () => {
+    const calls = splitCalls([
+      seg(0, 4.6, 'Delta 714, right on Quebec, cross runway 25 right,'),
+      seg(4.6, 6.1, 'then contact ground point 75.'),
+      seg(6.3, 9, 'Right on Quebec, cross 25 right, ground point 75, Delta 714.'),
+      seg(9.2, 11, 'Tower, United 434 with you.'),
+    ])
+    expect(calls.map((c) => c.text)).toEqual([
+      'Delta 714, right on Quebec, cross runway 25 right, then contact ground point 75.',
+      'Right on Quebec, cross 25 right, ground point 75, Delta 714.',
+      'Tower, United 434 with you.',
+    ])
+    expect(calls[0]).toMatchObject({ start: 0, end: 6.1 })
+  })
+  it('keeps a single call whole', () => {
+    expect(splitCalls([seg(0, 2, 'KLM 678 heavy, Tower,'), seg(2, 5, 'line up and wait runway 17R.')])).toHaveLength(1)
+    expect(splitCalls([])).toEqual([])
   })
 })

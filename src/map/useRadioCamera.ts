@@ -40,7 +40,7 @@ export function focusZoom(a: Pick<LiveAircraft, 'onGround' | 'altitudeFt'>, airp
 }
 
 /** `key`: who is framed. `zoom`: where the move was headed. `retries`: times a cut-short move was resumed. */
-type State = { key: string | null; settleAt: number; homeAt: number; zoom: number; retries: number }
+type State = { key: string | null; settleAt: number; homeAt: number; zoom: number; retries: number; until: number }
 
 /**
  * Returns a per-frame function for `MapView`'s frame loop. It returns true
@@ -48,7 +48,7 @@ type State = { key: string | null; settleAt: number; homeAt: number; zoom: numbe
  * stays out of the way.
  */
 export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, goHome: (ms?: number) => void, reduceMotion: boolean) {
-  const state = useRef<State>({ key: null, settleAt: 0, homeAt: 0, zoom: 0, retries: 0 })
+  const state = useRef<State>({ key: null, settleAt: 0, homeAt: 0, zoom: 0, retries: 0, until: 0 })
 
   return useCallback(
     (list: LiveAircraft[], dt: number): boolean => {
@@ -68,6 +68,11 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
 
       if (targets.length) {
         st.homeAt = 0
+        // Each new call in the exchange may nudge the layout (and cut a move short) again.
+        if (focus && focus.until !== st.until) {
+          st.until = focus.until
+          st.retries = 0
+        }
         const key = targets.map((a) => a.icao24).join(',')
         if (key !== st.key) {
           st.key = key
@@ -77,10 +82,10 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
         } else if (!map.isMoving()) {
           // Something stopped the move halfway (the map's padding changes as the
           // caption appears, which cancels camera animations): carry on from here.
-          if (Math.abs(map.getZoom() - st.zoom) > 0.08 && st.retries < 3) {
+          if ((Math.abs(map.getZoom() - st.zoom) > 0.08 || offCentre(map, targets) > 0.25) && st.retries < 3) {
             st.retries++
             st.settleAt = now + (reduceMotion ? 0 : RESUME_MS)
-            st.zoom = frame(map, targets, airport, reduceMotion, RESUME_MS)
+            st.zoom = frame(map, targets, airport, reduceMotion, RESUME_MS, true)
           } else if (now >= st.settleAt) chase(map, targets, dt, reduceMotion)
         }
         return true
@@ -110,7 +115,7 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
  * Move onto the aircraft: a flight for a long way, a glide for a short one, a
  * cut with reduced motion. Returns the zoom it is heading for.
  */
-function frame(map: MapLibreMap, targets: LiveAircraft[], airport: AirportConfig, reduceMotion: boolean, duration: number): number {
+function frame(map: MapLibreMap, targets: LiveAircraft[], airport: AirportConfig, reduceMotion: boolean, duration: number, resume = false): number {
   if (targets.length === 1) {
     const a = targets[0]
     const zoom = focusZoom(a, airport)
@@ -122,7 +127,8 @@ function frame(map: MapLibreMap, targets: LiveAircraft[], airport: AirportConfig
     const there = map.project([a.lon, a.lat])
     const far = Math.hypot(there.x - here.x, there.y - here.y) > map.getCanvas().clientWidth * 0.6 || Math.abs(map.getZoom() - zoom) > 1.6
     const opts = { center: [a.lon, a.lat] as [number, number], zoom, bearing: map.getBearing(), duration, easing: easeInOutCubic, essential: true }
-    if (far) map.flyTo({ ...opts, curve: 1.25 })
+    // Picking up a cut-short move never arcs out again.
+    if (far && !resume) map.flyTo({ ...opts, curve: 1.25 })
     else map.easeTo(opts)
     return zoom
   }
@@ -140,8 +146,23 @@ function frame(map: MapLibreMap, targets: LiveAircraft[], airport: AirportConfig
   const cam = map.cameraForBounds([[w, so], [e, n]], { padding: PAIR_PADDING, maxZoom: 15.3 })
   if (!cam) return map.getZoom()
   if (reduceMotion) map.jumpTo(cam)
+  else if (resume) map.easeTo({ ...cam, duration, easing: easeInOutCubic, essential: true })
   else map.flyTo({ ...cam, duration, easing: easeInOutCubic, curve: 1.25, essential: true })
   return cam.zoom ?? map.getZoom()
+}
+
+/** How far the aircraft (or the middle of a pair) sits from the middle of the view, as a fraction of its shorter side. */
+function offCentre(map: MapLibreMap, targets: LiveAircraft[]): number {
+  let lon = 0
+  let lat = 0
+  for (const a of targets) {
+    lon += a.lon / targets.length
+    lat += a.lat / targets.length
+  }
+  const c = map.project(map.getCenter())
+  const p = map.project([lon, lat])
+  const canvas = map.getCanvas()
+  return Math.hypot(p.x - c.x, p.y - c.y) / Math.max(1, Math.min(canvas.clientWidth, canvas.clientHeight))
 }
 
 /** Keep a moving aircraft (or the middle of a pair) in frame without jerks. */

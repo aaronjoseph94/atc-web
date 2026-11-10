@@ -89,7 +89,8 @@ function RadioCaption() {
   const setPanel = usePlayhead((s) => s.setPanel)
   const progress = useSweep(call)
   const canTranscribe = transcripts !== 'unavailable'
-  const busy = canTranscribe && (speaking || pending > 0)
+  // Someone on the air is worth showing even where nothing will be written out.
+  const busy = speaking || (canTranscribe && pending > 0)
   if (!call && !busy) return null
   const words = call ? call.text.split(/\s+/) : []
   const spoken = spokenWordCount(words, progress)
@@ -98,7 +99,7 @@ function RadioCaption() {
     <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the radio transcript">
       {previous && <p className="line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 [text-shadow:0_1px_8px_rgba(0,0,0,0.8)]">{previous.text}</p>}
       {call && (
-        <p key={call.id} className="animate-caption text-[21px] font-semibold leading-snug [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]">
+        <p key={call.id} className="animate-caption line-clamp-4 text-[21px] font-semibold leading-snug [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]">
           {words.map((w, i) => (
             <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
               {w}{' '}

@@ -362,3 +362,59 @@ export function writtenCallsign(callsign: string): string | null {
   if (/^N[1-9][0-9A-Z]{1,4}$/.test(callsign.toUpperCase())) return callsign.toUpperCase()
   return null
 }
+
+// ---------------------------------------------------------------------------
+// One upload, several calls
+// ---------------------------------------------------------------------------
+
+export type TimedText = { start: number; end: number; text: string }
+
+/** Does this sentence open a new radio call? Calls open with a callsign or with the facility being called. */
+function opensCall(text: string): boolean {
+  const tokens = tokenize(text)
+  let lead = 0
+  while (lead < tokens.length && (tokens[lead].punct || FILLER.has(tokens[lead].w))) lead++
+  const first = findCallsigns(text)[0]
+  if (first && first.start <= lead + 1) return true
+  // "Kennedy Tower, …" / "Ground, …": a facility word in the first few words, before any
+  // callsign, and not as the object of an instruction ("contact ground point 7").
+  const head = tokens.slice(lead, lead + 3)
+  const facility = head.findIndex((t) => !t.punct && FACILITY.has(t.w))
+  if (facility < 0 || head.slice(0, facility).some((t) => HANDOFF.has(t.w))) return false
+  return !first || first.start > lead + facility
+}
+
+/** Words that put a facility name inside an instruction rather than at the start of a call. */
+const HANDOFF = new Set(['contact', 'monitor', 'call', 'with', 'to', 'the', 'your', 'over', 'switch', 'for', 'then'])
+
+/** Does this sentence close a call? Readbacks end with the speaker's own callsign. */
+function closesCall(text: string): boolean {
+  const tokens = tokenize(text)
+  let tail = tokens.length - 1
+  while (tail >= 0 && (tokens[tail].punct || WEIGHT.has(tokens[tail].w) || FILLER.has(tokens[tail].w))) tail--
+  const mentions = findCallsigns(text)
+  const last = mentions[mentions.length - 1]
+  return !!last && last.end >= tail && last.start > 0
+}
+
+/**
+ * Split a transcript of back-to-back calls (a quick reply can follow before
+ * the squelch closes, so one upload may hold several) into separate calls,
+ * using the transcriber's sentence timings. A sentence joins the one before
+ * unless it opens a new call or the one before closed one.
+ */
+export function splitCalls(segments: TimedText[]): TimedText[] {
+  const calls: TimedText[] = []
+  for (const seg of segments) {
+    const text = seg.text.trim()
+    if (!text) continue
+    const prev = calls[calls.length - 1]
+    // A sentence ending in a callsign after a call that began with one is the readback.
+    const readback = !!prev && closesCall(text) && opensCall(prev.text)
+    if (prev && !readback && !opensCall(text) && !closesCall(prev.text)) {
+      prev.text = `${prev.text} ${text}`
+      prev.end = seg.end
+    } else calls.push({ start: seg.start, end: seg.end, text })
+  }
+  return calls
+}
