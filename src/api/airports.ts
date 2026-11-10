@@ -62,21 +62,35 @@ function stationLabel(f: Frequency): string {
 }
 
 /**
+ * Position names the public data leaves out. OurAirports lists Canadian
+ * airports with one bare "Tower" / "Ground" per frequency; where a field has
+ * two of each, these say which side of the airport each one works.
+ */
+const POSITIONS: Record<string, Record<number, string>> = {
+  // Calgary: the west tower and ground work 17R/35L and 11/29, the east ones 17L/35R.
+  YYC: { 118.4: 'West', 118.875: 'East', 121.9: 'West', 125.35: 'East' },
+}
+
+/**
  * Every published controller position at an airport, in channel-switcher
  * order. US airports list the FAA's per-runway and per-sector positions;
  * elsewhere there is one entry per type.
  */
 function buildStations(airport: string, name: string): Station[] {
   return getFrequencies(airport)
-    .map((f) => ({
-      id: `${airport.toLowerCase()}-${f.type.toLowerCase()}-${slug(f.description)}-${Math.round(f.mhz * 1000)}`,
-      airport,
-      name,
-      label: stationLabel(f),
-      position: f.description,
-      kind: f.type as StationKind,
-      frequencyMhz: f.mhz,
-    }))
+    .map((raw) => {
+      const side = POSITIONS[airport]?.[raw.mhz]
+      const f: Frequency = side ? Object.assign({}, raw, { description: side }) : raw
+      return {
+        id: `${airport.toLowerCase()}-${f.type.toLowerCase()}-${slug(f.description)}-${Math.round(f.mhz * 1000)}`,
+        airport,
+        name,
+        label: stationLabel(f),
+        position: f.description,
+        kind: f.type as StationKind,
+        frequencyMhz: f.mhz,
+      }
+    })
     .sort((x, y) => FREQUENCY_ORDER.indexOf(x.kind) - FREQUENCY_ORDER.indexOf(y.kind))
 }
 

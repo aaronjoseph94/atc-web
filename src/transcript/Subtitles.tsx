@@ -25,6 +25,13 @@ export function spokenWordCount(words: string[], progress: number): number {
   return words.length
 }
 
+/**
+ * The captions sit on a dark wash that rises from the bar below, so they stay
+ * readable over bright grass and pale runway paint alike.
+ */
+const SCRIM =
+  'pointer-events-auto w-full bg-gradient-to-b from-transparent via-[rgba(16,20,30,0.55)] to-[rgba(16,20,30,0.82)] px-4 pb-3 pt-14 text-left md:w-[min(92vw,40rem)] md:rounded-b-none md:rounded-t-3xl md:px-5'
+
 export function Subtitles() {
   const mode = usePlayhead((s) => s.mode)
   const tMs = usePlayhead((s) => s.tMs)
@@ -37,13 +44,13 @@ export function Subtitles() {
   const active = useMemo(() => (cues ? getActiveCue(cues, tMs) : null), [cues, tMs])
   const earlier = useMemo<TranscriptCue[]>(() => {
     if (!cues) return []
-    return cues.filter((c) => c.endMs <= tMs && c.id !== active?.id).slice(active ? -1 : -2)
+    return cues.filter((c) => c.endMs <= tMs && c.id !== active?.id).slice(-2)
   }, [cues, tMs, active])
 
   if (mode === 'live') {
     if (!caption) return null
     return (
-      <button type="button" className="pointer-events-auto w-full px-4 pb-2 text-left md:w-[min(92vw,40rem)] md:px-1" onClick={() => setPanel('transcripts')} aria-label="Open the tower log">
+      <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the tower log">
         {previousEvent && <p className="line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 [text-shadow:0_1px_8px_rgba(0,0,0,0.8)]">{previousEvent.text}</p>}
         <p key={caption.id} className="animate-caption text-[21px] font-semibold leading-snug text-white [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]">
           {caption.text}
@@ -57,9 +64,14 @@ export function Subtitles() {
   const spoken = active ? spokenWordCount(words, cueProgress(active, tMs)) : 0
 
   return (
-    <button type="button" className="pointer-events-auto w-full px-4 pb-2 text-left md:w-[min(92vw,40rem)] md:px-1" onClick={() => setPanel('transcripts')} aria-label="Open the transcript">
+    <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the transcript">
       {earlier.map((c, i) => (
-        <p key={c.id} className={`line-clamp-2 text-[19px] font-semibold leading-snug [text-shadow:0_1px_8px_rgba(0,0,0,0.8)] ${active || i < earlier.length - 1 ? 'text-white/30' : 'text-white/55'}`}>
+        <p
+          key={c.id}
+          className={`text-[19px] font-semibold leading-snug [text-shadow:0_1px_8px_rgba(0,0,0,0.6)] ${
+            i < earlier.length - 1 ? 'line-clamp-1 text-white/25' : `line-clamp-2 ${active ? 'text-white/50' : 'text-white/60'}`
+          }`}
+        >
           {c.text}
         </p>
       ))}
