@@ -9,8 +9,10 @@ import { icaoCode } from '../api/airportData'
 import { getAirport } from '../api/airports'
 import { useNow } from '../hooks/useNow'
 import type { Atis, Metar } from '../api/types'
-import { runwaysInUse } from '../live/events'
+import { useAirfield } from '../live/airfield'
+import { summariseRunwayUse, type ActiveRunways } from '../live/runwayUse'
 import { runwayEnds, type RunwayEndGeometry } from '../map/airportDiagram'
+import { RUNWAY_USE_COLOR } from '../map/mapStyle'
 import { usePlayhead } from '../playback/playheadStore'
 import { CATEGORY_COLOR, useWeather } from '../station/StationBar'
 import { FullPanel, SectionLabel } from '../ui/Panel'
@@ -46,6 +48,34 @@ function WindRose({ metar, ends }: { metar: Metar; ends: RunwayEndGeometry[] }) 
         </g>
       )}
     </svg>
+  )
+}
+
+/** `↓ Landing 22L 22R · ↑ Departing 22R 31L`: from the traffic, else the ATIS, else the wind's guess. */
+function RunwaysInUse({ active }: { active: ActiveRunways }) {
+  const arrow = (up: boolean) => (
+    <span aria-hidden className="grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold leading-none text-white" style={{ background: up ? RUNWAY_USE_COLOR.departures : RUNWAY_USE_COLOR.arrivals }}>
+      {up ? '↑' : '↓'}
+    </span>
+  )
+  if (active.basis === 'wind') return <p className="mb-2.5 text-white/70">No landings or departures seen yet. {summariseRunwayUse(active)}.</p>
+  return (
+    <>
+      <p className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold tabular-nums text-white" aria-label={summariseRunwayUse(active) ?? undefined}>
+        {active.landing.length > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            {arrow(false)}Landing {active.landing.join(' ')}
+          </span>
+        )}
+        {active.landing.length > 0 && active.departing.length > 0 && <span className="text-white/35">·</span>}
+        {active.departing.length > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            {arrow(true)}Departing {active.departing.join(' ')}
+          </span>
+        )}
+      </p>
+      {active.basis === 'atis' && <p className="-mt-1.5 mb-2.5 text-caption text-atc-muted">As announced on the ATIS; no landings or departures seen yet.</p>}
+    </>
   )
 }
 
@@ -87,7 +117,7 @@ function useSpeech() {
 export function WeatherPanel() {
   const open = usePlayhead((s) => s.panel === 'weather')
   const airportIcao = usePlayhead((s) => s.airportIcao)
-  const events = usePlayhead((s) => s.events)
+  const active = useAirfield((s) => s.runways)
   const setPanel = usePlayhead((s) => s.setPanel)
   const query = useWeather(airportIcao)
   const speech = useSpeech()
@@ -99,8 +129,7 @@ export function WeatherPanel() {
   const metar = query.data?.metar ?? null
   const atis = query.data?.atis ?? []
   const winds = useMemo(() => runwayWinds(metar, ends), [metar, ends])
-  // Only as fresh as the last render; fine for "in the last twenty minutes".
-  const inUse = useMemo(() => runwaysInUse(events, (events[0]?.at ?? 0) - 20 * 60_000), [events])
+  const inUse = summariseRunwayUse(active)
 
   const close = () => {
     speech.stop()
@@ -180,16 +209,11 @@ export function WeatherPanel() {
                 <Fact label="Altimeter" value={metar.altimeterInHg != null ? `${metar.altimeterInHg.toFixed(2)}` : '—'} hint="inches of mercury" />
               </div>
 
-              {(winds.length > 0 || inUse.landing.length > 0 || inUse.departing.length > 0) && (
+              {(winds.length > 0 || inUse) && (
                 <>
                   <SectionLabel>Runways</SectionLabel>
                   <div className="rounded-2xl bg-white/[0.05] p-3.5 text-footnote">
-                    {(inUse.landing.length > 0 || inUse.departing.length > 0) && (
-                      <p className="mb-2.5 text-white/85">
-                        Seen in the last 20 minutes:{' '}
-                        {[inUse.landing.length ? `landing ${inUse.landing.slice(0, 4).join(', ')}` : '', inUse.departing.length ? `departing ${inUse.departing.slice(0, 4).join(', ')}` : ''].filter(Boolean).join('; ')}.
-                      </p>
-                    )}
+                    {active && inUse && <RunwaysInUse active={active} />}
                     {winds.length > 0 && (
                       <>
                         <p className="mb-2 text-caption text-atc-muted">Aircraft land and take off into the wind. Best aligned right now:</p>

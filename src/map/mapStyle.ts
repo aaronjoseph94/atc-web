@@ -30,6 +30,8 @@ export const SRC = {
   procNet: 'proc-net',
   procFinal: 'proc-final',
   procHi: 'proc-hi',
+  runwayUse: 'apt-runway-use',
+  gateUse: 'apt-gate-use',
 } as const
 
 export const LAYER = {
@@ -50,6 +52,10 @@ export const LAYER = {
   label: 'ac-label',
   event: 'ac-event',
   procHit: 'proc-hit',
+  runwayGlow: 'apt-runway-use-glow',
+  runwayUseMark: 'apt-runway-use-mark',
+  gateBusyDot: 'apt-gate-busy-dot',
+  gateBusy: 'apt-gate-busy',
 } as const
 
 type Palette = {
@@ -231,6 +237,9 @@ export function effectiveTheme(theme: MapTheme, isUs: boolean): MapTheme {
 /** Transparent square the runway keep-out layer is made of, and its size in pixels. */
 export const KEEPOUT_IMAGE = 'runway-keepout'
 export const KEEPOUT_PX = 8
+
+/** Runway-in-use colours: arrivals green, departures blue, both cyan (as in iOS's system palette). */
+export const RUNWAY_USE_COLOR = { arrivals: '#34C759', departures: '#3D9BFF', both: '#5AC8FA' } as const
 
 const FONT = ['Noto Sans Regular']
 const FONT_BOLD = ['Noto Sans Bold']
@@ -415,6 +424,47 @@ function layers(p: Palette): LayerSpecification[] {
         'text-padding': 2,
       },
       paint: { 'text-color': chart ? '#1B2540' : 'rgba(232,236,245,0.9)', 'text-halo-color': chart ? 'rgba(255,255,255,0.85)' : 'rgba(12,16,34,0.9)', 'text-halo-width': 1.6 },
+    },
+
+    // ---- runways in use and occupied gates (fed by RunwayGateLayer) ------------
+    // A soft glow along both edges of an active runway's first stretch, in the
+    // colour of what it is used for; the pavement itself stays as painted.
+    {
+      id: LAYER.runwayGlow,
+      type: 'line',
+      source: SRC.runwayUse,
+      minzoom: 11,
+      filter: ['==', ['get', 'kind'], 'glow'],
+      layout: { 'line-cap': 'butt' },
+      paint: {
+        'line-color': ['match', ['get', 'role'], 'arrivals', RUNWAY_USE_COLOR.arrivals, 'departures', RUNWAY_USE_COLOR.departures, RUNWAY_USE_COLOR.both],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0.45, 14, 0.32, 17, 0.26],
+        'line-gap-width': metres(ownWidth(45), 1),
+        'line-width': ['interpolate', ['exponential', 2], ['zoom'], 11, 2.5, 14, 7, 17, 36],
+        'line-blur': ['interpolate', ['exponential', 2], ['zoom'], 11, 2, 14, 6, 17, 30],
+      },
+    },
+    // Occupied gates: the same chips as `aero-gate`, filled with the parked airline's colour.
+    // Placed first (top layer), they win the collision and hide the plain chip underneath.
+    { id: LAYER.gateBusyDot, type: 'symbol', source: SRC.gateUse, minzoom: 14.4, maxzoom: 15.8, layout: { 'icon-image': ['get', 'chip'], 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.36, 15.8, 0.6], 'icon-allow-overlap': true }, paint: {} },
+    { id: LAYER.gateBusy, type: 'symbol', source: SRC.gateUse, minzoom: 15.8, filter: ['!=', ['get', 'ref'], ''], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.8, 10.5, 18.5, 14], 'icon-image': ['get', 'chip'], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 2, 4], 'text-padding': 2 }, paint: { 'text-color': ['get', 'tc'] } },
+    // Arrival / departure badge just right of an active runway's designator chip.
+    {
+      id: LAYER.runwayUseMark,
+      type: 'symbol',
+      source: SRC.runwayUse,
+      minzoom: 11.2,
+      filter: ['==', ['get', 'kind'], 'mark'],
+      layout: {
+        'icon-image': ['get', 'icon'],
+        'icon-anchor': 'left',
+        // Clear of the designator, whose width depends on its length and the zoom (text 9 → 12 px).
+        'icon-offset': ['interpolate', ['linear'], ['zoom'], 11.2, ['match', ['get', 'len'], 1, ['literal', [6, 0]], 2, ['literal', [9, 0]], ['literal', [12, 0]]], 14, ['match', ['get', 'len'], 1, ['literal', [7, 0]], 2, ['literal', [11, 0]], ['literal', [15, 0]]]],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 11.2, 0.8, 14, 1],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+      paint: {},
     },
 
     // ---- aircraft ----------------------------------------------------------------
@@ -645,6 +695,8 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.procNet]: { type: 'geojson', data: empty },
       [SRC.procFinal]: { type: 'geojson', data: empty },
       [SRC.procHi]: { type: 'geojson', data: empty },
+      [SRC.runwayUse]: { type: 'geojson', data: empty },
+      [SRC.gateUse]: { type: 'geojson', data: empty },
     },
     layers: layers(PALETTES[theme]),
   }
