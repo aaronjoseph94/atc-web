@@ -166,8 +166,29 @@ function endMarkings(
     paint.push(quad(end, d - ft(10), d, -half + 1, half - 1, { kind: 'threshold-bar' }))
     const count = Math.max(1, Math.floor(d / ft(200)))
     const step = d / (count + 0.5)
+    // A row of arrowheads right before the bar, across the whole width.
+    const headLen = ft(25)
+    const headHalf = ft(11)
+    const thick = ft(4)
+    const t = d - ft(15)
+    for (let c = ft(15); c < half - headHalf; c += ft(30)) {
+      for (const x of [c, -c]) {
+        paint.push({
+          type: 'Feature',
+          properties: { kind: 'arrow' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              end.at(t - headLen, x - headHalf), end.at(t, x), end.at(t - headLen, x + headHalf),
+              end.at(t - headLen - thick, x + headHalf), end.at(t - thick, x), end.at(t - headLen - thick, x - headHalf),
+              end.at(t - headLen, x - headHalf),
+            ]],
+          },
+        })
+      }
+    }
     for (let i = 0; i < count; i++) {
-      const tip = d - ft(15) - i * step
+      const tip = d - ft(70) - i * step
       const base = tip - ft(45)
       if (base - ft(80) < 0) break
       paint.push({
