@@ -49,6 +49,7 @@ function useTransmitGlow(active: boolean) {
     }
     let raf = 0
     let level = 0
+    let shown = ''
     let last = performance.now()
     let buf: Float32Array<ArrayBuffer> | null = null
     const frame = (t: number) => {
@@ -70,7 +71,9 @@ function useTransmitGlow(active: boolean) {
       }
       if (reducedMotion()) level = speaking ? 0.4 : 0
       else level += (target - level) * (1 - (1 - (target > level ? ATTACK : RELEASE)) ** k)
-      el.style.setProperty('--tx', level < 0.002 ? '0' : level.toFixed(3))
+      // Only on a change: each write restyles the bar, and between calls the level sits at 0 for many frames.
+      const v = level < 0.002 ? '0' : level.toFixed(3)
+      if (v !== shown) el.style.setProperty('--tx', (shown = v))
     }
     raf = requestAnimationFrame(frame)
     return () => {

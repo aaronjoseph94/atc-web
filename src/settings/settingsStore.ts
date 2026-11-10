@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { DEFAULT_AIRPORT } from '../api/airports'
+import type { PerformanceMode } from '../perf/quality'
 
 export type AltitudeUnit = 'ft' | 'm'
 export type SpeedUnit = 'kt' | 'kmh' | 'mph'
@@ -57,6 +58,8 @@ export type Settings = {
   recents: string[]
   /** The "tap a plane" hint has been dismissed. */
   hintSeen: boolean
+  /** Rendering quality: `auto` follows the measured frame rate; the others hold a tier (src/perf). */
+  performance: PerformanceMode
 }
 
 type SettingsState = Settings & {
@@ -91,6 +94,7 @@ export const DEFAULT_SETTINGS: Settings = {
   favourites: [],
   recents: [],
   hintSeen: false,
+  performance: 'auto',
 }
 
 export const SETTINGS_STORAGE_KEY = 'atc-web.settings.v1'

@@ -163,9 +163,12 @@ function staticSignals(): GlassSignals {
 
 let current: GlassTier = 'off'
 let locked = false
+let installed = false
+/** The most glass the rendering quality tier allows (see src/perf); the choice above is held under it. */
+let perfCap: GlassTier = 'full'
 
-function apply(tier: GlassTier) {
-  current = tier
+function show(tier: GlassTier) {
+  if (typeof document === 'undefined') return
   const el = document.documentElement
   el.classList.toggle('glass-on', tier !== 'off')
   el.classList.toggle('glass-full', tier === 'full')
@@ -173,8 +176,21 @@ function apply(tier: GlassTier) {
   el.dataset.glass = tier
 }
 
+function apply(tier: GlassTier) {
+  current = tier
+  if (installed) show(locked ? tier : atMost(tier, perfCap))
+}
+
+/** The glass in use (this module's choice, under the quality tier's cap). */
 export function glassTier(): GlassTier {
-  return current
+  return locked ? current : atMost(current, perfCap)
+}
+
+/** Hold the glass at or below `cap` (the quality tier's ceiling); lifting the cap restores this module's own choice. */
+export function capGlass(cap: GlassTier) {
+  if (cap === perfCap) return
+  perfCap = cap
+  if (installed) show(glassTier())
 }
 
 /** Collect `count` frame intervals with requestAnimationFrame. */
@@ -191,8 +207,6 @@ function sampleFrames(count: number): Promise<number[]> {
     requestAnimationFrame(tick)
   })
 }
-
-let installed = false
 
 /**
  * Decide once at startup (synchronously from the static signals, so the first

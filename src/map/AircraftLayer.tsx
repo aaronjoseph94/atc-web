@@ -6,6 +6,13 @@
  * samples the `LivePositionBuffer` (live mode) or the clip (playback) and
  * writes straight into GeoJSON sources. The layers themselves are declared
  * in `mapStyle.ts`.
+ *
+ * A `setData` is the expensive part (MapLibre re-cuts the source's tiles,
+ * redoes tag collision and re-uploads each tile's icon atlas), so a frame is
+ * only sent when something on screen visibly changed (`sendGate.ts`); the
+ * blinking lights live in their own small source so a strobe flash doesn't
+ * re-send every tag; and the halo pulse is animated with plain paint values,
+ * which (unlike data-driven ones) don't make MapLibre re-cut the source.
  */
 import { useEffect, useRef } from 'react'
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
@@ -23,6 +30,8 @@ import { ensureMapImages, ICON_REACH_PX, ICON_SCALE, iconFor, iconImage } from '
 import { iconZoomFactor, LAYER, SRC } from './mapStyle'
 import { ParkedHeadings } from './parkedHeading'
 import { attachTagImages, tagKey } from './tagImages'
+import { inBox, SendGate, type GateItem } from './sendGate'
+import { noteSend, perfFrame, quality } from '../perf/governor'
 
 type Props = {
   /** The loaded MapLibre instance (null until the style has loaded). */
@@ -53,6 +62,12 @@ const WAKE_INTERVAL_MS = 220
 const WAKE_POINTS = 7
 /** The plain marker (a parked aircraft whose heading nobody knows) stops growing past this zoom, so close in it stays a small dot rather than a disc the size of an airliner. */
 const DOT_MAX_ZOOM = 14
+/** Everything is re-sent at least this often, so aircraft off screen are never far behind when the map pans to them. */
+const MAX_STALE_MS = 1000
+/** Parked aircraft hardly move; off screen, nobody minds if one is a few seconds behind. */
+const PARKED_STALE_MS = 10_000
+/** Aircraft this far outside the view (as a fraction of its size) still count as on screen: tags and shadows reach past the point. */
+const VIEW_MARGIN = 0.12
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
@@ -121,6 +136,14 @@ export function AircraftLayer(props: Props) {
     // What the trail and shadow sources last held, so unchanged data isn't sent again (each send re-tiles the source in the worker).
     let trailsMoving = false
     let shadowsOff = false
+    // Aircraft and shadows go to the map only when something visibly changed; the parked ones on their own,
+    // so they aren't re-sent (tags and all) every time something taxies past them.
+    const gate = new SendGate()
+    const parkedGate = new SendGate()
+    // The aircraft as last sent: the lights are drawn on these, so a light-only update stays registered with the airframe.
+    let sentMoving = new Map<string, Feature<Point>>()
+    let sentParked = new Map<string, Feature<Point>>()
+    let fxKeySent = ''
     let last = performance.now()
     let raf = 0
 
@@ -130,7 +153,12 @@ export function AircraftLayer(props: Props) {
       const acSrc = map.getSource(SRC.aircraft) as GeoJSONSource | undefined
       const trailSrc = map.getSource(SRC.trails) as GeoJSONSource | undefined
       const shadowSrc = map.getSource(SRC.shadows) as GeoJSONSource | undefined
-      if (!acSrc || !trailSrc || !shadowSrc) return
+      const fxSrc = map.getSource(SRC.fx) as GeoJSONSource | undefined
+      const parkedSrc = map.getSource(SRC.parked) as GeoJSONSource | undefined
+      const parkedShadowSrc = map.getSource(SRC.parkedShadows) as GeoJSONSource | undefined
+      if (!acSrc || !trailSrc || !shadowSrc || !fxSrc || !parkedSrc || !parkedShadowSrc) return
+      perfFrame(t - last, t)
+      const Q = quality()
       const dt = Math.min(100, t - last)
       last = t
 
@@ -147,7 +175,8 @@ export function AircraftLayer(props: Props) {
 
       const zoom = map.getZoom()
       const features: Feature<Point>[] = []
-      const shadows: Feature<Point>[] = []
+      // Each aircraft's shadow (null for none), by index into `features`.
+      const shadowOf: (Feature<Point> | null)[] = []
       // Shadow falls down-screen and to the right, whatever way the map is turned.
       const mpp = metersPerPixel(map.getCenter().lat, zoom)
       const br = (map.getBearing() * Math.PI) / 180
@@ -157,15 +186,27 @@ export function AircraftLayer(props: Props) {
       fx.begin({ t, zoom, reduceMotion: L.reduceMotion, width: canvas.clientWidth, height: canvas.clientHeight })
       if (!playing) parkedHeadings.update(map, list, t)
       const dotCap = Math.min(1, iconZoomFactor(DOT_MAX_ZOOM) / iconZoomFactor(zoom))
+      const view = map.getBounds()
+      const box = { west: view.getWest(), south: view.getSouth(), east: view.getEast(), north: view.getNorth() }
+      const items: GateItem[] = []
+      // Lights and exhaust, per aircraft, for the separate fx source.
+      const fxProps = new Map<string, { lt: string; lo: number; ex: string; exo: number }>()
+      let fxKey = ''
+      const reachK = ICON_REACH_PX * iconZoomFactor(zoom)
 
       let anyHi = false
       let anyTx = false
+      // Fade of the highlighted and the transmitting aircraft, for their rings.
+      let hiFade = 0
+      let txFade = 0
       for (let a of list) {
         const isSelected = a.icao24 === selected
         const transmitting = a.icao24 === active
         const hi = isSelected || transmitting
         anyHi ||= hi
         anyTx ||= transmitting
+        if (hi) hiFade = Math.max(hiFade, a.opacity)
+        if (transmitting) txFade = a.opacity
         // A parked aircraft with no reported heading is drawn nose-in to its terminal when there is one.
         const guess = !playing && a.headingKnown === false ? parkedHeadings.get(a.icao24) : null
         if (guess != null) a = { ...a, heading: guess, headingKnown: true }
@@ -183,6 +224,13 @@ export function AircraftLayer(props: Props) {
         const sub = wantLabel && L.dataBlocks && (hi || zoom >= 13.4) ? dataBlock(a, agl) : ''
         const fxa = fx.aircraft(a, icon, image, agl, parked, hi, wantLabel)
 
+        const vis = inBox(a.lon, a.lat, box, VIEW_MARGIN)
+        // Blinking lights and the exhaust shimmer go to their own source; off screen they're left dark.
+        const { lt, lo, ex, exo, ...drawn } = fxa.props
+        if (vis && (lt || ex)) {
+          fxProps.set(a.icao24, { lt, lo, ex, exo })
+          fxKey += `${a.icao24}:${lt}:${ex}:${lo}:${exo};`
+        }
         features.push({
           type: 'Feature',
           properties: {
@@ -201,11 +249,13 @@ export function AircraftLayer(props: Props) {
             o: a.opacity,
             // Higher aircraft draw on top; the highlighted one above all.
             z: hi ? 1e6 : agl,
-            ...fxa.props,
+            ...drawn,
           },
           geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
         })
 
+        let shadowAt: [number, number] | null = null
+        let shadow: Feature<Point> | null = null
         if (L.shadows && icon !== 'ac-dot') {
           // Offset grows with height and is capped, in screen pixels; on the
           // ground it is a soft contact shadow just below and to the right.
@@ -216,22 +266,85 @@ export function AircraftLayer(props: Props) {
           const px = Math.min(28, 3 + 0.36 * Math.sqrt(agl) + 3 * climb)
           const east = sx * px * mpp
           const north = sy * px * mpp
-          shadows.push({
+          shadowAt = [a.lon + east / metersPerDegLon(a.lat), a.lat + north / metersPerDegLat(a.lat)]
+          shadow = {
             type: 'Feature',
             properties: { icon: fxa.shadowImage, sh: icon, bl: fxa.shadowBlur, scale: ICON_SCALE[icon] * fxa.scale * (hi ? 1.25 : 1) * (1 + Math.min(0.25, agl / 40000) + 0.05 * climb), heading: a.heading, o: a.opacity * (parked && !hi ? 0.6 : 1) * fxa.shadowFade },
-            geometry: { type: 'Point', coordinates: [a.lon + east / metersPerDegLon(a.lat), a.lat + north / metersPerDegLat(a.lat)] },
-          })
+            geometry: { type: 'Point', coordinates: shadowAt },
+          }
         }
+        shadowOf.push(shadow)
+        // Filled in below, once the fin pass has settled what each aircraft shows.
+        items.push({ id: a.icao24, lon: a.lon, lat: a.lat, shadow: shadowAt, heading: 0, reachPx: 0, scale: 1, o: a.opacity, eo: 1, key: shadowAt ? `${fxa.shadowImage}|${fxa.shadowBlur}` : '', vis })
       }
       // The fin colour layer sits over all the artwork: leave it off aircraft another one is drawn over.
       if (zoom >= LIVERY_MIN_ZOOM - 0.5) {
         const k = ICON_REACH_PX * iconZoomFactor(zoom)
         hideCoveredFins(features, (f) => k * Number(f.properties?.scale) * (f.properties?.hi ? 1.25 : 1), mpp)
       }
-      acSrc.setData({ type: 'FeatureCollection', features })
-      if (L.shadows) shadowSrc.setData({ type: 'FeatureCollection', features: shadows })
-      else if (!shadowsOff) shadowSrc.setData(EMPTY)
-      shadowsOff = !L.shadows
+      // Split into the parked aircraft (not highlighted) and everything else, and fill in what the gates
+      // compare: where each aircraft and its shadow are, how it's turned and sized, and everything else drawn.
+      const movingF: Feature<Point>[] = []
+      const movingShadows: Feature<Point>[] = []
+      const movingItems: GateItem[] = []
+      const parked: Feature<Point>[] = []
+      const parkedShadows: Feature<Point>[] = []
+      const parkedItems: GateItem[] = []
+      for (let i = 0; i < features.length; i++) {
+        const f = features[i]
+        const p = f.properties!
+        const it = items[i]
+        it.heading = Number(p.heading) || 0
+        it.scale = Number(p.scale) || 1
+        it.reachPx = reachK * it.scale * (p.hi ? 1.25 : 1)
+        it.eo = Number(p.eo ?? 1)
+        it.key += `|${p.icon}|${p.tag}|${p.hi}|${p.tx}|${p.state}|${p.lbl}|${p.alert}|${p.lv}|${p.ll}|${p.sub}`
+        if (p.state === 0 && !p.hi) {
+          parked.push(f)
+          parkedItems.push(it)
+          if (shadowOf[i]) parkedShadows.push(shadowOf[i]!)
+          // The aircraft source keeps a bare point for it: the tap target (and hover) cover every aircraft.
+          movingF.push({ type: 'Feature', properties: { icao24: p.icao24, ps: 1, hi: 0, tx: 0, state: 0, o: p.o }, geometry: f.geometry })
+        } else {
+          movingF.push(f)
+          movingItems.push(it)
+          if (shadowOf[i]) movingShadows.push(shadowOf[i]!)
+        }
+      }
+      const gateOpts = { motionPx: Q.motionPx, minSendMs: Q.minSendMs, maxStaleMs: MAX_STALE_MS }
+      const shadowsToggled = shadowsOff !== !L.shadows
+      const parkedReason = parkedGate.check(parkedItems, t, mpp, { ...gateOpts, maxStaleMs: PARKED_STALE_MS }) ?? (shadowsToggled ? 'key' : null)
+      // The aircraft source carries the parked aircraft's tap targets, so it goes whenever they do.
+      const reason = gate.check(movingItems, t, mpp, gateOpts) ?? (shadowsToggled ? 'key' : parkedReason)
+      if (reason) noteSend(reason)
+      if (parkedReason) noteSend(`parked-${parkedReason}`)
+      const acSent = reason != null
+      if (parkedReason) {
+        parkedGate.commit(parkedItems, t)
+        parkedSrc.setData({ type: 'FeatureCollection', features: parked })
+        parkedShadowSrc.setData(L.shadows ? { type: 'FeatureCollection', features: parkedShadows } : EMPTY)
+        sentParked = new Map(parked.map((f) => [String(f.properties!.icao24), f]))
+      }
+      if (acSent) {
+        gate.commit(movingItems, t)
+        acSrc.setData({ type: 'FeatureCollection', features: movingF })
+        if (L.shadows) shadowSrc.setData({ type: 'FeatureCollection', features: movingShadows })
+        else if (!shadowsOff) shadowSrc.setData(EMPTY)
+        shadowsOff = !L.shadows
+        sentMoving = new Map(movingF.filter((f) => !f.properties!.ps).map((f) => [String(f.properties!.icao24), f]))
+      }
+      // Lights: whenever one blinks, drawn on the aircraft as last sent.
+      if (acSent || parkedReason || fxKey !== fxKeySent) {
+        fxKeySent = fxKey
+        const fxFeatures: Feature<Point>[] = []
+        for (const [id, v] of fxProps) {
+          const f = sentMoving.get(id) ?? sentParked.get(id)
+          if (!f) continue
+          const p = f.properties!
+          fxFeatures.push({ type: 'Feature', properties: { heading: p.heading, scale: p.scale, hi: p.hi, z: p.z, o: p.o, sh: p.sh, ...v }, geometry: f.geometry })
+        }
+        fxSrc.setData({ type: 'FeatureCollection', features: fxFeatures })
+      }
 
       // ---- trails ----------------------------------------------------------
       // Faint wakes behind everything airborne are rebuilt a few times a
@@ -259,11 +372,13 @@ export function AircraftLayer(props: Props) {
         if (coords.length >= 2) lines.push(line(coords, 1))
       }
       // Contrails behind anything cruising high overhead, rebuilt every frame so they stay attached.
-      for (const c of fx.contrails(list, (id) => (playing ? trailAt(playing.tracks[trackKeyFor(playing, id) ?? ''] ?? [], tMs, 16) : liveBuffer.trail(id, 16, t)))) lines.push(c)
-      // The wakes alone only change when they are rebuilt; the focus trail and contrails follow their aircraft every frame.
+      for (const c of fx.contrails(Q.contrails ? list : [], (id) => (playing ? trailAt(playing.tracks[trackKeyFor(playing, id) ?? ''] ?? [], tMs, 16) : liveBuffer.trail(id, 16, t)))) lines.push(c)
+      // The wakes alone only change when they are rebuilt; the focus trail and contrails follow their aircraft, so they go whenever the aircraft do.
       const moving = lines.length > wakeCount
-      if (rebuilt || moving || trailsMoving) trailSrc.setData({ type: 'FeatureCollection', features: lines })
-      trailsMoving = moving
+      if (rebuilt || (acSent && (moving || trailsMoving))) {
+        trailSrc.setData({ type: 'FeatureCollection', features: lines })
+        trailsMoving = moving
+      }
 
       // ---- highlight rings ---------------------------------------------------
       // The aircraft being talked about wears the speaker's colour (purple while
@@ -279,17 +394,20 @@ export function AircraftLayer(props: Props) {
         map.setPaintProperty(LAYER.haloOuter, 'circle-color', color as never)
         map.setPaintProperty(LAYER.ping, 'circle-stroke-color', talk.light)
       }
+      // Plain numbers, not expressions reading the feature: a data-driven paint value makes MapLibre
+      // re-cut the whole aircraft source on every change, which here would be every frame. The rings
+      // still fade with their aircraft (one dropping out of the feed) through `hiFade` and `txFade`.
       if (anyHi) {
-        map.setPaintProperty(LAYER.halo, 'circle-opacity', fading(0.36 + 0.06 * wave))
+        map.setPaintProperty(LAYER.halo, 'circle-opacity', (0.36 + 0.06 * wave) * hiFade)
         map.setPaintProperty(LAYER.halo, 'circle-radius', 20 + 2 * wave)
-        map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', fading(0.2 + 0.05 * wave))
+        map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', (0.2 + 0.05 * wave) * hiFade)
         map.setPaintProperty(LAYER.haloOuter, 'circle-radius', 36 + 5 * wave)
       }
       if (anyTx) {
         // Radar-style ping expanding from whoever is transmitting.
         const phase = L.reduceMotion ? 0.4 : (t % 1500) / 1500
         map.setPaintProperty(LAYER.ping, 'circle-radius', 12 + 34 * phase)
-        map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', fading(L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6))
+        map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', (L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6) * txFade)
       }
 
       L.onFrame?.(list, dt)
@@ -322,11 +440,6 @@ function replayed(clip: ClipPack, tMs: number): LiveAircraft[] {
   const list = positionsAt(clip, tMs) as LiveAircraft[]
   for (const a of list) a.opacity = 1
   return list
-}
-
-/** A ring's opacity scaled by its aircraft's own fade, so the halo leaves with an aircraft that drops out of the feed instead of pulsing on over empty ground. */
-function fading(v: number): never {
-  return ['*', v, ['get', 'o']] as never
 }
 
 function line(coordinates: [number, number][], sel: 0 | 1): Feature<LineString> {
