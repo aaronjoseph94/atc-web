@@ -11,6 +11,7 @@ import { getAiStatus, getHealth } from '../api/client'
 import { usePlayhead } from '../playback/playheadStore'
 import { supportsHaptics } from '../ui/haptics'
 import { Group, Row, SectionLabel, Segmented, Sheet, Toggle } from '../ui/Panel'
+import { AiSettingsGroup } from './AiSettingsGroup'
 import { DEFAULT_SETTINGS, useSettings, type Settings } from './settingsStore'
 
 export function SettingsView() {
@@ -100,6 +101,8 @@ export function SettingsView() {
           />
         </Row>
       </Group>
+
+      <AiSettingsGroup />
 
       <Group className="mt-6">
         <button type="button" className="pressable-soft -mx-3.5 flex min-h-12 w-[calc(100%+1.75rem)] items-center justify-between rounded-2xl px-3.5 text-left text-subhead font-medium hover:bg-white/[0.04]" onClick={() => setPanel('layers')}>

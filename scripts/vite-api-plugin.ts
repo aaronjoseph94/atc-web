@@ -14,6 +14,8 @@ import { fetchFlightDetails } from '../src/api/flightSources'
 import { buildHealth } from '../src/api/healthHandler'
 import { memoryCache } from '../src/api/sourceHealth'
 import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
+import { aiStatus as aiRunStatus, handleAiRun } from '../src/api/ai/handler'
+import { optionsFromHeaders } from '../src/api/ai/run'
 import { NOT_AVAILABLE } from '../src/api/transcribeHandler'
 import { fetchWeather } from '../src/api/weatherHandler'
 
@@ -85,6 +87,20 @@ export function apiDevPlugin(): Plugin {
             const q = parseFlightQuery(url.searchParams.get('hex'), url.searchParams.get('callsign'))
             if (!q.hex && !q.callsign) return await send(res, jsonResponse({ error: 'hex or callsign required' }, 400, 'no-store'))
             return await send(res, jsonResponse(await fetchFlightDetails(q.hex, q.callsign, devCache), 200, 'public, max-age=600'))
+          }
+
+          if (url.pathname === '/api/ai') {
+            const opts = optionsFromHeaders((n) => (req.headers[n] as string | undefined) ?? null)
+            const env = { ...aiEnv(), ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY }
+            if (req.method === 'GET') return await send(res, jsonResponse(aiRunStatus(env, opts), 200, 'no-store'))
+            let body: unknown
+            try {
+              body = JSON.parse(await readBody(req))
+            } catch {
+              return await send(res, jsonResponse({ ok: false, error: 'bad request', status: 400 }, 400, 'no-store'))
+            }
+            const out = await handleAiRun(body, env, opts)
+            return await send(res, jsonResponse(out, out.ok ? 200 : out.status, 'no-store'))
           }
 
           if (url.pathname === '/api/summarize') {
