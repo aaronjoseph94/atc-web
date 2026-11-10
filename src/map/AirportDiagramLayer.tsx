@@ -4,7 +4,7 @@
  *
  * It also paints the runway holding-position bars. Those depend on where the
  * taxiways actually are, which only the map tiles know, so they are worked
- * out from the loaded taxiway geometry once the map settles.
+ * out from the loaded taxiway geometry after each camera move.
  */
 import type { Feature, FeatureCollection, LineString } from 'geojson'
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl'
@@ -44,8 +44,17 @@ export function AirportDiagramLayer({ map, airportIcao }: { map: MapLibreMap | n
     // Only one end per runway is needed to describe its centreline.
     const runways = runwayEnds(airportIcao).filter((_, i) => i % 2 === 0)
     const bars = new Map<string, Feature<LineString>[]>()
+    let timer = 0
+    let tries = 0
     const refresh = () => {
-      if (map.getZoom() < MIN_ZOOM || !map.isSourceLoaded('omt')) return
+      window.clearTimeout(timer)
+      if (map.getZoom() < MIN_ZOOM) return
+      // Tiles for the new view may still be arriving; look again shortly.
+      if (!map.isSourceLoaded('omt')) {
+        if (tries++ < 12) timer = window.setTimeout(refresh, 400)
+        return
+      }
+      tries = 0
       const taxiways = map.querySourceFeatures('omt', {
         sourceLayer: 'aeroway',
         filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']],
@@ -58,11 +67,18 @@ export function AirportDiagramLayer({ map, airportIcao }: { map: MapLibreMap | n
       }
       if (added) setData(map, SRC.hold, { type: 'FeatureCollection', features: [...bars.values()].flat() })
     }
+    // The map never goes "idle" while aircraft animate, so settle on the end of each move instead.
+    const schedule = () => {
+      tries = 0
+      window.clearTimeout(timer)
+      timer = window.setTimeout(refresh, 350)
+    }
     setData(map, SRC.hold, { type: 'FeatureCollection', features: [] })
-    map.on('idle', refresh)
-    refresh()
+    map.on('moveend', schedule)
+    schedule()
     return () => {
-      map.off('idle', refresh)
+      window.clearTimeout(timer)
+      map.off('moveend', schedule)
     }
   }, [map, airportIcao])
 
