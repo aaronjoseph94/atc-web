@@ -55,6 +55,8 @@ async function fakeAi(page: Page) {
     const send = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (req.method() === 'GET') return send({ configured: true, provider: 'anthropic', model: 'test', keySource: 'server', server: { anthropic: true, openrouter: false } })
     const body = req.postDataJSON() as { task: string; input: { text: string } }
+    // Other AI features (the airport briefing, alerts…) ask too; this spec is about the radio pass only.
+    if (body.task !== 'radioCleanup') return send({ ok: false, task: body.task, error: 'not in this test', status: 503 })
     const n = inputs.push(body.input) - 1
     await turn(n)
     const result = ANSWERS[body.input.text]
