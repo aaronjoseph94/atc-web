@@ -267,7 +267,9 @@ function layers(p: Palette): LayerSpecification[] {
         'text-field': ['get', 'text'],
         'text-font': FONT_BOLD,
         // Em size in metres → pixels: the factor is baked in per feature (`px10`).
-        'text-size': ['interpolate', ['exponential', 2], ['zoom'], 10, ['get', 'px10'], 22, ['*', ['get', 'px10'], 4096]],
+        // One stop per zoom level: MapLibre packs sizes into 16 bits (max 512 px), so a
+        // single far-away stop would be clamped and drag every size in between down with it.
+        'text-size': ['interpolate', ['exponential', 2], ['zoom'], ...[13, 14, 15, 16, 17, 18, 19, 20].flatMap((z) => [z, ['min', 500, ['*', ['get', 'px10'], 2 ** (z - 10)]]])],
         'text-rotate': ['get', 'rot'],
         'text-rotation-alignment': 'map',
         'text-pitch-alignment': 'map',
@@ -412,9 +414,9 @@ function iconScale(factor: unknown): unknown[] {
     [9, 0.32],
     [12, 0.5],
     [14, 0.74],
-    [15, 0.95],
-    [16, 1.6],
-    [19, 12.8],
+    [15, 0.92],
+    [16, 1.3],
+    [19, 10.4],
   ]
   return ['interpolate', ['exponential', 2], ['zoom'], ...stops.flatMap(([z, v]) => [z, ['*', v, factor]])]
 }
