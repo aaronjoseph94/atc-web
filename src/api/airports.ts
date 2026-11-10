@@ -29,10 +29,18 @@ export type AirportConfig = {
   radiusNm: number
   /** Field elevation, feet above sea level. */
   elevationFt: number
+  /**
+   * Desert field: the infield is gravel and dirt, so it is drawn slate rather
+   * than green even where the map data calls it grass.
+   */
+  arid: boolean
   /** `[[west, south], [east, north]]` framing every runway. */
   bounds: [[number, number], [number, number]]
   stations: Station[]
 }
+
+/** Desert airports whose infields are gravel, not lawn. */
+const ARID = new Set(['PHX', 'LAS', 'SLC'])
 
 /** Optional per-airport sizing for busy or sprawling fields. */
 type AirportPad = { dLat?: number; dLon?: number; radiusNm?: number }
@@ -100,6 +108,7 @@ function apt(
     bbox: bboxAround(lat, lon, pad?.dLat, pad?.dLon),
     radiusNm: pad?.radiusNm ?? 12,
     elevationFt: getElevationFt(icao),
+    arid: ARID.has(icao),
     bounds: getRunwayBounds(icao) ?? [
       [lon - 0.03, lat - 0.02],
       [lon + 0.03, lat + 0.02],
