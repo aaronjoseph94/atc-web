@@ -113,7 +113,7 @@ function Card({ facts, onClose }: { facts: RunwayFacts; onClose: () => void }) {
   const size = formatRunwaySize(facts, metric)
 
   return (
-    <div role="dialog" aria-label={`Runway ${facts.name}`} className="pointer-events-auto w-[17rem] rounded-2xl bg-[#1d2535]/95 p-3.5 shadow-pop ring-1 ring-white/[0.12] backdrop-blur-xl">
+    <div role="dialog" aria-label={`Runway ${facts.name}`} className="pointer-events-auto w-[17rem] rounded-2xl glass-pop p-3.5 shadow-pop ring-1 ring-white/[0.12]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-caption font-semibold text-white/55">Runway</div>

@@ -13,6 +13,7 @@ import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
+import { DOCK_EVENT, readDockReserve } from '../ui/layout'
 import { CAMERA_EASE } from '../ui/motion'
 import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
@@ -55,11 +56,11 @@ function resetFocus(homeAt = 0) {
   focus.homeAt = homeAt
 }
 
-/** Space the floating chrome takes at the top and bottom, so the camera frames around it. */
+/** Space the floating chrome takes at the top and bottom (and the docked side panel on the right), so the camera frames around it. */
 function chromePadding() {
   const bottom = document.getElementById('bottom-stack')?.offsetHeight ?? 150
   const wide = window.innerWidth >= 768
-  return { top: 76, bottom: Math.min(bottom + (wide ? 24 : 8), window.innerHeight * 0.62), left: 0, right: 0 }
+  return { top: 76, bottom: Math.min(bottom + (wide ? 24 : 8), window.innerHeight * 0.62), left: 0, right: readDockReserve() }
 }
 
 export function MapView() {
@@ -142,8 +143,12 @@ export function MapView() {
       const have = map.getPadding()
       // Setting padding stops any camera move in flight, so only do it for a real change,
       // and re-frame afterwards if the app is the one steering.
-      if (Math.abs((have.top ?? 0) - want.top) < 2 && Math.abs((have.bottom ?? 0) - want.bottom) < 2) return
-      map.setPadding(want)
+      if (Math.abs((have.top ?? 0) - want.top) < 2 && Math.abs((have.bottom ?? 0) - want.bottom) < 2 && Math.abs((have.right ?? 0) - want.right) < 2) return
+      // Keep what is on screen where it is (the centre point moves with the padding instead of the map jumping);
+      // in automatic mode the re-frame below then glides to the new framing.
+      const { clientWidth: w, clientHeight: h } = map.getContainer()
+      const centre = map.unproject([(want.left + w - want.right) / 2, (want.top + h - want.bottom) / 2])
+      map.jumpTo({ center: centre, padding: want })
       const s = usePlayhead.getState()
       if (s.cameraMode === 'auto' && !s.selectedIcao && !focus.id) focus.homeAt = performance.now()
     }
@@ -152,9 +157,11 @@ export function MapView() {
     const ro = stack ? new ResizeObserver(apply) : null
     if (stack) ro?.observe(stack)
     window.addEventListener('resize', apply)
+    window.addEventListener(DOCK_EVENT, apply)
     return () => {
       ro?.disconnect()
       window.removeEventListener('resize', apply)
+      window.removeEventListener(DOCK_EVENT, apply)
     }
   }, [map, sheet])
 
@@ -350,12 +357,7 @@ export function MapView() {
   )
 }
 
-/** Shown until the map has drawn its first frame: the airfield colours with a slow sweep. */
+/** Shown until the map has drawn its first frame: the map colour, with the radar card (MapStatus) on top saying what is happening. */
 function MapSkeleton() {
-  return (
-    <div className="pointer-events-none absolute inset-0 grid place-items-center overflow-hidden bg-atc-map">
-      <div className="absolute inset-0 animate-sweep bg-[conic-gradient(from_0deg_at_50%_50%,transparent_0deg,rgba(124,92,252,0.16)_40deg,transparent_60deg)]" />
-      <p className="relative text-sm font-medium text-white/50">Loading the airfield…</p>
-    </div>
-  )
+  return <div className="pointer-events-none absolute inset-0 bg-atc-map" />
 }

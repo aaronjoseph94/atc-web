@@ -62,7 +62,7 @@ export function MapControls() {
         </GlassButton>
       )}
       <div className="hidden flex-col overflow-visible pt-1.5 [@media(hover:hover)]:flex">
-        <div className="pointer-events-auto flex flex-col rounded-full bg-atc-glass/75 shadow-float ring-1 ring-white/[0.13] backdrop-blur-xl">
+        <div className="pointer-events-auto flex flex-col rounded-full glass-chip shadow-float ring-1 ring-white/[0.13]">
           <ZoomButton label="Zoom in" shortcut="+" onClick={() => cameraNudge.zoom(1)}>
             <Plus className="size-5" />
           </ZoomButton>

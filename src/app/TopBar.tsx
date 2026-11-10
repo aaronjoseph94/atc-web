@@ -3,11 +3,12 @@
  * the middle (LIVE with aircraft count, TRACK while locked onto a flight,
  * REPLAY during playback), traffic search and the menu on the right.
  */
-import { useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, MoreHorizontal, Search, X } from 'lucide-react'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
+import { ChevronLeft, MoreHorizontal, PanelRightOpen, RotateCw, Search, WifiOff, X } from 'lucide-react'
 import { useNow } from '../hooks/useNow'
 import { agoLabel } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
+import { useDock, useIsWide } from '../ui/layout'
 import { GlassButton } from '../ui/Panel'
 
 function StatusPill() {
@@ -21,6 +22,7 @@ function StatusPill() {
   const airportIcao = usePlayhead((s) => s.airportIcao)
   const setPanel = usePlayhead((s) => s.setPanel)
   const queryClient = useQueryClient()
+  const retrying = useIsFetching({ queryKey: ['aircraft', airportIcao] }) > 0
   const now = useNow(5000)
 
   const pill = 'pointer-events-auto flex h-9 items-center gap-2 rounded-full px-3.5 text-footnote font-semibold shadow-float'
@@ -42,14 +44,26 @@ function StatusPill() {
   }
   if (status === 'error') {
     return (
-      <button type="button" className={`${pill} pressable motion-pop bg-atc-glass/85 text-white ring-1 ring-white/[0.13] backdrop-blur-xl`} onClick={() => void queryClient.invalidateQueries({ queryKey: ['aircraft', airportIcao] })}>
-        <span className="size-2 rounded-full bg-atc-muted" />
-        Feed offline. Tap to retry
+      <button
+        type="button"
+        className={`${pill} pressable motion-pop glass-chip pl-2 text-white ring-1 ring-white/[0.13] hover:bg-atc-glass-hover/90`}
+        onClick={() => void queryClient.invalidateQueries({ queryKey: ['aircraft', airportIcao] })}
+        aria-label="Live traffic is offline. Try again"
+        disabled={retrying}
+      >
+        <span className="grid size-5 place-items-center rounded-full bg-white/15">
+          <WifiOff className="size-3" strokeWidth={2.5} />
+        </span>
+        Feed offline
+        <span className="flex items-center gap-1 text-white/70">
+          <RotateCw className={`size-3.5 ${retrying ? 'animate-spin' : ''}`} />
+          {retrying ? 'Retrying' : 'Retry'}
+        </span>
       </button>
     )
   }
   return (
-    <button type="button" className={`${pill} pressable bg-atc-glass/75 pl-2 text-white ring-1 ring-white/[0.13] backdrop-blur-xl hover:bg-atc-glass-hover/90`} onClick={() => setPanel('traffic')} aria-label={`Live. ${count} aircraft. Open traffic list`}>
+    <button type="button" className={`${pill} pressable glass-chip pl-2 text-white ring-1 ring-white/[0.13] hover:bg-atc-glass-hover/90`} onClick={() => setPanel('traffic')} aria-label={`Live. ${count} aircraft. Open traffic list`}>
       <span className="flex h-5 items-center gap-1 rounded-full bg-atc-live pl-1.5 pr-2 text-caption2 font-bold tracking-[0.06em] text-white">
         <span className="size-1.5 animate-pulse-dot rounded-full bg-white" />
         LIVE
@@ -66,6 +80,10 @@ export function TopBar() {
   const select = usePlayhead((s) => s.select)
   const setPanel = usePlayhead((s) => s.setPanel)
   const exitPlayback = usePlayhead((s) => s.exitPlayback)
+  // On wide screens with the side panel tucked away, a button brings it back.
+  const wide = useIsWide()
+  const collapsed = useDock((s) => s.collapsed)
+  const setCollapsed = useDock((s) => s.setCollapsed)
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-[max(0.75rem,var(--safe-top))] md:px-4">
@@ -77,7 +95,7 @@ export function TopBar() {
         ) : mode === 'playback' ? (
           <button
             type="button"
-            className="motion-pop pressable pointer-events-auto flex h-11 items-center gap-1 rounded-full bg-atc-glass/75 pl-2 pr-3 text-white shadow-float ring-1 ring-white/[0.13] backdrop-blur-xl hover:bg-atc-glass-hover/90"
+            className="motion-pop pressable glass-chip pointer-events-auto flex h-11 items-center gap-1 rounded-full pl-2 pr-3 text-white shadow-float ring-1 ring-white/[0.13] hover:bg-atc-glass-hover/90"
             onClick={exitPlayback}
             aria-label="Back to live traffic"
           >
@@ -93,7 +111,12 @@ export function TopBar() {
 
       <StatusPill />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {wide && collapsed && (
+          <GlassButton label="Show side panel" shortcut="]" onClick={() => setCollapsed(false)} className="motion-pop">
+            <PanelRightOpen className="size-5" />
+          </GlassButton>
+        )}
         <GlassButton label="Menu" shortcut="M" tooltip={panel === 'menu' ? 'none' : 'left'} onClick={() => setPanel(panel === 'menu' ? null : 'menu')} active={panel === 'menu'}>
           <MoreHorizontal className="size-5" />
         </GlassButton>

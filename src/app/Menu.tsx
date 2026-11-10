@@ -31,7 +31,7 @@ export function Menu() {
         aria-label="Menu"
         tabIndex={-1}
         data-closing={closing ? '' : undefined}
-        className="motion-pop absolute right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] w-64 origin-top-right overflow-hidden rounded-2xl bg-[#1d2535]/95 py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none backdrop-blur-xl md:right-4"
+        className="motion-pop absolute right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none md:right-4"
       >
         {mode === 'playback' ? (
           <Item icon={Radio} label="Back to live" onClick={exitPlayback} />

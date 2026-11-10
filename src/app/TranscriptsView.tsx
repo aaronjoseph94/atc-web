@@ -14,7 +14,7 @@ import { useRadio, type Transmission } from '../live/radio/radioStore'
 import { trackId } from '../playback/interpolate'
 import { formatClock } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
-import { FullPanel } from '../ui/Panel'
+import { PanelFrame } from '../ui/Panel'
 
 const EVENT_ICON: Record<LiveEvent['kind'], typeof ArrowUp> = { departed: ArrowUp, landed: ArrowDown, goaround: RotateCcw, lineup: ArrowUpFromLine, emergency: Siren }
 
@@ -27,11 +27,12 @@ function callLabel(t: Transmission): string {
   return [who, role].filter(Boolean).join(' · ')
 }
 
-export function TranscriptsView() {
-  const open = usePlayhead((s) => s.panel === 'transcripts')
+/** `docked`: rendered in the desktop side panel instead of as a sheet. */
+export function TranscriptsView({ docked = false }: { docked?: boolean }) {
+  const open = usePlayhead((s) => s.panel === 'transcripts') || docked
   const clip = usePlayhead((s) => s.clip)
   // The clock only matters while the transcript is showing; closed, it shouldn't re-render on every tick.
-  const tMs = usePlayhead((s) => (s.panel === 'transcripts' ? s.tMs : 0))
+  const tMs = usePlayhead((s) => (docked || s.panel === 'transcripts' ? s.tMs : 0))
   const mode = usePlayhead((s) => s.mode)
   const events = usePlayhead((s) => s.events)
   const airportIcao = usePlayhead((s) => s.airportIcao)
@@ -70,7 +71,7 @@ export function TranscriptsView() {
   const close = () => setPanel(null)
 
   return (
-    <FullPanel open={open} title={playback ? 'Transcript' : view === 'radio' ? 'Live radio' : 'Tower log'} onClose={close} tone="black">
+    <PanelFrame docked={docked} open={open} title={playback ? 'Transcript' : view === 'radio' ? 'Live radio' : 'Tower log'} onClose={close} tone="black">
       <p className="-mt-1.5 mb-4 px-1 text-footnote text-white/55">
         {airport.icao} {station?.label}
         {station?.frequencyMhz != null ? `, ${formatMhz(station.frequencyMhz)}` : ''}
@@ -208,6 +209,6 @@ export function TranscriptsView() {
       {playback && cues.length > 0 && <p className="py-6 text-center text-caption text-white/35">Tap a line to jump the replay there.</p>}
       {view === 'radio' && radioCalls.length > 0 && <p className="py-6 text-center text-caption text-white/35">Live audio from LiveATC.net. Transcripts are machine-made and can be wrong.</p>}
       <div ref={listEnd} />
-    </FullPanel>
+    </PanelFrame>
   )
 }

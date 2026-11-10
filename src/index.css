@@ -488,6 +488,247 @@ body,
   }
 }
 
+/*
+ * Frosted glass (see src/ui/glass.ts). Three tints, from light controls to
+ * heavy reading surfaces; each blurs and saturates the map behind it so the
+ * colours glow through without fighting the text. `html.glass-on` blurs the
+ * small surfaces, `html.glass-full` the big ones too (only on devices with
+ * headroom: big blurred areas cost real frame time over a live map);
+ * otherwise the same classes are a solid fill, so nothing loses contrast. They set only the
+ * background, so rings, shadows and hover colours still come from utilities.
+ * Tints are mirrored in GLASS_TINT for the contrast tests.
+ */
+@layer components {
+  .glass-chip {
+    background-color: rgb(27 35 51 / 0.94);
+  }
+  .glass-pop {
+    background-color: rgb(29 37 53 / 0.97);
+  }
+  .glass-sheet {
+    background-color: var(--color-atc-panel);
+  }
+  .glass-on .glass-chip {
+    background-color: rgb(22 29 42 / 0.66);
+    -webkit-backdrop-filter: blur(14px) saturate(1.7);
+    backdrop-filter: blur(14px) saturate(1.7);
+  }
+  .glass-on .glass-pop {
+    background-color: rgb(24 31 45 / 0.8);
+    -webkit-backdrop-filter: blur(22px) saturate(1.7);
+    backdrop-filter: blur(22px) saturate(1.7);
+  }
+  .glass-full .glass-sheet {
+    background-color: rgb(14 19 28 / 0.86);
+    -webkit-backdrop-filter: blur(30px) saturate(1.6);
+    backdrop-filter: blur(30px) saturate(1.6);
+  }
+  /* A hairline of light along the top edge, as on real glass. */
+  .glass-full .glass-sheet,
+  .glass-on .glass-pop {
+    background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.06), transparent 3rem);
+  }
+}
+/* No blur at all on devices that can't afford it, including the odd `backdrop-blur-*` utility elsewhere. */
+.glass-off *,
+.glass-off *::before,
+.glass-off *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass-chip,
+  .glass-pop,
+  .glass-sheet {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/*
+ * Big display text (airport codes, callsigns): normal kerning and
+ * proportional figures, so "2292" or "678" sit as snugly as the letters
+ * beside them instead of on tabular-width cells, with tracking pulled in a hair.
+ */
+@utility display-tight {
+  letter-spacing: -0.012em;
+  font-kerning: normal;
+  font-variant-numeric: proportional-nums;
+  font-feature-settings:
+    'kern' 1,
+    'tnum' 0,
+    'pnum' 1;
+}
+
+/*
+ * Film grain on big dark surfaces: an almost invisible noise tile that breaks
+ * up banding in their gradients. Static (no animation), never over the map.
+ */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+/*
+ * Scroll edge fades: a scrolling list fades out at an edge only while there
+ * is more to see that way (src/ui/scrollFade.ts sets the data attributes).
+ * A sticky header at the top of the list stays crisp; the fade starts below it.
+ */
+@property --fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+.scroll-fade {
+  --fade-offset: 0px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 var(--fade-offset), transparent var(--fade-offset), #000 calc(var(--fade-offset) + var(--fade-top)), #000 calc(100% - var(--fade-bottom)), transparent);
+  mask-image: linear-gradient(to bottom, #000 var(--fade-offset), transparent var(--fade-offset), #000 calc(var(--fade-offset) + var(--fade-top)), #000 calc(100% - var(--fade-bottom)), transparent);
+  transition:
+    --fade-top var(--duration-fast) var(--ease-out),
+    --fade-bottom var(--duration-fast) var(--ease-out);
+}
+.scroll-fade[data-fade-top] {
+  --fade-top: 28px;
+}
+.scroll-fade[data-fade-bottom] {
+  --fade-bottom: 36px;
+}
+.scroll-fade:has(> .sticky:first-child) {
+  --fade-offset: 2.5rem;
+}
+
+/*
+ * Sheet grabber: pulled past where the sheet can go, it stretches a little
+ * and catches the light (`--sheet-stretch`, 0..1, set by useSheetDrag), then
+ * springs back on release.
+ */
+.sheet-grabber {
+  position: relative;
+  scale: calc(1 + var(--sheet-stretch, 0) * 0.5) calc(1 - var(--sheet-stretch, 0) * 0.15);
+  transition: scale 320ms var(--ease-spring);
+}
+.sheet-grabber::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #fff;
+  opacity: calc(var(--sheet-stretch, 0) * 0.55);
+  transition: opacity 320ms var(--ease-out);
+}
+.on-yellow .sheet-grabber::after {
+  background: #000;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-grabber {
+    scale: none;
+  }
+}
+.reduce-motion .sheet-grabber {
+  scale: none;
+}
+
+/* Radar blips flare as the beam passes and fade before it comes round again. */
+.radar-blip {
+  opacity: 0.85;
+  animation: blip 2.8s linear infinite;
+}
+@keyframes blip {
+  0% {
+    opacity: 1;
+    scale: 1.25;
+  }
+  12% {
+    scale: 1;
+  }
+  75%,
+  100% {
+    opacity: 0.08;
+  }
+}
+.quiet-twinkle {
+  animation: twinkle 3.2s ease-in-out infinite;
+}
+@keyframes twinkle {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/*
+ * Desktop side panel. The map chrome (top bar, controls, bottom stack) sits in
+ * a box that stops where the panel starts (`--dock-w`), and slides along as
+ * the panel opens or closes; while the panel is dragged wider it follows at once.
+ */
+#map-chrome {
+  right: var(--dock-w, 0px);
+  transition: right var(--duration-sheet) var(--ease-sheet);
+}
+.dock-resizing #map-chrome,
+.dock-resizing .dock {
+  transition: none;
+}
+.dock-resizing,
+.dock-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+.dock {
+  transition:
+    translate var(--duration-sheet) var(--ease-sheet),
+    opacity var(--duration-base) var(--ease-out);
+}
+.dock[data-collapsed] {
+  translate: calc(100% + 1.5rem) 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    translate var(--duration-exit) var(--ease-exit),
+    opacity var(--duration-exit) var(--ease-exit);
+}
+@starting-style {
+  .dock {
+    translate: calc(100% + 1.5rem) 0;
+    opacity: 0;
+  }
+}
+/* Tabs cross-fade with a small drift in the direction of travel. */
+.dock-pane {
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    translate var(--duration-base) var(--ease-out);
+}
+.dock-pane[data-closing] {
+  opacity: 0;
+  translate: calc(var(--pane-dir, 1) * -12px) 0;
+  transition-duration: var(--duration-exit-fast);
+  transition-timing-function: var(--ease-exit);
+  pointer-events: none;
+}
+@starting-style {
+  .dock-pane {
+    opacity: 0;
+    translate: calc(var(--pane-dir, 1) * 16px) 0;
+  }
+}
+@media (min-width: 1024px) {
+  .maplibregl-ctrl-bottom-right {
+    right: var(--dock-w, 0px);
+    transition: right var(--duration-sheet) var(--ease-sheet);
+  }
+}
+
 /* Honour OS-level reduced motion in addition to the in-app setting. */
 @media (prefers-reduced-motion: reduce) {
   *,
