@@ -201,7 +201,7 @@ export const AIRPORTS: AirportConfig[] = [
   std('PHL', 'Philadelphia International', 'Philadelphia', 'US'),
   std('SLC', 'Salt Lake City International', 'Salt Lake City', 'US'),
   std('DCA', 'Ronald Reagan Washington National', 'Washington National', 'US', 13.0),
-  std('IAD', 'Washington Dulles International', 'Dulles', 'US', 11.8, { dLat: 0.08, dLon: 0.1, radiusNm: 15 }),
+  std('IAD', 'Washington Dulles International', 'Washington Dulles', 'US', 11.8, { dLat: 0.08, dLon: 0.1, radiusNm: 15 }),
   std('SAN', 'San Diego International', 'San Diego', 'US', 13.0),
   std('FLL', 'Fort Lauderdale–Hollywood International', 'Fort Lauderdale', 'US', 12.6),
   std('MDW', 'Chicago Midway International', 'Chicago Midway', 'US', 13.2),

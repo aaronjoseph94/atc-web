@@ -56,6 +56,8 @@ type Palette = {
   infield: string
   /** Grey-green used for all vegetation and the airfield when zoomed out, so the wide view stays quiet. */
   far: string
+  /** Slate used for open land when zoomed out. */
+  farLand: string
   apron: string
   taxiway: string
   /** Lighter band around pavement: the shoulder that rings each grass island. */
@@ -101,7 +103,8 @@ const NAVY: Palette = {
   wood: '#27453A',
   grass: '#2A4A3B',
   infield: '#33594A',
-  far: '#33423F',
+  far: '#26332F',
+  farLand: '#2F3749',
   apron: '#191C33',
   taxiway: '#191C33',
   shoulder: '#2E3A57',
@@ -141,7 +144,8 @@ const GRAPHITE: Palette = {
   wood: '#243029',
   grass: '#26342B',
   infield: '#34493C',
-  far: '#30363A',
+  far: '#262B28',
+  farLand: '#2C2F33',
   apron: '#1B1D20',
   taxiway: '#1B1D20',
   shoulder: '#33383E',
@@ -237,7 +241,8 @@ function layers(p: Palette): LayerSpecification[] {
   const roads = base || sat
 
   const list: unknown[] = [
-    { id: 'bg', type: 'background', paint: { 'background-color': p.bg } },
+    // Zoomed out the land is a light slate with darker forest, like a dimmed relief map; closer in it settles to navy.
+    { id: 'bg', type: 'background', paint: { 'background-color': base ? ['interpolate', ['linear'], ['zoom'], 10, p.farLand, 12.5, p.bg] : p.bg } },
 
     // ---- free raster underlays --------------------------------------------
     { id: 'raster-satellite', type: 'raster', source: 'usgs', layout: vis(sat), paint: { 'raster-opacity': 1, 'raster-saturation': -0.15, 'raster-brightness-max': 0.82, 'raster-fade-duration': 200 } },
@@ -246,7 +251,7 @@ function layers(p: Palette): LayerSpecification[] {
 
     // ---- land and water ---------------------------------------------------
     { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', layout: vis(base), paint: { 'fill-color': p.water } },
-    { id: 'landuse-residential', type: 'fill', source: 'omt', 'source-layer': 'landuse', filter: ['in', ['get', 'class'], ['literal', ['residential', 'commercial', 'industrial', 'retail']]], layout: vis(base), paint: { 'fill-color': p.land } },
+    { id: 'landuse-residential', type: 'fill', source: 'omt', 'source-layer': 'landuse', filter: ['in', ['get', 'class'], ['literal', ['residential', 'commercial', 'industrial', 'retail']]], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 10, p.farLand, 12.5, p.land] } },
     { id: 'landcover-wood', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'wood'], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.wood] } },
     { id: 'landcover-grass', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland', 'wetland']]], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.grass] } },
     { id: 'waterway', type: 'line', source: 'omt', 'source-layer': 'waterway', layout: vis(base), paint: { 'line-color': p.water, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.6, 16, 3] } },
@@ -269,11 +274,11 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.buildings, type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 12, layout: vis(base), paint: { 'fill-color': p.building, 'fill-outline-color': p.buildingEdge } },
 
     // ---- roads --------------------------------------------------------------
-    { id: 'road-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12, filter: ['in', ['get', 'class'], ['literal', ['minor', 'service', 'tertiary']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.roadMinor, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 12, 0.5, 16, 4] } },
-    { id: 'road-major-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 9, filter: ['in', ['get', 'class'], ['literal', ['secondary', 'primary', 'trunk']]], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.roadCase, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 9, 1.2, 16, 9] } },
-    { id: 'road-major', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 9, filter: ['in', ['get', 'class'], ['literal', ['secondary', 'primary', 'trunk']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.roadMajor, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 9, 0.6, 16, 6] } },
-    { id: 'road-motorway-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 6, filter: ['==', ['get', 'class'], 'motorway'], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.roadCase, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 6, 1.4, 16, 12] } },
-    { id: 'road-motorway', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 6, filter: ['==', ['get', 'class'], 'motorway'], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.motorway, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 6, 0.7, 16, 8] } },
+    { id: 'road-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13.5, filter: ['in', ['get', 'class'], ['literal', ['minor', 'service', 'tertiary']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.roadMinor, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 12, 0.5, 16, 4] } },
+    { id: 'road-major-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12.5, filter: ['in', ['get', 'class'], ['literal', ['secondary', 'primary', 'trunk']]], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.roadCase, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 9, 1.2, 16, 9] } },
+    { id: 'road-major', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12.5, filter: ['in', ['get', 'class'], ['literal', ['secondary', 'primary', 'trunk']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.roadMajor, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 9, 0.6, 16, 6] } },
+    { id: 'road-motorway-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 11.5, filter: ['==', ['get', 'class'], 'motorway'], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.roadCase, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 6, 1.4, 16, 12] } },
+    { id: 'road-motorway', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 11.5, filter: ['==', ['get', 'class'], 'motorway'], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.motorway, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 6, 0.7, 16, 8] } },
     { id: 'rail', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12, filter: ['==', ['get', 'class'], 'rail'], layout: vis(base), paint: { 'line-color': p.rail, 'line-width': 1, 'line-dasharray': [4, 2] } },
     { id: 'boundary', type: 'line', source: 'omt', 'source-layer': 'boundary', filter: ['in', ['get', 'admin_level'], ['literal', [2, 4]]], layout: vis(roads), paint: { 'line-color': p.boundary, 'line-width': 1, 'line-dasharray': [3, 2] } },
 
@@ -305,11 +310,11 @@ function layers(p: Palette): LayerSpecification[] {
     // ---- labels ----------------------------------------------------------------
     { id: 'water-name', type: 'symbol', source: 'omt', 'source-layer': 'water_name', layout: { ...vis(base), 'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']], 'text-font': ['Noto Sans Italic'], 'text-size': 12, 'text-letter-spacing': 0.08, 'symbol-placement': 'point' }, paint: { 'text-color': p.waterLabel, 'text-halo-color': p.labelHalo, 'text-halo-width': 1 } },
     { id: 'road-name', type: 'symbol', source: 'omt', 'source-layer': 'transportation_name', minzoom: 13.5, filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]], layout: { ...vis(roads), 'text-field': ['coalesce', ['get', 'ref'], ['get', 'name']], 'text-font': FONT, 'text-size': 10, 'symbol-placement': 'line', 'symbol-spacing': 500 }, paint: { 'text-color': p.label, 'text-opacity': 0.7, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.2 } },
-    { id: 'place-minor', type: 'symbol', source: 'omt', 'source-layer': 'place', minzoom: 10.5, maxzoom: 14.5, filter: ['in', ['get', 'class'], ['literal', ['suburb', 'village', 'town', 'neighbourhood']]], layout: { ...vis(!chart), 'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']], 'text-font': FONT, 'text-size': 11, 'text-letter-spacing': 0.04, 'text-max-width': 7 }, paint: { 'text-color': p.label, 'text-opacity': sat ? 0.9 : 0.4, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.2 } },
-    { id: 'place-city', type: 'symbol', source: 'omt', 'source-layer': 'place', maxzoom: 13, filter: ['==', ['get', 'class'], 'city'], layout: { ...vis(!chart), 'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 12, 15], 'text-max-width': 7 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
+    { id: 'place-minor', type: 'symbol', source: 'omt', 'source-layer': 'place', minzoom: 10.5, maxzoom: 14.5, filter: ['in', ['get', 'class'], ['literal', ['suburb', 'village', 'town', 'neighbourhood']]], layout: { ...vis(sat), 'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']], 'text-font': FONT, 'text-size': 11, 'text-letter-spacing': 0.04, 'text-max-width': 7 }, paint: { 'text-color': p.label, 'text-opacity': sat ? 0.9 : 0.4, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.2 } },
+    { id: 'place-city', type: 'symbol', source: 'omt', 'source-layer': 'place', maxzoom: 13, filter: ['==', ['get', 'class'], 'city'], layout: { ...vis(sat), 'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 12, 15], 'text-max-width': 7 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
 
     // Gate numbers and taxiway location signs straight from OpenStreetMap.
-    { id: 'aero-gate', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 15.3, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate'], ['has', 'ref']], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.3, 9, 18, 13], 'text-padding': 4 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
+    { id: 'aero-gate', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 15.2, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate'], ['has', 'ref']], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.2, 7.5, 18, 11], 'icon-image': 'gate-chip', 'icon-text-fit': 'both', 'icon-text-fit-padding': [1, 3, 1, 3], 'text-padding': 3 }, paint: { 'text-color': '#2B2208' } },
     // Taxiway letters, laid along the pavement beside the centreline.
     {
       id: 'aero-taxi-sign',
@@ -334,7 +339,7 @@ function layers(p: Palette): LayerSpecification[] {
       },
       paint: { 'text-color': chart ? '#1B2540' : 'rgba(228,233,244,0.86)', 'text-halo-color': chart ? 'rgba(255,255,255,0.8)' : sat ? 'rgba(0,0,0,0.7)' : p.taxiway, 'text-halo-width': 1.1 },
     },
-    { id: 'aero-other', type: 'symbol', source: 'omt', 'source-layer': 'aerodrome_label', minzoom: 8, maxzoom: 11, layout: { ...vis(!chart), 'text-field': ['coalesce', ['get', 'iata'], ['get', 'name_en'], ['get', 'name']], 'text-font': FONT_BOLD, 'text-size': 11, 'text-letter-spacing': 0.06, 'text-padding': 8 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
+    { id: 'aero-other', type: 'symbol', source: 'omt', 'source-layer': 'aerodrome_label', minzoom: 8, maxzoom: 11, layout: { ...vis(sat), 'text-field': ['coalesce', ['get', 'iata'], ['get', 'name_en'], ['get', 'name']], 'text-font': FONT_BOLD, 'text-size': 11, 'text-letter-spacing': 0.06, 'text-padding': 8 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
     // Runway designators at the ends, for the zooms where the painted numbers are too small to read.
     {
       id: LAYER.runwayChip,
@@ -424,8 +429,8 @@ function layers(p: Palette): LayerSpecification[] {
  */
 function iconScale(factor: unknown): unknown[] {
   const stops: [number, number][] = [
-    [9, 0.32],
-    [12, 0.5],
+    [9, 0.5],
+    [12, 0.64],
     [14, 0.9],
     [15, 1.2],
     [16, 1.8],
