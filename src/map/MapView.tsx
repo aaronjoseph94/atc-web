@@ -23,6 +23,7 @@ import { RunwayGateLayer } from './RunwayGateLayer'
 import type { LiveAircraft } from './livePositions'
 import { ProceduresLayer } from './ProceduresLayer'
 import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
+import { RippleLayer } from './RippleLayer'
 import { useRadioCamera } from './useRadioCamera'
 
 /** Extra zoom applied when the camera closes in on a talking/selected aircraft. */
@@ -336,6 +337,7 @@ export function MapView() {
           <LightingLayer map={map} airportIcao={airportIcao} />
           <ProceduresLayer map={map} airportIcao={airportIcao} />
           <RunwayGateLayer map={map} airportIcao={airportIcao} />
+          <RippleLayer map={map} airport={airport} reduceMotion={reduceMotion} />
           <AircraftLayer
             map={map}
             liveBuffer={liveBuffer}

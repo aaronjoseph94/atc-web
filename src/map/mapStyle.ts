@@ -32,6 +32,7 @@ export const SRC = {
   procHi: 'proc-hi',
   runwayUse: 'apt-runway-use',
   gateUse: 'apt-gate-use',
+  ripple: 'radio-ripple',
 } as const
 
 export const LAYER = {
@@ -473,6 +474,8 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7C5CFC', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
     { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(124,92,252,0.02)', 0.5, 'rgba(124,92,252,0.5)', 1, 'rgba(168,140,255,1)'] } },
     { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#000000', 'icon-opacity': ['*', chart ? 0.22 : 0.42, ['get', 'o']], 'icon-halo-color': 'rgba(0,0,0,0.4)', 'icon-halo-width': 1.6, 'icon-halo-blur': 1.6 } },
+    // Radio ripple between tower and aircraft, under the aircraft and their halos.
+    ...rippleLayers(),
     { id: LAYER.event, type: 'circle', source: SRC.events, paint: { 'circle-radius': ['get', 'r'], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2, 'circle-stroke-opacity': ['get', 'o'], 'circle-pitch-alignment': 'map' } },
     { id: LAYER.ping, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'tx'], 1], paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#F5C518', 'circle-stroke-width': 2, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } },
     // Two flat discs, one inside the other, under whoever is selected or being talked to.
@@ -697,6 +700,7 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.procHi]: { type: 'geojson', data: empty },
       [SRC.runwayUse]: { type: 'geojson', data: empty },
       [SRC.gateUse]: { type: 'geojson', data: empty },
+      [SRC.ripple]: { type: 'geojson', data: empty },
     },
     layers: layers(PALETTES[theme]),
   }
@@ -930,4 +934,20 @@ export function lightingLayers(): { layer: LayerSpecification; before: string }[
     { before: 'water-name', layer: bloom(LIGHT_LAYER.runwayBloom, LIGHT_SRC.runway) },
     { before: 'water-name', layer: core(LIGHT_LAYER.runwayCore, LIGHT_SRC.runway) },
   ]
+}
+
+/**
+ * The transmission ripple (`RippleLayer.tsx` writes the features): a faint
+ * guide line between tower and aircraft, travelling arcs drawn twice (a wide
+ * soft glow under a thin bright core) and a small light at the tower. Colour
+ * and opacity come from each feature, so these layers never change at runtime.
+ */
+export function rippleLayers(): LayerSpecification[] {
+  const opacity = (k: number): unknown => ['*', k, ['get', 'o']]
+  return [
+    { id: 'radio-ripple-beam', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'beam'], layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(1), 'line-width': 2, 'line-blur': 0.8, 'line-dasharray': [1.4, 2.2] } },
+    { id: 'radio-ripple-glow', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'wave'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(0.38), 'line-width': 9, 'line-blur': 6 } },
+    { id: 'radio-ripple-wave', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'wave'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(0.85), 'line-width': 2, 'line-blur': 0.6 } },
+    { id: 'radio-ripple-tower', type: 'circle', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'tower'], paint: { 'circle-radius': 4, 'circle-color': ['get', 'c'], 'circle-opacity': opacity(0.8), 'circle-blur': 0.35, 'circle-stroke-color': ['get', 'c'], 'circle-stroke-width': 6, 'circle-stroke-opacity': opacity(0.16), 'circle-pitch-alignment': 'map' } },
+  ] as unknown as LayerSpecification[]
 }

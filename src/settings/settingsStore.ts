@@ -30,6 +30,8 @@ export type Settings = {
   trailLength: 24 | 48 | 96
   /** Disable pulse/camera easing for motion-sensitive users. */
   reduceMotion: boolean
+  /** Light vibration ticks on phones that can (dial detents, sheet snaps, selections, radio calls). */
+  haptics: boolean
   mapTheme: MapTheme
   /** Day/night look and airfield lights. */
   lighting: LightingMode
@@ -73,6 +75,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideGround: false,
   trailLength: 48,
   reduceMotion: false,
+  haptics: true,
   mapTheme: 'navy',
   lighting: 'auto',
   dataBlocks: true,

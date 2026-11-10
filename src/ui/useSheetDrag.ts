@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { haptic } from './haptics'
 import { createVelocityTracker, DURATION, projectMomentum, releaseDuration, rubberband } from './motion'
 
 type Options = {
@@ -200,6 +201,8 @@ function createEngine({ setDy, setDragging, setSettleMs }: Setters) {
 
     const commitDown = !cancelled && !!down && d > SLOP && ((v > 0.45 && d > 12) || (d > limit && v > -0.2) || d + projectMomentum(v) > g.height * 0.5)
     const commitUp = !cancelled && !commitDown && !!up && d < -SLOP && ((v < -0.45 && d < -12) || (d < -limit && v < 0.2))
+    // The sheet snapping to its next stop is felt as well as seen.
+    if (commitDown || commitUp) haptic('tick')
 
     if (self.el) {
       if (commitDown) {

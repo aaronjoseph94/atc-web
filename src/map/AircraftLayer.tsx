@@ -14,6 +14,7 @@ import type { ClipPack } from '../api/types'
 import { positionsAt, trackKeyFor, trailAt } from '../playback/interpolate'
 import { playbackInstant, usePlayhead } from '../playback/playheadStore'
 import type { LabelMode } from '../settings/settingsStore'
+import { ATC_COLORS, speakerColors, type SpeakerColors } from '../ui/speaker'
 import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
 import type { LiveAircraft, LivePositionBuffer } from './livePositions'
 import { ensureMapImages, ICON_SCALE, iconFor, iconImage } from './mapImages'
@@ -104,6 +105,8 @@ export function AircraftLayer(props: Props) {
 
     const wakes = new Map<string, Feature<LineString>>()
     let wakesAt = 0
+    // Speaker colours last pushed to the halo layers (only re-sent when they change).
+    let haloTalk: SpeakerColors | null = null
     let last = performance.now()
     let raf = 0
 
@@ -217,21 +220,26 @@ export function AircraftLayer(props: Props) {
       trailSrc.setData({ type: 'FeatureCollection', features: lines })
 
       // ---- highlight rings ---------------------------------------------------
-      // Purple when a pilot (or nobody in particular) has the aircraft's
-      // attention, blue while the controller is talking to it.
+      // The aircraft being talked about wears the speaker's colour (purple while
+      // ATC talks to it, blue while its pilot talks); a selected aircraft that
+      // nobody is talking to keeps the plain purple selection look.
       const wave = L.reduceMotion ? 0 : Math.sin(t / 620)
-      const color = st.activeSpeaker === 'controller' ? '#3B9BFF' : '#7C5CFC'
-      map.setPaintProperty(LAYER.halo, 'circle-color', color)
+      const talk = speakerColors(st.activeSpeaker)
+      if (talk !== haloTalk) {
+        haloTalk = talk
+        const color = ['case', ['==', ['get', 'tx'], 1], talk.base, ATC_COLORS.base]
+        map.setPaintProperty(LAYER.halo, 'circle-color', color as never)
+        map.setPaintProperty(LAYER.haloOuter, 'circle-color', color as never)
+        map.setPaintProperty(LAYER.ping, 'circle-stroke-color', talk.light)
+      }
       map.setPaintProperty(LAYER.halo, 'circle-opacity', 0.36 + 0.06 * wave)
       map.setPaintProperty(LAYER.halo, 'circle-radius', 20 + 2 * wave)
-      map.setPaintProperty(LAYER.haloOuter, 'circle-color', color)
       map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', 0.2 + 0.05 * wave)
       map.setPaintProperty(LAYER.haloOuter, 'circle-radius', 36 + 5 * wave)
       // Radar-style ping expanding from whoever is transmitting.
       const phase = L.reduceMotion ? 0.4 : (t % 1500) / 1500
       map.setPaintProperty(LAYER.ping, 'circle-radius', 12 + 34 * phase)
       map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6)
-      map.setPaintProperty(LAYER.ping, 'circle-stroke-color', st.activeSpeaker === 'controller' ? '#7DBDFF' : '#F5C518')
 
       L.onFrame?.(list, dt)
     }
