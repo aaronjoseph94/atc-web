@@ -271,6 +271,19 @@ body,
   kbd {
     font-family: var(--font-sans);
   }
+  /*
+   * Native dropdown lists. Windows draws the open list with its own white
+   * background but keeps our white text, so the options vanish; give the list
+   * the dark panel colour explicitly (and ask for dark scrollbars).
+   */
+  select {
+    color-scheme: dark;
+  }
+  select option,
+  select optgroup {
+    background-color: var(--color-atc-raised);
+    color: #f4f6fb;
+  }
 }
 
 /*
