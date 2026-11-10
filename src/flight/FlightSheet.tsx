@@ -25,6 +25,7 @@ import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
 import { AircraftPanel } from '../aircraft/AircraftPanel'
 import { aircraftTypeName, altitudeComparison, compassDirection, describeCallsign, PHASE_LABEL } from './describe'
+import { FlightTimeline } from './FlightTimeline'
 import { Sparkline } from './Sparkline'
 import { useFlight, useFlightInfo, type FlightView } from './useFlight'
 
@@ -369,6 +370,9 @@ export function FlightDetail() {
               {d.squawk && <Stat label="Transponder" value={d.squawk} hint={d.emergency ? `emergency: ${d.emergency}` : d.squawk === '1200' ? 'flying visually (VFR)' : 'assigned by ATC'} />}
             </div>
           )}
+
+          {/* Its life so far: phases, times, and a speed and altitude chart */}
+          <FlightTimeline flight={flight} info={info} />
 
           {/* The conversation so far: live radio calls naming this aircraft */}
           {liveCalls.length > 0 && (
