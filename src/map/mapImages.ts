@@ -5,7 +5,6 @@
  *  - aircraft silhouettes (self-authored, CC0), one per broad airframe class,
  *    as shaded artwork in white and in yellow, plus a signed-distance-field
  *    mask of each for the soft shadow;
- *  - the white-on-red runway sign plate, modelled on real airfield signage;
  *  - the callsign tag plates.
  */
 import type { Map as MapLibreMap } from 'maplibre-gl'
@@ -316,10 +315,8 @@ function artwork(draw: Draw, tone: keyof typeof TONES): ImageData {
 
 type Plate = { fill: string; stroke?: string; strokeWidth?: number; radius: number }
 
-/** Sign and tag plates. The runway sign's colours follow FAA AC 150/5340-18. */
+/** Callsign tag plates. */
 const PLATES: Record<string, Plate> = {
-  // Runway (mandatory instruction) sign: white legend on red.
-  'sign-runway': { fill: '#C8102E', stroke: 'rgba(255,255,255,0.9)', strokeWidth: 1.5, radius: 5 },
   tag: { fill: 'rgba(58,66,90,0.92)', stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, radius: 8 },
   // The highlighted aircraft's tag takes the flight card's purple.
   'tag-active': { fill: '#5B3DF5', stroke: 'rgba(255,255,255,0.35)', strokeWidth: 1, radius: 8 },

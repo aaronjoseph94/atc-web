@@ -12,9 +12,9 @@
   /* Heavy condensed face for airport codes and callsigns, like airfield signage. */
   --font-display: 'Anton', 'Outfit', ui-sans-serif, system-ui, sans-serif;
 
-  --color-atc-yellow: #ffb800;
-  --color-atc-yellow-deep: #f2a900;
-  --color-atc-yellow-press: #d99700;
+  --color-atc-yellow: #f5b93d;
+  --color-atc-yellow-deep: #ebac2f;
+  --color-atc-yellow-press: #d99a20;
   --color-atc-purple: #7c5cfc;
   --color-atc-magenta: #b517c8;
   --color-atc-card: #5b3df5;
