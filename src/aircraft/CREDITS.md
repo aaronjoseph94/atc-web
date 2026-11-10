@@ -1,8 +1,8 @@
 # Aircraft drawings: sources and licences
 
-The map icons and the drawing in the flight view are rendered at runtime from
-the outlines in `outlines.ts` (see `render.ts` for the shading). Nothing here
-is GPL, share-alike or non-commercial.
+The map icons are rendered at runtime from
+the top-view outlines in `outlines.ts` (see `render.ts` for the shading); the
+flight view draws side views instead (below). Nothing here is GPL, share-alike or non-commercial.
 
 ## Traced from public-domain clipart
 
@@ -29,6 +29,16 @@ width, engine and tail positions) and are released with the rest of the app:
 - `ac-twin-piston`: light twin (Baron 58 proportions)
 - `ac-heli`: light twin helicopter airframe (H135 class), with the rotor drawn by the renderer
 - `ac-vehicle`, `ac-dot`: plain markers
+
+## Side views (flight view)
+
+The side profiles in the flight view's aircraft card are generated at runtime
+by `sideProfiles.ts` from per-class parameters (fuselage length and height,
+nose and tail-cone lengths, fin size and sweep, wing position, engine size and
+placement, window rows, gear), using each type's published length where we
+have it. They were drawn for this project from published dimensions and
+general arrangement; no outside artwork was traced or copied, and they are
+released with the rest of the app.
 
 Candidates looked at and not used: Plane Watch's silhouette set (CC BY-NC-SA,
 non-commercial), tar1090/dump1090 markers (GPL), and Wikimedia Commons

@@ -1,8 +1,8 @@
 /**
  * Aircraft classes as drawable geometry: the outline, the fuselage and any
- * parts that sit on top, as SVG path data in metres (nose toward -y). The map
- * icons and the flight view's illustration are both rendered from these, so
- * they always match.
+ * parts that sit on top, as SVG path data in metres (nose toward -y), for the
+ * map icons. (The flight view draws side views from `sideProfiles.ts`; the
+ * class each aircraft gets is shared, so the two always agree.)
  */
 import { OUTLINES } from './outlines'
 
