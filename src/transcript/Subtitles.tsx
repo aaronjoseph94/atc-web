@@ -14,6 +14,7 @@ import { useCallText } from '../live/radio/understand/store'
 import { cueProgress, getActiveCue } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
 import { useReducedMotion } from '../ui/motion'
+import { Terms } from '../learn/Terms'
 
 /**
  * How many words of a cue have been spoken. Words are weighted by length, so
@@ -115,11 +116,18 @@ function RadioCaption() {
       {call && (
         <p key={call.id} className={`animate-caption line-clamp-4 text-[21px] font-semibold leading-snug ${GLOW}`}>
           <FadeSwap swapKey={shown.cleaned ? 'cleaned' : 'raw'}>
-            {words.map((w, i) => (
-              <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
-                {w}{' '}
+            {/* Once every word is lit, Learn mode can underline its terms. */}
+            {spoken >= words.length ? (
+              <span className="text-white">
+                <Terms text={words.join(' ')} />
               </span>
-            ))}
+            ) : (
+              words.map((w, i) => (
+                <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
+                  {w}{' '}
+                </span>
+              ))
+            )}
           </FadeSwap>
         </p>
       )}
@@ -152,7 +160,7 @@ export function Subtitles() {
       <button type="button" className={SCRIM} onClick={() => setPanel('traffic')} aria-label="Open recent activity">
         {previousEvent && <p className={`line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 ${GLOW_SOFT}`}>{previousEvent.text}</p>}
         <p key={caption.id} className={`animate-caption text-[21px] font-semibold leading-snug text-white ${GLOW}`}>
-          {caption.text}
+          <Terms text={caption.text} />
         </p>
       </button>
     )
@@ -176,11 +184,17 @@ export function Subtitles() {
       ))}
       {active && (
         <p key={active.id} className={`animate-caption text-[21px] font-semibold leading-snug ${GLOW}`} aria-live="off">
-          {words.map((w, i) => (
-            <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
-              {w}{' '}
+          {spoken >= words.length ? (
+            <span className="text-white">
+              <Terms text={active.text} />
             </span>
-          ))}
+          ) : (
+            words.map((w, i) => (
+              <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
+                {w}{' '}
+              </span>
+            ))
+          )}
         </p>
       )}
     </button>

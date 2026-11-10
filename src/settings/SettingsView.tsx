@@ -13,6 +13,7 @@ import { openFeedback } from '../feedback/store'
 import { usePlayhead } from '../playback/playheadStore'
 import { supportsHaptics } from '../ui/haptics'
 import { Group, Row, SectionLabel, Segmented, Sheet, Toggle } from '../ui/Panel'
+import { InsightSettingsGroup } from '../insights/InsightSettingsGroup'
 import { AiSettingsGroup } from './AiSettingsGroup'
 import { PerformanceSettings } from '../perf/PerformanceSettings'
 import { DEFAULT_SETTINGS, useSettings, type Settings } from './settingsStore'
@@ -106,6 +107,7 @@ export function SettingsView() {
       </Group>
 
       <SpottingSettingsGroup />
+      <InsightSettingsGroup />
 
       <AiSettingsGroup />
 

@@ -31,28 +31,41 @@ export async function askAi<T = unknown>(task: string, input: unknown, opts: { s
     const hit = memo.get(key)
     if (hit) return hit.result as T
     const pending = inflight.get(key)
-    if (pending) return (await pending).result as T
+    if (pending) return (await abortable(pending, opts.signal)).result as T
   }
   const p = (async () => {
     const res = await fetch('/api/ai', {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...aiHeaders(s) },
       body: JSON.stringify({ task, input }),
-      signal: opts.signal,
     })
     const body = (await res.json().catch(() => null)) as { ok?: boolean; result?: unknown; error?: string; provider?: string; model?: string } | null
     if (!res.ok || !body?.ok) throw new AiUnavailableError(body?.error ?? `AI request failed (${res.status})`, res.status)
     return { result: body.result, provider: body.provider ?? '', model: body.model ?? '' }
   })()
+  // The request is shared by everyone asking the same thing, so one caller giving up
+  // (its `signal` aborting) must not cancel it for the others: each caller stops
+  // waiting on its own, while the request carries on and its answer is kept.
   inflight.set(key, p)
-  try {
-    const answer = await p
-    memo.set(key, answer)
-    if (memo.size > MEMO_LIMIT) memo.delete(memo.keys().next().value!)
-    return answer.result as T
-  } finally {
-    inflight.delete(key)
-  }
+  void p
+    .then((answer) => {
+      memo.set(key, answer)
+      if (memo.size > MEMO_LIMIT) memo.delete(memo.keys().next().value!)
+    })
+    .catch(() => {})
+    .finally(() => inflight.delete(key))
+  return (await abortable(p, opts.signal)).result as T
+}
+
+/** `p`, or a rejection as soon as `signal` aborts (without cancelling `p` itself). */
+function abortable<T>(p: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return p
+  if (signal.aborted) return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    p.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
 }
 
 export type AiStatus = { configured: boolean; provider: 'anthropic' | 'openrouter' | null; model: string | null; keySource: 'device' | 'server' | null; server: { anthropic: boolean; openrouter: boolean } }

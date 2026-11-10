@@ -1,7 +1,9 @@
 /** The "⋯" menu: a popover under the button, like a native context menu. */
-import { CircleHelp, CloudSun, FileText, History, Layers, List, MessageSquareText, Pin, PinOff, Radio, Settings, type LucideIcon } from 'lucide-react'
+import { BookOpen, CircleHelp, CloudSun, FileText, History, Layers, List, MessageSquareText, Pin, PinOff, Radio, Settings, Sunrise, type LucideIcon } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { openFeedback } from '../feedback/store'
+import { openCatchUp } from '../insights/hooks'
+import { useLearn } from '../learn/learnStore'
 import { usePlayhead, type Panel } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
 import { Kbd, useDialog } from '../ui/Panel'
@@ -59,6 +61,24 @@ export function Menu() {
         <Item icon={FileText} label="Transcript" shortcut="T" onClick={go('transcripts')} />
         <Item icon={List} label="Traffic" shortcut="/" onClick={go('traffic')} />
         <Item icon={CloudSun} label="Weather and ATIS" shortcut="W" onClick={go('weather')} />
+        {mode === 'live' && (
+          <Item
+            icon={Sunrise}
+            label="What did I miss?"
+            onClick={() => {
+              close()
+              openCatchUp()
+            }}
+          />
+        )}
+        <Item
+          icon={BookOpen}
+          label="ATC terms"
+          onClick={() => {
+            close()
+            useLearn.getState().openGlossary()
+          }}
+        />
         <Divider />
         <Item
           icon={pinned ? PinOff : Pin}

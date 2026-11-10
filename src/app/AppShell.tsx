@@ -29,6 +29,8 @@ import { StationBar } from '../station/StationBar'
 import { StationSheet } from '../station/StationSheet'
 import { Subtitles } from '../transcript/Subtitles'
 import { useHapticFeedback } from '../ui/useHapticFeedback'
+import { BriefingCard } from '../insights/Briefing'
+import { InsightsModals, InsightsOverlay } from '../insights/Insights'
 import { DURATION } from '../ui/motion'
 import { installGlass, watchMapFrames } from '../ui/glass'
 import { useDockActive, useIsWide } from '../ui/layout'
@@ -115,6 +117,7 @@ export function AppShell() {
         <div ref={stack} id="bottom-stack" className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center *:max-w-full md:bottom-6 md:px-6">
           <Hint />
           <AutoMapPill />
+          <BriefingCard />
           <Subtitles />
           <WaitingStrip />
           {/* The flight card slides up over the station bar and back down to reveal it, as one stack. */}
@@ -169,6 +172,7 @@ const MapOverlays = memo(function MapOverlays() {
     <>
       <RunwayInfo />
       <MapGestures />
+      <InsightsOverlay />
       {/* The chrome box lets clicks through to the map; the menu's own backdrop needs them back. */}
       <div className="pointer-events-auto contents">
         <Menu />
@@ -193,6 +197,7 @@ const Modals = memo(function Modals() {
       <SettingsView />
       <HelpPanel />
       <FeedbackSheet />
+      <InsightsModals />
     </>
   )
 })
