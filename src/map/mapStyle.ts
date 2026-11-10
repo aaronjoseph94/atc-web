@@ -211,7 +211,7 @@ const PALETTES: Record<MapTheme, Palette> = { navy: NAVY, graphite: GRAPHITE, sa
 
 /** Display metadata for the theme picker. */
 export const MAP_THEMES: { id: MapTheme; label: string; hint: string; usOnly: boolean; swatch: [string, string, string] }[] = [
-  { id: 'navy', label: 'Night', hint: 'Navy airfield chart', usOnly: false, swatch: ['#161B2F', '#33594C', '#10182F'] },
+  { id: 'navy', label: 'Navy', hint: 'Navy airfield chart', usOnly: false, swatch: ['#161B2F', '#33594C', '#10182F'] },
   { id: 'graphite', label: 'Graphite', hint: 'Neutral dark', usOnly: false, swatch: ['#1B1D20', '#34493C', '#141618'] },
   { id: 'satellite', label: 'Satellite', hint: 'USGS aerial photos', usOnly: true, swatch: ['#3A4A3C', '#6E7A63', '#9AA08F'] },
   { id: 'chart', label: 'FAA chart', hint: 'VFR sectional', usOnly: true, swatch: ['#E9E2CF', '#8FB7D9', '#C7B8E0'] },
