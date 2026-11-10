@@ -51,7 +51,7 @@ type End = {
   at: (s: number, t: number) => LngLat
 }
 
-function frames(r: Runway): { lengthM: number; le: End; he: End } | null {
+function frames(r: Runway): { lengthM: number; le: End; he: End; origin: LngLat; ux: number; uy: number } | null {
   const a: LngLat = [r.le.lon, r.le.lat]
   const b: LngLat = [r.he.lon, r.he.lat]
   const [e, n] = toLocal(a, b)
@@ -68,10 +68,27 @@ function frames(r: Runway): { lengthM: number; le: End; he: End } | null {
   })
   return {
     lengthM,
+    origin: a,
+    ux,
+    uy,
     le: make(a, ux, uy, r.le.ident, r.le.displacedFt),
     he: make(b, -ux, -uy, r.he.ident, r.he.displacedFt),
   }
 }
+
+/** A runway's pavement as a rectangle, for deciding which runway keeps its markings at a crossing. */
+type Rect = { origin: LngLat; ux: number; uy: number; lengthM: number; half: number }
+
+/** Is `p` on the pavement of `r`, with `margin` metres of slack all round? */
+function onPavement(r: Rect, p: LngLat, margin: number): boolean {
+  const [x, y] = toLocal(r.origin, p)
+  const along = x * r.ux + y * r.uy
+  const cross = x * r.uy - y * r.ux
+  return along > -margin && along < r.lengthM + margin && Math.abs(cross) < r.half + margin
+}
+
+/** Marks that stay painted through a crossing only on the runway that has right of way. */
+const THROUGH_ONLY = new Set(['centre', 'edge', 'aim', 'tdz'])
 
 function quad(end: End, s0: number, s1: number, t0: number, t1: number, properties: Record<string, unknown>): Feature<Polygon> {
   const ring = [end.at(s0, t0), end.at(s1, t0), end.at(s1, t1), end.at(s0, t1), end.at(s0, t0)]
@@ -263,23 +280,47 @@ export function buildAirportDiagram(airport: string): AirportDiagram {
   const out = emptyDiagram()
   const icao = icaoCode(airport)
 
-  for (const r of getRunways(airport)) {
-    const f = frames(r)
-    if (!f) continue
+  // Where two runways cross, the longer one keeps its centreline, side stripes
+  // and touchdown marks straight through; the shorter one is interrupted.
+  const all = getRunways(airport)
+    .map((r) => ({ r, f: frames(r) }))
+    .filter((x): x is { r: Runway; f: NonNullable<ReturnType<typeof frames>> } => x.f != null)
+  const rects = all.map(({ r, f }) => ({ origin: f.origin, ux: f.ux, uy: f.uy, lengthM: f.lengthM, half: ft(r.widthFt ?? 150) / 2 }))
+  const rank = all.map(({ r, f }, i) => f.lengthM * 10 + (r.widthFt ?? 0) / 100 - i * 1e-6)
+
+  all.forEach(({ r, f }, idx) => {
     const widthM = ft(r.widthFt ?? 150)
     const half = widthM / 2
     const surface = isConcrete(r.surface) ? 'concrete' : 'asphalt'
     const name = `${paintedDesignator(r.le.ident, icao)}/${paintedDesignator(r.he.ident, icao)}`
+    const winners = rects.filter((_, j) => rank[j] > rank[idx])
+    const blocked = (p: LngLat, margin = 2) => winners.some((w) => onPavement(w, p, margin))
 
     out.surface.features.push(quad(f.le, 0, f.lengthM, -half, half, { surface, name }))
 
-    // Side stripes run the full length, just inside each edge.
-    const edge = Math.max(0.9, widthM * 0.02)
-    out.paint.features.push(quad(f.le, 0, f.lengthM, half - 1 - edge, half - 1, { kind: 'edge' }))
-    out.paint.features.push(quad(f.le, 0, f.lengthM, -half + 1, -half + 1 + edge, { kind: 'edge' }))
+    const mine: Feature<Polygon>[] = []
 
-    const leEnd = endMarkings(f.le, f.lengthM, widthM, paintedDesignator(r.le.ident, icao), out.paint.features, out.designators.features)
-    const heEnd = endMarkings(f.he, f.lengthM, widthM, paintedDesignator(r.he.ident, icao), out.paint.features, out.designators.features)
+    // Side stripes run the length of the runway, just inside each edge, in
+    // pieces that stop short of any runway crossing it.
+    const edge = Math.max(0.9, widthM * 0.02)
+    for (const side of [1, -1]) {
+      const t0 = side * (half - 1)
+      const t1 = side * (half - 1 - edge)
+      let runStart: number | null = null
+      for (let s = 0; s <= f.lengthM + 1e-6; s += 1) {
+        const free = s < f.lengthM && !blocked(f.le.at(s + 0.5, t0), 1.5)
+        if (free && runStart == null) runStart = s
+        if (!free && runStart != null) {
+          if (s - runStart > 4) mine.push(quad(f.le, runStart, s, Math.min(t0, t1), Math.max(t0, t1), { kind: 'edge' }))
+          runStart = null
+        }
+      }
+      // The last piece runs to the end of the pavement.
+      if (runStart != null && f.lengthM - runStart > 4) mine.push(quad(f.le, runStart, f.lengthM, Math.min(t0, t1), Math.max(t0, t1), { kind: 'edge' }))
+    }
+
+    const leEnd = endMarkings(f.le, f.lengthM, widthM, paintedDesignator(r.le.ident, icao), mine, out.designators.features)
+    const heEnd = endMarkings(f.he, f.lengthM, widthM, paintedDesignator(r.he.ident, icao), mine, out.designators.features)
 
     // Centreline: 120 ft stripes with 80 ft gaps between the two designators.
     const from = leEnd
@@ -290,7 +331,13 @@ export function buildAirportDiagram(airport: string): AirportDiagram {
     const cw = Math.max(0.6, ft(3) / 2)
     for (let i = 0; i < n; i++) {
       const s = start + i * pitch
-      out.paint.features.push(quad(f.le, s, s + ft(120), -cw, cw, { kind: 'centre' }))
+      mine.push(quad(f.le, s, s + ft(120), -cw, cw, { kind: 'centre' }))
+    }
+
+    // Drop the through-marks that would run across a runway with right of way.
+    for (const m of mine) {
+      if (THROUGH_ONLY.has(String(m.properties?.kind)) && (m.geometry.coordinates[0] as LngLat[]).some((p) => blocked(p))) continue
+      out.paint.features.push(m)
     }
 
     for (const end of [f.le, f.he]) {
@@ -303,7 +350,7 @@ export function buildAirportDiagram(airport: string): AirportDiagram {
       approachPath(end, out.approach.features)
       out.pads.push(blastPad(end, widthM))
     }
-  }
+  })
   return out
 }
 
