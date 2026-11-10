@@ -11,6 +11,7 @@
  */
 import type { LayerSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import type { MapTheme } from '../settings/settingsStore'
+import { differs, nightShade } from './lighting/color'
 
 /** Ids other modules need to reference. */
 export const SRC = {
@@ -583,6 +584,202 @@ export function themeHasVectorBase(theme: MapTheme): boolean {
  */
 export function applyGroundCover(map: MapLibreMap, theme: MapTheme, arid: boolean) {
   if (!map.getLayer('landcover-grass')) return
+  map.setPaintProperty('landcover-grass', 'fill-color', groundCover(PALETTES[theme], arid) as never)
+}
+
+function groundCover(p: Palette, arid: boolean): unknown[] {
+  return ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield]
+}
+
+// ---------------------------------------------------------------------------
+// Night: the darker ground and the airfield lights (driven by `lighting/LightingLayer`)
+// ---------------------------------------------------------------------------
+
+/**
+ * How each ground colour changes after dark: [brightness kept, saturation kept].
+ * Vegetation loses the most colour; pavement and paint dim least, so the
+ * airfield still reads under its lights.
+ */
+const NIGHT_SHADE: Partial<Record<keyof Palette, [number, number]>> = {
+  bg: [0.72, 0.75],
+  water: [0.7, 0.85],
+  land: [0.72, 0.75],
+  wood: [0.6, 0.55],
+  grass: [0.6, 0.55],
+  infield: [0.6, 0.55],
+  far: [0.66, 0.6],
+  farLand: [0.72, 0.75],
+  apron: [0.8, 0.8],
+  taxiway: [0.8, 0.8],
+  shoulder: [0.7, 0.7],
+  pad: [0.7, 0.7],
+  runway: [0.82, 0.8],
+  runwayConcrete: [0.82, 0.8],
+  paint: [0.72, 0.8],
+  paintMid: [0.72, 0.8],
+  paintDim: [0.72, 0.8],
+  paintFaint: [0.72, 0.8],
+  centreLine: [0.78, 1],
+  taxiLine: [0.72, 0.8],
+  building: [0.72, 0.75],
+  buildingEdge: [0.72, 0.75],
+  roadMinor: [0.75, 0.75],
+  roadMajor: [0.75, 0.75],
+  motorway: [0.75, 0.75],
+  roadCase: [0.75, 0.75],
+  rail: [0.75, 0.75],
+  boundary: [0.75, 0.75],
+}
+
+function nightPalette(p: Palette): Palette {
+  const out = { ...p }
+  for (const [key, [dim, sat]] of Object.entries(NIGHT_SHADE) as [keyof Palette, [number, number]][]) {
+    const v = out[key]
+    if (typeof v === 'string') (out as Record<string, unknown>)[key] = nightShade(v, dim, sat)
+  }
+  return out
+}
+
+/** One paint property that changes between day and night, with both values. */
+export type NightPaint = { layer: string; prop: string; day: unknown; night: unknown }
+
+/**
+ * Every base-map paint value that differs at night for a theme, worked out by
+ * building the style with the day and the night palette and comparing them,
+ * so layers added later darken without being listed here. Blend each pair
+ * with `mixValue` and push it with `setPaintProperty`.
+ */
+export function nightPaint(theme: MapTheme, arid: boolean): NightPaint[] {
   const p = PALETTES[theme]
-  map.setPaintProperty('landcover-grass', 'fill-color', ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield] as never)
+  // A paper chart has no night.
+  if (p.raster === 'chart') return []
+  const n = nightPalette(p)
+  const day = layers(p)
+  const night = layers(n)
+  const out: NightPaint[] = []
+  day.forEach((l, i) => {
+    const hidden = (l.layout as { visibility?: string } | undefined)?.visibility === 'none' && !RUNTIME_VISIBILITY.has(l.id)
+    if (hidden || l.id === LAYER.halo || l.id === LAYER.haloOuter || l.id === LAYER.ping) return
+    const a = (l.paint ?? {}) as Record<string, unknown>
+    const b = (night[i].paint ?? {}) as Record<string, unknown>
+    for (const prop of Object.keys(a)) if (differs(a[prop], b[prop])) out.push({ layer: l.id, prop, day: a[prop], night: b[prop] })
+  })
+  // The grass colour is set per airport (`applyGroundCover`), not by the theme.
+  const grass = out.find((e) => e.layer === 'landcover-grass' && e.prop === 'fill-color')
+  if (grass) Object.assign(grass, { day: groundCover(p, arid), night: groundCover(n, arid) })
+  // Aerial photos are daylight pictures: darken and drain them instead.
+  if (p.raster === 'satellite') {
+    out.push({ layer: 'raster-satellite', prop: 'raster-brightness-max', day: 0.82, night: 0.42 })
+    out.push({ layer: 'raster-satellite', prop: 'raster-saturation', day: -0.15, night: -0.55 })
+  }
+  return out
+}
+
+/** Does this theme show airfield lights at night? (Not on the paper chart.) */
+export function themeHasLights(theme: MapTheme): boolean {
+  return PALETTES[theme].raster !== 'chart'
+}
+
+export const LIGHT_SRC = { runway: 'lights-runway', taxi: 'lights-taxi', apron: 'lights-apron' } as const
+
+export const LIGHT_LAYER = {
+  apronWash: 'lights-apron-wash',
+  apron: 'lights-apron-glow',
+  taxiBloom: 'lights-taxi-bloom',
+  taxiCore: 'lights-taxi-core',
+  runwayBloom: 'lights-runway-bloom',
+  runwayCore: 'lights-runway-core',
+} as const
+
+/**
+ * Taxiway lights and floodlights fade in over 12.8–13.6 and are absent below.
+ * Runway lights start a little further out, so the overview of the whole
+ * airfield already shows its runways drawn in light.
+ */
+export const LIGHT_MIN_ZOOM = 12.8
+const RUNWAY_LIGHT_MIN_ZOOM = 11.8
+
+/** Each light layer's zoom fade (none at the first zoom, full at the second) and opacity at full night. */
+const LIGHT_FADE: Record<string, [number, number, number]> = {
+  [LIGHT_LAYER.apronWash]: [LIGHT_MIN_ZOOM, 13.6, 0.04],
+  [LIGHT_LAYER.apron]: [LIGHT_MIN_ZOOM, 13.6, 0.2],
+  // Taxiway lights outline every taxiway, so they come up more slowly than the rest, keeping the wide view calm.
+  [LIGHT_LAYER.taxiBloom]: [LIGHT_MIN_ZOOM, 14.2, 0.4],
+  [LIGHT_LAYER.taxiCore]: [LIGHT_MIN_ZOOM, 14.2, 0.9],
+  [LIGHT_LAYER.runwayBloom]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 0.45],
+  [LIGHT_LAYER.runwayCore]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 1],
+}
+
+/** The opacity property of a light layer and its value at night factor `t` (0..1). */
+export function lightOpacity(layer: string, t: number): { prop: string; value: unknown[] } {
+  const [z0, z1, peak] = LIGHT_FADE[layer] ?? [LIGHT_MIN_ZOOM, 13.6, 1]
+  return { prop: layer === LIGHT_LAYER.apronWash ? 'fill-opacity' : 'circle-opacity', value: ['interpolate', ['linear'], ['zoom'], z0, 0, z1, peak * t] }
+}
+
+/** Screen size of a light by zoom (times its own size factor `s`): point sources, growing gently. */
+function lightRadius(stops: [number, number][]): unknown[] {
+  return ['interpolate', ['exponential', 1.6], ['zoom'], ...stops.flatMap(([z, r]) => [z, ['*', r, ['coalesce', ['get', 's'], 1]]])]
+}
+
+const CORE_RADIUS: [number, number][] = [
+  [12, 0.75],
+  [13, 0.9],
+  [15, 1.4],
+  [17, 2.5],
+  [19, 4.6],
+]
+const BLOOM_RADIUS: [number, number][] = [
+  [12, 2],
+  [13, 2.6],
+  [15, 4.4],
+  [17, 8.5],
+  [19, 16],
+]
+
+/**
+ * The light layers, each with the layer it goes under. They start hidden and
+ * transparent; `LightingLayer` adds them at runtime and fades them in. Each
+ * light is a soft, wide disc under a small, whiter core, which reads as a
+ * gentle bloom without any post-processing.
+ */
+export function lightingLayers(): { layer: LayerSpecification; before: string }[] {
+  const hidden = { visibility: 'none' as const }
+  const bloom = (id: string, source: string) =>
+    ({ id, type: 'circle', source, minzoom: LIGHT_FADE[id][0], layout: hidden, paint: { 'circle-color': ['get', 'c'], 'circle-radius': lightRadius(BLOOM_RADIUS) as never, 'circle-blur': 1, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' } }) as LayerSpecification
+  const core = (id: string, source: string) =>
+    ({ id, type: 'circle', source, minzoom: LIGHT_FADE[id][0], layout: hidden, paint: { 'circle-color': ['get', 'k'], 'circle-radius': lightRadius(CORE_RADIUS) as never, 'circle-blur': 0.45, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' } }) as LayerSpecification
+  return [
+    // A faint warm cast over every apron, the spill of the floodlights, under the apron's own paint and buildings.
+    {
+      before: LAYER.buildings,
+      layer: {
+        id: LIGHT_LAYER.apronWash,
+        type: 'fill',
+        source: 'omt',
+        'source-layer': 'aeroway',
+        minzoom: LIGHT_MIN_ZOOM,
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']],
+        layout: hidden,
+        paint: { 'fill-color': '#FFD6A0', 'fill-opacity': 0 },
+      } as LayerSpecification,
+    },
+    // Floodlight pools by the gates, over the buildings (they light the terminal faces) and under the roads.
+    {
+      before: 'road-minor',
+      layer: {
+        id: LIGHT_LAYER.apron,
+        type: 'circle',
+        source: LIGHT_SRC.apron,
+        minzoom: LIGHT_MIN_ZOOM,
+        layout: hidden,
+        // `r` is the pool's radius in pixels at zoom 0; it doubles with every zoom level, like the ground.
+        paint: { 'circle-color': '#FFB45E', 'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 0, ['get', 'r'], 22, ['*', ['get', 'r'], 2 ** 22]], 'circle-blur': 1, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' },
+      } as LayerSpecification,
+    },
+    // Taxiway and runway lights over all the paint, under the labels and aircraft.
+    { before: 'water-name', layer: bloom(LIGHT_LAYER.taxiBloom, LIGHT_SRC.taxi) },
+    { before: 'water-name', layer: core(LIGHT_LAYER.taxiCore, LIGHT_SRC.taxi) },
+    { before: 'water-name', layer: bloom(LIGHT_LAYER.runwayBloom, LIGHT_SRC.runway) },
+    { before: 'water-name', layer: core(LIGHT_LAYER.runwayCore, LIGHT_SRC.runway) },
+  ]
 }

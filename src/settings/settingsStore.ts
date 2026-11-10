@@ -12,6 +12,8 @@ export type AltitudeUnit = 'ft' | 'm'
 export type SpeedUnit = 'kt' | 'kmh' | 'mph'
 export type LabelMode = 'auto' | 'always' | 'never'
 export type MapTheme = 'navy' | 'graphite' | 'satellite' | 'chart'
+/** Map lighting: follow the sun at the airport, or hold day or night. */
+export type LightingMode = 'auto' | 'day' | 'night'
 
 export type Settings = {
   /** Airport shown on launch. */
@@ -29,6 +31,8 @@ export type Settings = {
   /** Disable pulse/camera easing for motion-sensitive users. */
   reduceMotion: boolean
   mapTheme: MapTheme
+  /** Day/night look and airfield lights. */
+  lighting: LightingMode
   /** Second label line with altitude, trend and type, like a controller's data block. */
   dataBlocks: boolean
   /** Faint wake behind every airborne aircraft. */
@@ -68,6 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   trailLength: 48,
   reduceMotion: false,
   mapTheme: 'navy',
+  lighting: 'auto',
   dataBlocks: true,
   trails: true,
   shadows: true,
