@@ -9,6 +9,23 @@
 @import 'tailwindcss';
 @import 'maplibre-gl/dist/maplibre-gl.css';
 
+/*
+ * Stand-in for Archivo while it downloads: a bold Arial-metric face the system
+ * already has, shrunk and re-baselined to Archivo 66%/900's proportions (fitted
+ * by measuring both: the codes come out within a few percent of their final
+ * width). Without it the big "JFK" draws ~25% wider in the fallback and the
+ * airport name beside it jumps sideways when Archivo arrives.
+ */
+@font-face {
+  font-family: 'Archivo Fallback';
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Helvetica Bold'), local('Helvetica-Bold'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Arimo Bold'), local('Arimo-Bold'), local('Roboto Bold'), local('Roboto-Bold');
+  font-weight: 900;
+  size-adjust: 77%;
+  ascent-override: 114.3%;
+  descent-override: 27.3%;
+  line-gap-override: 0%;
+}
+
 /* `static`: emit every token, so motion classes and script can read them even when no utility does. */
 @theme static {
   /*
@@ -19,7 +36,7 @@
    */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, sans-serif;
   /* The linked face is declared at 66% width and weight 900 only, so any element using it gets exactly that cut. */
-  --font-display: 'Archivo', 'Arial Narrow', 'Roboto Condensed', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Archivo', 'Archivo Fallback', 'Arial Narrow', 'Roboto Condensed', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /*
    * The type scale, after Apple's text styles. Use these names in new code;
@@ -70,6 +87,8 @@
   --color-atc-raised: #1a2230;
   --color-atc-map: #0b1322;
   --color-atc-live: #ff3b30;
+  /* The same red a shade deeper behind white text (the LIVE badges): 4.7:1, where #ff3b30 only reaches 3.5:1 for 11 px type. */
+  --color-atc-live-badge: #e0261c;
   --color-atc-muted: #9aa3b5;
   /* Floating controls over the map: a dark, slightly blue glass. */
   --color-atc-glass: #1b2333;
@@ -485,6 +504,10 @@ body,
 @media (min-width: 768px) {
   .maplibregl-ctrl-bottom-right {
     bottom: 0.5rem;
+  }
+  /* No room beside the floating bar (AppShell sets the class): above it instead, clear of its 1.5rem lift. */
+  .attrib-lift .maplibregl-ctrl-bottom-right {
+    bottom: calc(var(--bottom-stack, 8.25rem) + 2rem);
   }
 }
 

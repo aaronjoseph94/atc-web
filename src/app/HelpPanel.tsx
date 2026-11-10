@@ -1,7 +1,8 @@
 /** Keyboard shortcuts, gestures and data credits. */
 import { AIRPORT_DATA_DATE, FAA_CYCLE_DATE } from '../api/airportData'
-import { SHORTCUTS } from '../hooks/useShortcuts'
+import { SHORTCUTS, WIDE_ONLY_SHORTCUTS } from '../hooks/useShortcuts'
 import { usePlayhead } from '../playback/playheadStore'
+import { useIsWide } from '../ui/layout'
 import { Group, Kbd, SectionLabel, Sheet } from '../ui/Panel'
 
 const GESTURES: [string, string][] = [
@@ -33,6 +34,7 @@ const CREDITS: [string, string, string][] = [
 export function HelpPanel() {
   const open = usePlayhead((s) => s.panel === 'help')
   const setPanel = usePlayhead((s) => s.setPanel)
+  const wide = useIsWide()
   return (
     <Sheet open={open} title="Help" onClose={() => setPanel(null)}>
       <SectionLabel>Touch and mouse</SectionLabel>
@@ -51,7 +53,7 @@ export function HelpPanel() {
         <SectionLabel>Keyboard</SectionLabel>
         <Group className="py-2">
           <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
-            {SHORTCUTS.map(([k, v]) => (
+            {SHORTCUTS.filter(([k]) => wide || !WIDE_ONLY_SHORTCUTS.has(k)).map(([k, v]) => (
               <div key={k} className="flex items-center gap-3 py-1.5 text-footnote">
                 <dt className="flex w-14 shrink-0 gap-1">
                   {k.split(' ').map((key) => (

@@ -15,7 +15,7 @@ import { TaxiRouteLayer } from '../live/taxi/TaxiRouteLayer'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
 import { DOCK_EVENT, readDockReserve } from '../ui/layout'
-import { CAMERA_EASE } from '../ui/motion'
+import { CAMERA_EASE, useReducedMotion } from '../ui/motion'
 import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
@@ -87,7 +87,7 @@ export function MapView() {
   const shadows = useSettings((s) => s.shadows)
   const approachPaths = useSettings((s) => s.approachPaths)
   const weatherRadar = useSettings((s) => s.weatherRadar)
-  const reduceMotion = useSettings((s) => s.reduceMotion)
+  const reduceMotion = useReducedMotion()
   const mapTheme = useSettings((s) => s.mapTheme)
 
   const airport = useMemo(() => getAirport(airportIcao), [airportIcao])
@@ -122,7 +122,10 @@ export function MapView() {
         usePlayhead.getState().addEvents(events)
       }
       setLive('ok', data.aircraft.length, data.provider)
-    } else if (isPending) {
+    } else if (isPending && usePlayhead.getState().liveStatus !== 'error') {
+      // A query that has never had data goes back to "pending" on every retry and poll. Once the feed
+      // is known to be down it stays "offline" through those, instead of flashing the loading card
+      // (and "Connecting…" in the pill) each time. A new airport resets the status to loading itself.
       setLive('loading')
     }
   }, [data, dataUpdatedAt, isError, isPending, mode, ends, airport.elevationFt, setLive])

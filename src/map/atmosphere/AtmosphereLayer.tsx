@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getAirport } from '../../api/airports'
 import { usePlayhead } from '../../playback/playheadStore'
 import { useSettings } from '../../settings/settingsStore'
+import { useReducedMotion } from '../../ui/motion'
 import { useWeather } from '../../station/StationBar'
 import { runwayEnds, standMarkings, tyreMarks } from '../airportDiagram'
 import type { LngLat } from '../geo'
@@ -59,7 +60,7 @@ function useNight(center: LngLat): number {
 }
 
 export function AtmosphereLayer({ map, airportIcao }: { map: MapLibreMap | null; airportIcao: string }) {
-  const reduceMotion = useSettings((s) => s.reduceMotion)
+  const reduceMotion = useReducedMotion()
   const streamlines = useSettings((s) => s.windStreamlines)
   const mapTheme = useSettings((s) => s.mapTheme)
   const airport = useMemo(() => getAirport(airportIcao), [airportIcao])

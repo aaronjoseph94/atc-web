@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getAirport } from '../../api/airports'
 import { usePlayhead } from '../../playback/playheadStore'
 import { useSettings } from '../../settings/settingsStore'
+import { useReducedMotion } from '../../ui/motion'
 import type { LngLat } from '../geo'
 import { effectiveTheme, LIGHT_LAYER, LIGHT_MIN_ZOOM, LIGHT_SRC, lightingLayers, lightOpacity, nightPaint, themeHasLights, type NightPaint } from '../mapStyle'
 import { addApronGlows, addTaxiwayLights, LightSet, runwayFrames, runwayLights, type GlowFeature, type LightFeature } from './airfieldLights'
@@ -126,7 +127,7 @@ class NightPainter {
 export function LightingLayer({ map, airportIcao }: { map: MapLibreMap | null; airportIcao: string }) {
   const lighting = useSettings((s) => s.lighting)
   const mapTheme = useSettings((s) => s.mapTheme)
-  const reduceMotion = useSettings((s) => s.reduceMotion)
+  const reduceMotion = useReducedMotion()
   const airport = useMemo(() => getAirport(airportIcao), [airportIcao])
   const theme = effectiveTheme(mapTheme, airport.group === 'US')
   const sun = useSunNight(airport.center, lighting === 'auto')

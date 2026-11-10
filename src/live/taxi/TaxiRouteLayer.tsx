@@ -13,7 +13,7 @@ import { X } from 'lucide-react'
 import { AirlineLogo } from '../../airline/AirlineLogo'
 import { offset, toLocal, type LngLat } from '../../map/geo'
 import { LAYER, TAXI_CHIP, TAXI_LAYER, TAXI_SRC, taxiRouteLayers } from '../../map/mapStyle'
-import { useSettings } from '../../settings/settingsStore'
+import { useReducedMotion } from '../../ui/motion'
 import { liveBuffer } from '../session'
 import { progressAlong } from './route'
 import { setTileTemplate } from './network'
@@ -143,7 +143,7 @@ function routeFeatures(r: TaxiRoute, ahead: LngLat[], o: number): { line: Featur
 }
 
 export function TaxiRouteLayer({ map }: { map: MapLibreMap | null }) {
-  const reduceMotion = useSettings((s) => s.reduceMotion)
+  const reduceMotion = useReducedMotion()
   const [popup, setPopup] = useState<{ id: string; at: LngLat } | null>(null)
   const route = useTaxi((s) => (popup ? (s.routes.find((r) => r.id === popup.id) ?? null) : null))
 

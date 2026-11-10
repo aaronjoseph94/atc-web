@@ -156,7 +156,8 @@ export const usePlayhead = create<PlayheadState>((set) => ({
       tSyncedAt: now(),
       liveStatus: 'loading',
       liveCount: 0,
-      cameraMode: 'auto',
+      // A new airport is always framed whole; who steers after that follows the "Automatic camera" setting.
+      cameraMode: useSettings.getState().autoCamera ? 'auto' : 'manual',
       following: false,
       events: [],
       caption: null,
@@ -235,7 +236,8 @@ export const usePlayhead = create<PlayheadState>((set) => ({
       selectedIcao: null,
       sheet: 'closed',
       following: false,
-      cameraMode: 'auto',
+      // Replays steer the camera themselves; back in live, the user's "Automatic camera" choice applies again.
+      cameraMode: useSettings.getState().autoCamera ? 'auto' : 'manual',
     })),
 }))
 

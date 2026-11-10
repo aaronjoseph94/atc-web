@@ -2,7 +2,7 @@
  * Everything currently in view, searchable. Hovering a row lights the
  * aircraft up on the map; tapping selects it and closes the list.
  */
-import { useQueryClient } from '@tanstack/react-query'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
@@ -45,6 +45,8 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
   const [query, setQuery] = useState('')
   const [list, setList] = useState<Aircraft[]>([])
   const queryClient = useQueryClient()
+  // Same busy state as the map's offline card, so a tap on "Try again" visibly does something.
+  const retrying = useIsFetching({ queryKey: ['aircraft', airportIcao] }) > 0
 
   // Refresh once a second while open; the map keeps its own 60 fps copy.
   useEffect(() => {
@@ -110,8 +112,8 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
             art={<OfflineArt />}
             title="Live traffic is offline"
             actions={
-              <StateAction primary onClick={() => void queryClient.invalidateQueries({ queryKey: ['aircraft', airportIcao] })}>
-                Try again
+              <StateAction primary busy={retrying} onClick={() => void queryClient.invalidateQueries({ queryKey: ['aircraft', airportIcao] })}>
+                {retrying ? 'Trying…' : 'Try again'}
               </StateAction>
             }
           >

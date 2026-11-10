@@ -21,7 +21,12 @@ export const SHORTCUTS: [string, string][] = [
   ['← →', 'Skip 5 seconds in a replay'],
   ['Esc', 'Close, or clear the selection'],
   ['?', 'This list'],
+  // Handled by the side panel itself (DesktopPanel); listed only where that panel exists.
+  [']', 'Hide or show the side panel'],
 ]
+
+/** Shortcuts that only do something on wide screens, where the side panel docks. */
+export const WIDE_ONLY_SHORTCUTS = new Set([']'])
 
 const PANEL_KEYS: Record<string, Panel> = { '/': 'traffic', a: 'airports', c: 'stations', t: 'transcripts', w: 'weather', r: 'replay', l: 'layers', m: 'menu', '?': 'help' }
 

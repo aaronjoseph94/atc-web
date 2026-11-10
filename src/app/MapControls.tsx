@@ -8,6 +8,7 @@ import { Compass, Layers, Locate, Minus, Plus, Sparkles } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { mapHandle } from '../live/session'
 import { usePlayhead } from '../playback/playheadStore'
+import { useSettings } from '../settings/settingsStore'
 import { GlassButton } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
 import { cameraNudge } from './camera'
@@ -87,7 +88,10 @@ function ZoomButton({ label, shortcut, onClick, children }: { label: string; sho
 
 /** Offered once the user has taken the map, when nothing is selected. */
 export function AutoMapPill() {
-  const show = usePlayhead((s) => s.cameraMode === 'manual' && !s.selectedIcao)
+  // Not with "Automatic camera" turned off in Settings: the map starts out manual then, and offering
+  // the automatic map on every launch would nag about a choice the user made on purpose.
+  const autoCamera = useSettings((s) => s.autoCamera)
+  const show = usePlayhead((s) => s.cameraMode === 'manual' && !s.selectedIcao) && autoCamera
   const setCameraMode = usePlayhead((s) => s.setCameraMode)
   const { mounted, closing } = usePresence(show, 200)
   if (!mounted) return null

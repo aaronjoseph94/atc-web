@@ -18,6 +18,7 @@ import { CATEGORY_COLOR, useWeather } from '../station/StationBar'
 import { PanelFrame, SectionLabel } from '../ui/Panel'
 import { EmptyState, OfflineArt, StateAction, WeatherSkeleton } from '../ui/States'
 import { ceilingFt, phonetic, readableAtis, runwayWinds, sentenceCase } from './atis'
+import { tafLines } from './taf'
 
 const CATEGORY_TEXT = {
   VFR: 'Clear enough to fly by sight',
@@ -130,6 +131,7 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
   const ends = useMemo(() => runwayEnds(airportIcao), [airportIcao])
   const metar = query.data?.metar ?? null
   const atis = query.data?.atis ?? []
+  const taf = tafLines(query.data?.taf)
   const winds = useMemo(() => runwayWinds(metar, ends), [metar, ends])
   const inUse = summariseRunwayUse(active)
 
@@ -257,6 +259,20 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
             <>
               <SectionLabel>Original observation</SectionLabel>
               <p className="break-words rounded-2xl bg-white/[0.05] p-3.5 font-mono text-caption text-white/75">{metar.raw}</p>
+            </>
+          )}
+
+          {/* The terminal forecast comes with every weather answer but was never shown; one period per line. */}
+          {taf.length > 0 && (
+            <>
+              <SectionLabel>Forecast (TAF)</SectionLabel>
+              <div className="break-words rounded-2xl bg-white/[0.05] p-3.5 font-mono text-caption text-white/75">
+                {taf.map((line, i) => (
+                  <p key={i} className={i ? 'mt-1 pl-3' : ''}>
+                    {line}
+                  </p>
+                ))}
+              </div>
             </>
           )}
 

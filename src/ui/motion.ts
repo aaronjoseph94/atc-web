@@ -6,6 +6,7 @@
  * Keep the two in step: a sheet that is dragged and let go should land with
  * the same curve as one opened with a tap.
  */
+import { useSyncExternalStore } from 'react'
 import { useSettings } from '../settings/settingsStore'
 
 /** Durations in milliseconds, mirroring the CSS `--duration-*` tokens. */
@@ -134,6 +135,29 @@ export function createVelocityTracker(windowMs = 90) {
 export function reducedMotion(): boolean {
   if (useSettings.getState().reduceMotion) return true
   return typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+const osReduceQuery = () => (typeof matchMedia === 'undefined' ? null : matchMedia('(prefers-reduced-motion: reduce)'))
+
+function subscribeOsReduce(cb: () => void) {
+  const q = osReduceQuery()
+  q?.addEventListener('change', cb)
+  return () => q?.removeEventListener('change', cb)
+}
+
+/**
+ * `reducedMotion()` as a hook: the in-app setting or the OS preference, and
+ * re-renders when either changes. Script-driven motion (camera flights, map
+ * animations, caption sweeps) can't see the CSS media query, so it reads this.
+ */
+export function useReducedMotion(): boolean {
+  const setting = useSettings((s) => s.reduceMotion)
+  const os = useSyncExternalStore(
+    subscribeOsReduce,
+    () => !!osReduceQuery()?.matches,
+    () => false,
+  )
+  return setting || os
 }
 
 /** A tiny tap of the vibration motor where there is one (Android); silent elsewhere. */

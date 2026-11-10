@@ -74,7 +74,16 @@ export function AppShell() {
   useEffect(() => {
     const el = stack.current
     if (!el) return
-    const apply = () => document.documentElement.style.setProperty('--bottom-stack', `${el.offsetHeight}px`)
+    const apply = () => {
+      const root = document.documentElement
+      root.style.setProperty('--bottom-stack', `${el.offsetHeight}px`)
+      // On wider screens the attribution button sits in the map's bottom-right corner, beside the floating
+      // bar. When the map area is too narrow for both (a 1024 px window with the side panel open), lift it
+      // above the bar as on phones. The stack is as wide as the map area, so this re-runs when that changes.
+      const bar = el.querySelector('[data-bar]')
+      const room = bar ? el.getBoundingClientRect().right - bar.getBoundingClientRect().right : Infinity
+      root.classList.toggle('attrib-lift', room < 56)
+    }
     apply()
     const ro = new ResizeObserver(apply)
     ro.observe(el)
@@ -110,7 +119,7 @@ export function AppShell() {
           {/* The flight card slides up over the station bar and back down to reveal it, as one stack. */}
           {/* Beside the side panel the bars are as wide as the map area allows. */}
           {/* On a phone the one column is the screen's width: an auto column would grow to fit the bar's untruncated channel name and push the play button off screen. */}
-          <div className={`grid w-full justify-items-center ${wide ? 'grid-cols-[minmax(0,1fr)] lg:max-w-[40rem]' : 'max-md:grid-cols-[minmax(0,1fr)] md:w-auto'}`}>
+          <div data-bar className={`grid w-full justify-items-center ${wide ? 'grid-cols-[minmax(0,1fr)] lg:max-w-[40rem]' : 'max-md:grid-cols-[minmax(0,1fr)] md:w-auto'}`}>
             <div className={`pointer-events-none flex w-full justify-center self-end *:max-w-full [grid-area:1/1] ${wide ? '' : 'md:w-auto'} ${cardOpen ? 'invisible delay-[var(--duration-sheet)]' : ''} transition-[visibility]`} inert={cardOpen}>
               <StationBar />
             </div>

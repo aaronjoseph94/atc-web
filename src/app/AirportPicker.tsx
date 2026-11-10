@@ -60,7 +60,8 @@ export function AirportPicker() {
     return (
       <li key={a.icao} className={`flex items-center rounded-2xl transition-colors duration-[var(--duration-fast)] ${active ? 'bg-atc-yellow/15 ring-1 ring-inset ring-atc-yellow/60' : 'bg-white/[0.05] hover:bg-white/[0.09]'}`}>
         <button type="button" aria-current={active || undefined} className="pressable-soft flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 text-left" onClick={() => setAirport(a.icao)}>
-          <span className="w-12 shrink-0 font-display text-[26px] leading-none text-atc-yellow">{a.icao}</span>
+          {/* Wide enough for the widest code (MDW), so every name starts on the same line. */}
+          <span className="w-14 shrink-0 font-display text-[26px] leading-none text-atc-yellow">{a.icao}</span>
           <span className="min-w-0 flex-1 truncate text-subhead">{a.name}</span>
         </button>
         <button

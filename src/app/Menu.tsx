@@ -1,5 +1,6 @@
 /** The "⋯" menu: a popover under the button, like a native context menu. */
 import { CircleHelp, CloudSun, FileText, History, Layers, List, Pin, PinOff, Radio, Settings, type LucideIcon } from 'lucide-react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { usePlayhead, type Panel } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
 import { Kbd, useDialog } from '../ui/Panel'
@@ -22,6 +23,21 @@ export function Menu() {
 
   const go = (panel: Panel) => () => setPanel(panel)
 
+  // A role="menu" is expected to move with the arrow keys (and Home/End), not just Tab.
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+    if (!items.length) return
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    let next: number
+    if (e.key === 'ArrowDown') next = at < 0 ? 0 : (at + 1) % items.length
+    else if (e.key === 'ArrowUp') next = at < 0 ? items.length - 1 : (at - 1 + items.length) % items.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = items.length - 1
+    else return
+    e.preventDefault()
+    items[next].focus()
+  }
+
   return (
     <div className={`absolute inset-0 z-50 ${closing ? 'pointer-events-none' : ''}`}>
       <button type="button" tabIndex={-1} aria-label="Close menu" className="absolute inset-0 cursor-default" onClick={close} />
@@ -30,6 +46,7 @@ export function Menu() {
         role="menu"
         aria-label="Menu"
         tabIndex={-1}
+        onKeyDown={onKeyDown}
         data-closing={closing ? '' : undefined}
         className="motion-pop absolute right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none md:right-4"
       >
@@ -69,7 +86,7 @@ function Item({ icon: Icon, label, shortcut, onClick }: { icon: LucideIcon; labe
       type="button"
       role="menuitem"
       aria-keyshortcuts={shortcut}
-      className="flex min-h-11 w-full items-center gap-3 px-4 text-left transition-colors duration-[var(--duration-fast)] hover:bg-white/[0.08] active:bg-white/[0.14]"
+      className="flex min-h-11 w-full items-center gap-3 px-4 text-left transition-colors duration-[var(--duration-fast)] hover:bg-white/[0.08] focus-visible:bg-white/[0.08] focus-visible:-outline-offset-2 active:bg-white/[0.14]"
       onClick={onClick}
     >
       <Icon className="size-[18px] shrink-0 text-white/75" />

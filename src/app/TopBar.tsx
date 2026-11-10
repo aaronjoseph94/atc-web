@@ -64,7 +64,7 @@ function StatusPill() {
   }
   return (
     <button type="button" className={`${pill} pressable glass-chip pl-2 text-white ring-1 ring-white/[0.13] hover:bg-atc-glass-hover/90`} onClick={() => setPanel('traffic')} aria-label={`Live. ${count} aircraft. Open traffic list`}>
-      <span className="flex h-5 items-center gap-1 rounded-full bg-atc-live pl-1.5 pr-2 text-caption2 font-bold tracking-[0.06em] text-white">
+      <span className="flex h-5 items-center gap-1 rounded-full bg-atc-live-badge pl-1.5 pr-2 text-caption2 font-bold tracking-[0.06em] text-white">
         <span className="size-1.5 animate-pulse-dot rounded-full bg-white" />
         LIVE
       </span>
@@ -100,7 +100,7 @@ export function TopBar() {
             aria-label="Back to live traffic"
           >
             <ChevronLeft className="size-5" />
-            <span className="rounded-full bg-atc-live px-2 py-0.5 text-caption2 font-bold tracking-[0.06em]">LIVE</span>
+            <span className="rounded-full bg-atc-live-badge px-2 py-0.5 text-caption2 font-bold tracking-[0.06em]">LIVE</span>
           </button>
         ) : (
           <GlassButton label="Search traffic" shortcut="/" tooltip="right" onClick={() => setPanel('traffic')}>

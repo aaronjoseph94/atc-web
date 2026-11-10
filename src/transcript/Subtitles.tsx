@@ -11,7 +11,7 @@ import type { TranscriptCue } from '../api/types'
 import { useRadio, type Transmission } from '../live/radio/radioStore'
 import { cueProgress, getActiveCue } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
-import { useSettings } from '../settings/settingsStore'
+import { useReducedMotion } from '../ui/motion'
 
 /**
  * How many words of a cue have been spoken. Words are weighted by length, so
@@ -50,7 +50,7 @@ const GLOW_SOFT = '[text-shadow:0_0_20px_rgba(6,10,22,0.42),0_0_40px_rgba(6,10,2
  * twice speaking pace) rather than pretending to be in sync.
  */
 function useSweep(call: Transmission | null): number {
-  const reduceMotion = useSettings((s) => s.reduceMotion)
+  const reduceMotion = useReducedMotion()
   const [sweep, setSweep] = useState<{ id: string | null; p: number }>({ id: null, p: 1 })
   const id = call?.id ?? null
   const durationMs = call?.durationMs ?? 0

@@ -13,7 +13,8 @@ export function LayersPanel() {
 
   return (
     <Sheet open={open} title="Map" onClose={() => setPanel(null)}>
-      <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Map style">
+      {/* pt-1: the chosen style's ring (2 px, offset 2 px) would otherwise be cut off by the top of the scroll box. */}
+      <div className="grid grid-cols-4 gap-2 pt-1" role="radiogroup" aria-label="Map style">
         {MAP_THEMES.map((t) => {
           const unavailable = t.usOnly && !isUs
           const active = s.mapTheme === t.id && !unavailable
