@@ -38,15 +38,24 @@ describe('buildAirportDiagram', () => {
     expect(idents).not.toContain('04L')
   })
 
-  it('writes the designator as a number plus a side letter, aligned with the runway', () => {
-    const texts = ord.designators.features.map((f) => f.properties?.text)
-    expect(texts).toContain('28')
-    expect(texts).toContain('R')
-    const number = ord.designators.features.find((f) => f.properties?.text === '28')!
-    // 28R is flown heading roughly west.
-    expect(number.properties?.rot).toBeGreaterThan(260)
-    expect(number.properties?.rot).toBeLessThan(280)
-    expect(number.properties?.em).toBeGreaterThan(15)
+  it('paints each designator as stencil strokes on the runway, a third of its width tall', () => {
+    const ends = runwayEnds('ORD')
+    const end = ends.find((e) => e.ident === '28R')!
+    // Strokes belonging to 28R: on its centreline band, in its first 150 m.
+    const mine = ord.designators.features.filter((f) =>
+      (f.geometry.coordinates as [number, number][]).every((c) => {
+        const { along, cross } = relativeToRunway(end, c)
+        return along > 40 && along < 110 && Math.abs(cross) < end.widthM * 0.25
+      }),
+    )
+    // "R" is two strokes, "2" one, "8" one.
+    expect(mine).toHaveLength(4)
+    const along = mine.flatMap((f) => (f.geometry.coordinates as [number, number][]).map((c) => relativeToRunway(end, c).along))
+    const across = mine.flatMap((f) => (f.geometry.coordinates as [number, number][]).map((c) => relativeToRunway(end, c).cross))
+    // Letter then number, stacked along the runway and centred on it.
+    expect(Math.max(...along) - Math.min(...along)).toBeCloseTo(end.widthM * (0.26 + 0.12 + 0.3), 0)
+    expect(Math.max(...across) + Math.min(...across)).toBeCloseTo(0, 0)
+    expect(Math.max(...across) - Math.min(...across)).toBeCloseTo(end.widthM * 0.33, 0)
   })
 
   it('includes every standard marking on a long precision runway', () => {
@@ -66,11 +75,16 @@ describe('buildAirportDiagram', () => {
     }
   })
 
-  it('sizes threshold stripes to the FAA standard', () => {
-    const stripe = ord.paint.features.find((f) => f.properties?.kind === 'threshold')!
-    const ring = stripe.geometry.coordinates[0] as [number, number][]
+  it('fills the threshold with fine stripes 150 ft long, behind a solid bar', () => {
+    const end = runwayEnds('ORD').find((e) => e.ident === '28R')!
+    const stripes = ord.paint.features.filter((f) => f.properties?.kind === 'threshold' && Math.abs(relativeToRunway(end, f.geometry.coordinates[0][0] as [number, number]).cross) < end.widthM / 2 && relativeToRunway(end, f.geometry.coordinates[0][0] as [number, number]).along < 10 && relativeToRunway(end, f.geometry.coordinates[0][0] as [number, number]).along > 0)
+    // A 150 ft runway carries 13 stripes, evenly spread across its width.
+    expect(stripes).toHaveLength(13)
+    const ring = stripes[0].geometry.coordinates[0] as [number, number][]
     expect(distanceM(ring[0], ring[1]) / M_PER_FT).toBeCloseTo(150, 0)
-    expect(distanceM(ring[1], ring[2]) / M_PER_FT).toBeCloseTo(5.75, 1)
+    expect(distanceM(ring[1], ring[2])).toBeGreaterThan(1.5)
+    expect(distanceM(ring[1], ring[2])).toBeLessThan(2.2)
+    expect(ord.paint.features.some((f) => f.properties?.kind === 'threshold-bar')).toBe(true)
   })
 
   it('draws displaced-threshold arrows and a bar where the threshold is displaced', () => {
@@ -89,10 +103,10 @@ describe('buildAirportDiagram', () => {
   it('offers a blast pad with chevrons before every runway end', () => {
     expect(ord.pads).toHaveLength(getRunways('ORD').length * 2)
     const pad = ord.pads.find((p) => p.ident === '10L')!
-    expect(pad.features.map((f) => f.properties?.kind)).toEqual(['pad', 'chevron', 'chevron', 'chevron'])
-    // The pad lies wholly before the pavement: its probe point is 200 ft short of the runway end.
+    expect(pad.features.map((f) => f.properties?.kind)).toEqual(['pad', 'chevron', 'chevron', 'chevron', 'chevron'])
+    // The pad lies wholly before the pavement: its probe point is 250 ft short of the runway end.
     const end = runwayEnds('ORD').find((e) => e.ident === '10L')!
-    expect(relativeToRunway(end, pad.probe).along).toBeCloseTo(-200 * M_PER_FT, 0)
+    expect(relativeToRunway(end, pad.probe).along).toBeCloseTo(-250 * M_PER_FT, 0)
   })
 
   it('returns an empty diagram for an unknown airport', () => {

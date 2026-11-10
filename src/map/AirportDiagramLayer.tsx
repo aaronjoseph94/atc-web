@@ -10,7 +10,7 @@ import type { Feature, FeatureCollection, LineString } from 'geojson'
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl'
 import { useEffect } from 'react'
 import { buildAirportDiagram, relativeToRunway, runwayEnds, type RunwayEndGeometry } from './airportDiagram'
-import { M_PER_FT, metersPerPixel, offset, toLocal, type LngLat } from './geo'
+import { M_PER_FT, offset, toLocal, type LngLat } from './geo'
 import { SRC } from './mapStyle'
 
 /** Distance from runway centreline to the holding position (FAA standard for large airports). */
@@ -29,11 +29,6 @@ export function AirportDiagramLayer({ map, airportIcao }: { map: MapLibreMap | n
   useEffect(() => {
     if (!map) return
     const d = buildAirportDiagram(airportIcao)
-    // Designator size is stored in metres; the style needs pixels at zoom 10.
-    for (const f of d.designators.features) {
-      const p = f.properties as { em: number; lat: number; px10?: number }
-      p.px10 = p.em / metersPerPixel(p.lat, 10)
-    }
     setData(map, SRC.surface, d.surface)
     setData(map, SRC.paint, d.paint)
     setData(map, SRC.designators, d.designators)

@@ -64,7 +64,11 @@ type Palette = {
   pad: string
   runway: string
   runwayConcrete: string
+  /** Runway paint, in four strengths from the threshold block down to the side stripes. */
   paint: string
+  paintMid: string
+  paintDim: string
+  paintFaint: string
   taxiLine: string
   building: string
   buildingEdge: string
@@ -104,7 +108,10 @@ const NAVY: Palette = {
   pad: '#343D58',
   runway: '#12152E',
   runwayConcrete: '#151932',
-  paint: '#C9CED9',
+  paint: '#C9CCD7',
+  paintMid: '#A9AEBF',
+  paintDim: '#8D93A8',
+  paintFaint: '#6F7790',
   taxiLine: '#9A852E',
   building: '#262C44',
   buildingEdge: '#343C58',
@@ -142,6 +149,9 @@ const GRAPHITE: Palette = {
   runway: '#141618',
   runwayConcrete: '#17191C',
   paint: '#C8CBD0',
+  paintMid: '#A6A9AF',
+  paintDim: '#8A8D93',
+  paintFaint: '#6C6F75',
   taxiLine: '#8F7F3A',
   building: '#1A1D21',
   buildingEdge: '#2B3036',
@@ -283,29 +293,11 @@ function layers(p: Palette): LayerSpecification[] {
     { id: 'apt-surface', type: 'fill', source: SRC.surface, minzoom: 10, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'surface'], 'concrete', p.runwayConcrete, p.runway] } },
     { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.9], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.5, 16, 1.1, 19, 5] } },
     { id: 'apt-hold', type: 'line', source: SRC.hold, minzoom: 14, layout: vis(paint), paint: { 'line-color': p.taxiLine, 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 0.8, 17, 2, 20, 8], 'line-dasharray': ['case', ['==', ['get', 'dashed'], 1], ['literal', [1.6, 1.2]], ['literal', [1, 0]]] } },
-    { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': p.paint, 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, ['match', ['get', 'kind'], 'edge', 0.5, 'centre', 0.8, 0.95]] } },
-    {
-      id: 'apt-designator',
-      type: 'symbol',
-      source: SRC.designators,
-      minzoom: 13.6,
-      layout: {
-        ...vis(paint),
-        'text-field': ['get', 'text'],
-        'text-font': FONT_BOLD,
-        // Em size in metres → pixels: the factor is baked in per feature (`px10`).
-        // One stop per zoom level: MapLibre packs sizes into 16 bits (max 512 px), so a
-        // single far-away stop would be clamped and drag every size in between down with it.
-        'text-size': ['interpolate', ['exponential', 2], ['zoom'], ...[13, 14, 15, 16, 17, 18, 19, 20].flatMap((z) => [z, ['min', 500, ['*', ['get', 'px10'], 2 ** (z - 10)]]])],
-        'text-rotate': ['get', 'rot'],
-        'text-rotation-alignment': 'map',
-        'text-pitch-alignment': 'map',
-        'text-allow-overlap': true,
-        'text-ignore-placement': true,
-        'text-padding': 0,
-      },
-      paint: { 'text-color': p.paint, 'text-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.2, 0.95] },
-    },
+    // Each marking has its own grey: the threshold block brightest, the aiming blocks next,
+    // then the touchdown bars, centreline and side stripes receding into the pavement.
+    { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'kind'], 'threshold', p.paint, 'threshold-bar', p.paint, 'aim', p.paintMid, 'edge', p.paintFaint, p.paintDim], 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, 1] } },
+    // Runway numbers and letters, as thin stencil strokes with a real-world width.
+    { id: 'apt-designator', type: 'line', source: SRC.designators, minzoom: 13.6, layout: { ...vis(paint), 'line-cap': 'square', 'line-join': 'miter' }, paint: { 'line-color': p.paintMid, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, 1], 'line-width': metres(1.15) } },
 
     // ---- 3D buildings (only when the map is tilted) ------------------------------
     { id: LAYER.buildings3d, type: 'fill-extrusion', source: 'omt', 'source-layer': 'building', minzoom: 13, layout: vis(false), paint: { 'fill-extrusion-color': p.buildingTop, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.92, 'fill-extrusion-vertical-gradient': true } },
