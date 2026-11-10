@@ -13,6 +13,7 @@
 import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Plane, Radio, Sparkles, X } from 'lucide-react'
 import type { FlightInfo, RouteAirport } from '../api/types'
 import { distanceM } from '../map/geo'
+import { FrequencyTuner } from '../station/FrequencyTuner'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '../settings/settingsStore'
 import { Grabber, useDialog } from '../ui/Panel'
@@ -58,6 +59,7 @@ export function FlightCard() {
   const sheet = usePlayhead((s) => s.sheet)
   const select = usePlayhead((s) => s.select)
   const setSheet = usePlayhead((s) => s.setSheet)
+  const live = usePlayhead((s) => s.mode === 'live')
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
   const flight = useFlight()
@@ -136,7 +138,12 @@ export function FlightCard() {
         <ChevronRight className="size-5 shrink-0 text-white/50" />
       </button>
 
-      <p className="px-4 pb-[max(0.9rem,var(--safe-bottom))] pt-2.5 text-center text-[13px] font-medium text-white/75 md:pb-3.5">{flight.stationLine}</p>
+      {/* Live, the foot of the card is a dial for changing channel; a replayed scene stays on its own channel. */}
+      {live ? (
+        <FrequencyTuner />
+      ) : (
+        <p className="px-4 pb-[max(0.9rem,var(--safe-bottom))] pt-2.5 text-center text-[13px] font-medium text-white/75 md:pb-3.5">{flight.stationLine}</p>
+      )}
     </section>
   )
 }
