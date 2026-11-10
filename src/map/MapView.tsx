@@ -18,6 +18,7 @@ import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
 import type { LiveAircraft } from './livePositions'
+import { ProceduresLayer } from './ProceduresLayer'
 import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
 
 /** Extra zoom applied when the camera closes in on a talking/selected aircraft. */
@@ -319,6 +320,7 @@ export function MapView() {
           }}
         >
           <AirportDiagramLayer map={map} airportIcao={airportIcao} />
+          <ProceduresLayer map={map} airportIcao={airportIcao} />
           <AircraftLayer
             map={map}
             liveBuffer={liveBuffer}

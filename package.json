@@ -16,6 +16,7 @@
     "clips:build": "python3 scripts/clips/build_clips.py",
     "clips:verify": "python3 scripts/clips/verify_clips.py",
     "data:airports": "node scripts/fetch-airport-data.mjs",
+    "data:procedures": "node scripts/fetch-procedures.mjs",
     "logos:build": "python3 -I scripts/fetch-airline-logos.py",
     "pages": "wrangler pages dev dist --port 8788",
     "deploy": "npm run build && wrangler pages deploy dist --project-name atc-web",

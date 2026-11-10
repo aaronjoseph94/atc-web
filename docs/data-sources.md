@@ -73,8 +73,17 @@ picked by confidence (adsbdb 3, hexdb 2, feed 1.5; agreeing sources add up). The
 | [USGS The National Map](https://www.usgs.gov/programs/national-geospatial-program/national-map) | Aerial imagery (`basemap.nationalmap.gov`) | US government work, public domain | Credit requested (shown) |
 | [FAA Aeronautical Information Services](https://www.faa.gov/air_traffic/flight_info/aeronav/) | VFR sectional/terminal chart tiles (FAA's ArcGIS tile services) | US government work, public domain | Credit + "not for navigation" (shown) |
 | [FAA NASR](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) | Runway ends, controller frequencies (US) | US government work, public domain | Credited in Help |
+| [FAA CIFP](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/cifp/) (Coded Instrument Flight Procedures) | Arrival (STAR), departure (SID) and approach paths, fixes and altitude constraints (US), the map's "Procedures" layer | US government work, public domain; free download each 28-day AIRAC cycle from aeronav.faa.gov | Credited in Help; "not for navigation" (Help) |
 | [OurAirports](https://ourairports.com/data/) | Runways and frequencies (Canada, fallback) | Public domain | Credited in Help |
 | [Piper](https://github.com/rhasspy/piper) voices | Synthesized radio in the bundled replay scenes | Per-voice licence on the model card; the LibriTTS-based voices are CC BY 4.0 | Credit the voice datasets if the scenes ship publicly |
+
+**Procedures.** `npm run data:procedures` (`scripts/fetch-procedures.mjs`) downloads the CIFP in force, reads the
+ARINC 424 records for our US airports and writes `public/procedures/{code}.json` (committed; 20–140 KB each,
+10–20 KB gzipped). Legs to fixes are drawn straight, RF/AF arcs as points, and heading legs ("climb on heading 044
+to 520 ft", "expect vectors") as short stubs, so the lines are a sketch of the published paths, not a navigation
+source. Refresh every cycle or two. **Canada:** the CIFP covers only FAA procedures, and NAV CANADA's procedure data
+(Canada Flight Supplement, Canada Air Pilot, the AIP and its ARINC data) is copyright NAV CANADA and not licensed
+for redistribution, so there is no free legal source; Canadian airports keep just the extended runway centrelines.
 
 ## ATC radio
 
