@@ -43,6 +43,8 @@ export type Settings = {
   approachPaths: boolean
   /** Precipitation radar overlay (US). */
   weatherRadar: boolean
+  /** Arrival, departure and approach paths from the FAA's procedure data (US). */
+  procedures: boolean
   /** Let the camera move to whoever is in the news unless the user takes over. */
   autoCamera: boolean
   /** Pinned airports, shown first in the picker. */
@@ -78,6 +80,7 @@ export const DEFAULT_SETTINGS: Settings = {
   shadows: true,
   approachPaths: true,
   weatherRadar: false,
+  procedures: false,
   autoCamera: true,
   favourites: [],
   recents: [],

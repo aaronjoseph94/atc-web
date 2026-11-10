@@ -79,6 +79,9 @@ export function LayersPanel() {
         <Row label="Approach paths">
           <Toggle checked={s.approachPaths} onChange={(v) => s.update('approachPaths', v)} label="Approach paths" />
         </Row>
+        <Row label="Procedures" hint={isUs ? 'Arrivals, departures and approaches' : 'US only'}>
+          <Toggle checked={s.procedures} onChange={(v) => s.update('procedures', v)} label="Arrival, departure and approach procedures" />
+        </Row>
         <Row label="Weather radar" hint={isUs ? undefined : 'US only'}>
           <Toggle checked={s.weatherRadar} onChange={(v) => s.update('weatherRadar', v)} label="Weather radar" />
         </Row>

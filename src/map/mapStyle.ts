@@ -26,6 +26,10 @@ export const SRC = {
   shadows: 'aircraft-shadows',
   trails: 'aircraft-trails',
   events: 'aircraft-events',
+  procAll: 'proc-all',
+  procNet: 'proc-net',
+  procFinal: 'proc-final',
+  procHi: 'proc-hi',
 } as const
 
 export const LAYER = {
@@ -45,6 +49,7 @@ export const LAYER = {
   aircraft: 'ac-icon',
   label: 'ac-label',
   event: 'ac-event',
+  procHit: 'proc-hit',
 } as const
 
 type Palette = {
@@ -316,6 +321,9 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.approach, type: 'line', source: SRC.approach, filter: ['==', ['get', 'kind'], 'centreline'], minzoom: 9, paint: { 'line-color': p.approach, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.12, 12, 0.28, 15, 0.16], 'line-width': 1, 'line-dasharray': [6, 5] } },
     { id: LAYER.approachTick, type: 'line', source: SRC.approach, filter: ['==', ['get', 'kind'], 'tick'], minzoom: 10.5, paint: { 'line-color': p.approach, 'line-opacity': 0.32, 'line-width': 1 } },
 
+    // ---- instrument procedures (CIFP; empty unless "Procedures" is on) ----------
+    ...procedureLayers(p),
+
     // ---- runway pavement and paint (generated from the runway data) ----------------
     // A dashed centreline makes runways read as runways long before the paint is legible.
     { id: 'aero-runway-dash', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, maxzoom: 14.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: vis(base), paint: { 'line-color': p.paint, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0.35, 13, 0.6, 14.2, 0], 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 14, 1.2], 'line-dasharray': [5, 4] } },
@@ -489,6 +497,90 @@ const USGS_ATTR = 'Imagery: <a href="https://www.usgs.gov/programs/national-geos
 const FAA_ATTR = 'Charts: <a href="https://www.faa.gov/air_traffic/flight_info/aeronav/" target="_blank" rel="noreferrer">FAA Aeronautical Information Services</a> (not for navigation)'
 const RADAR_ATTR = 'Radar: NOAA NEXRAD via <a href="https://mesonet.agron.iastate.edu/" target="_blank" rel="noreferrer">Iowa Environmental Mesonet</a>'
 
+/** Triangle drawn for procedure fixes (registered by `ProceduresLayer`, signed-distance so it takes any colour). */
+export const PROC_FIX_IMAGE = 'proc-fix'
+
+/**
+ * Arrivals, departures and approaches from the FAA's CIFP, filled in by
+ * `ProceduresLayer`. Thin blue-grey routes that are strongest at the
+ * approach-control zooms and fade away over the airfield; finals of the
+ * runways in use drawn brighter; the procedure the selected aircraft is
+ * flying (or a tapped one) in the selection lilac.
+ */
+function procedureLayers(p: Palette): LayerSpecification[] {
+  const sat = p.raster === 'satellite'
+  const chart = p.raster === 'chart'
+  const route = chart ? '#33406A' : sat ? '#E4EAFF' : '#8E9CC4'
+  const finalOn = chart ? '#141B33' : sat ? '#FFFFFF' : '#DCE4FF'
+  const hi = chart ? '#5B3DF5' : '#B9A5FF'
+  const label = chart ? '#26304F' : sat ? '#F2F5FF' : '#AEB9D8'
+  const altLabel = chart ? '#4A5680' : sat ? '#D5DCF0' : '#8592B6'
+  const on = ['==', ['get', 'on'], 1]
+  // Strongest where the procedures are what you look at (approach control), quiet over the field.
+  const routeOpacity = (k: number) => ['interpolate', ['linear'], ['zoom'], 7, 0.32 * k, 9, 0.55 * k, 10.5, 0.42 * k, 11.5, 0.22 * k, 12.5, 0.12 * k, 14, 0.05 * k]
+  const fixText = (minZoom: number) => [
+    'step',
+    ['zoom'],
+    '',
+    minZoom,
+    ['format', ['get', 'n'], {}],
+    minZoom + 0.75,
+    ['format', ['get', 'n'], {}, ['case', ['has', 'a'], ['concat', '\n', ['get', 'a']], ''], { 'font-scale': 0.88, 'text-color': altLabel }],
+  ]
+  const fixLayer = (id: string, filter: unknown[], minzoom: number, textZoom: number): LayerSpecification =>
+    ({
+      id,
+      type: 'symbol',
+      source: SRC.procAll,
+      minzoom,
+      filter,
+      layout: {
+        'icon-image': PROC_FIX_IMAGE,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], minzoom, 0.5, 13, 0.7],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'text-field': fixText(textZoom),
+        'text-font': FONT,
+        'text-size': 10,
+        'text-letter-spacing': 0.05,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.55],
+        'text-optional': true,
+        'text-padding': 4,
+      },
+      paint: {
+        'icon-color': route,
+        'icon-opacity': ['interpolate', ['linear'], ['zoom'], minzoom, 0, minzoom + 0.6, 0.85, 13.5, 0.7, 15, 0.25],
+        'text-color': label,
+        'text-opacity': ['interpolate', ['linear'], ['zoom'], textZoom, 0, textZoom + 0.4, 0.9, 13.5, 0.75, 15, 0.3],
+        'text-halo-color': p.labelHalo,
+        'text-halo-width': 1.2,
+      },
+    }) as unknown as LayerSpecification
+  return [
+    { id: 'proc-star', type: 'line', source: SRC.procNet, filter: ['==', ['get', 'k'], 'star'], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': route, 'line-opacity': routeOpacity(1), 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 1.2, 15, 1.4] } },
+    { id: 'proc-sid', type: 'line', source: SRC.procNet, filter: ['==', ['get', 'k'], 'sid'], layout: { 'line-join': 'round' }, paint: { 'line-color': route, 'line-opacity': routeOpacity(0.75), 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 1.2, 15, 1.4], 'line-dasharray': [3, 2.5] } },
+    {
+      id: 'proc-final',
+      type: 'line',
+      source: SRC.procFinal,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': ['case', on, finalOn, route],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 7, ['case', on, 0.55, 0.3], 10, ['case', on, 0.85, 0.5], 13, ['case', on, 0.7, 0.32], 15, ['case', on, 0.35, 0.12]],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 8, ['case', on, 1.3, 0.9], 12, ['case', on, 1.8, 1.2], 15, ['case', on, 2.2, 1.4]],
+      },
+    },
+    { id: 'proc-hi-glow', type: 'line', source: SRC.procHi, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': hi, 'line-opacity': 0.28, 'line-width': 7, 'line-blur': 4 } },
+    { id: 'proc-hi', type: 'line', source: SRC.procHi, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': hi, 'line-opacity': 0.95, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.6, 13, 2.4] } },
+    { id: 'proc-hi-label', type: 'symbol', source: SRC.procHi, minzoom: 8.5, layout: { 'symbol-placement': 'line', 'symbol-spacing': 420, 'text-field': ['get', 'n'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-letter-spacing': 0.04, 'text-offset': [0, -0.9], 'text-max-angle': 30 }, paint: { 'text-color': hi, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
+    // Invisible, finger-wide: what a tap on a procedure finds.
+    { id: LAYER.procHit, type: 'line', source: SRC.procAll, filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 18 } },
+    fixLayer('proc-fix-approach', ['all', ['==', ['get', 'k'], 'fix'], ['has', 'f']], 9.5, 11),
+    fixLayer('proc-fix-route', ['all', ['==', ['get', 'k'], 'fix'], ['!', ['has', 'f']]], 10.5, 11.75),
+  ] as unknown as LayerSpecification[]
+}
+
 /**
  * NEXRAD base-reflectivity mosaic (US, public domain data). The mosaic
  * refreshes every five minutes; `stamp` changes the URL so tiles are refetched.
@@ -549,6 +641,10 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.shadows]: { type: 'geojson', data: empty },
       [SRC.trails]: { type: 'geojson', data: empty, lineMetrics: true },
       [SRC.events]: { type: 'geojson', data: empty },
+      [SRC.procAll]: { type: 'geojson', data: empty },
+      [SRC.procNet]: { type: 'geojson', data: empty },
+      [SRC.procFinal]: { type: 'geojson', data: empty },
+      [SRC.procHi]: { type: 'geojson', data: empty },
     },
     layers: layers(PALETTES[theme]),
   }
