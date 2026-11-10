@@ -145,8 +145,9 @@ const NAVY: Palette = {
   paintFaint: '#6F7790',
   centreLine: '#EEF2FA',
   taxiLine: '#8C7B2F',
-  building: '#2A2D3B',
-  buildingEdge: '#3A3E4F',
+  // Terminals read as slate-grey blocks against the navy ramps (sampled #333647 / #333C4D).
+  building: '#323648',
+  buildingEdge: '#40455A',
   roadMinor: '#1D2640',
   roadMajor: '#212A45',
   motorway: '#252F4C',
@@ -287,8 +288,9 @@ function layers(p: Palette): LayerSpecification[] {
   const paint = !p.hidePaint
   const sat = p.raster === 'satellite'
   const chart = p.raster === 'chart'
-  // On imagery and charts the overlay roads would fight the picture underneath.
-  const roads = base || sat
+  // The reference map shows no streets at all, only the airfield; roads are kept for
+  // satellite imagery, where they help to read the photo.
+  const roads = sat
 
   const list: unknown[] = [
     // Zoomed out the land is a light slate with darker forest, like a dimmed relief map; closer in it settles to navy.
@@ -304,9 +306,9 @@ function layers(p: Palette): LayerSpecification[] {
     { id: 'landuse-residential', type: 'fill', source: 'omt', 'source-layer': 'landuse', filter: ['in', ['get', 'class'], ['literal', ['residential', 'commercial', 'industrial', 'retail']]], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 10, p.farLand, 12.5, p.land] } },
     // Airfield ground is slate; only land the map data marks as grass is painted green on top,
     // so a desert field like Phoenix reads as gravel and O'Hare as lawn, as in the reference.
-    { id: 'aero-infield', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['==', ['get', 'class'], 'aerodrome'], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.shoulder], 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.55, 12, 1] } },
-    { id: 'landcover-wood', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'wood'], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.wood] } },
-    { id: 'landcover-grass', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland', 'wetland']]], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.infield] } },
+    { id: 'aero-infield', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['==', ['get', 'class'], 'aerodrome'], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 10.5, p.far, 12.3, p.shoulder], 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.55, 12, 1] } },
+    { id: 'landcover-wood', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'wood'], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 10.5, p.far, 12.3, p.wood] } },
+    { id: 'landcover-grass', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland', 'wetland']]], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 10.5, p.far, 12.3, p.infield] } },
     { id: 'waterway', type: 'line', source: 'omt', 'source-layer': 'waterway', layout: vis(base), paint: { 'line-color': p.water, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.6, 16, 3] } },
 
     // ---- airfield (OpenStreetMap geometry) ----------------------------------
@@ -314,10 +316,10 @@ function layers(p: Palette): LayerSpecification[] {
     // pavement on top. What shows of the first pass is the band that rings every
     // grass island, and round joins give the islands their rounded corners.
     { id: 'aero-apron-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1], 'line-color': p.shoulder, 'line-width': metres(16) } },
-    { id: 'aero-taxiway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1], 'line-color': p.shoulder, 'line-width': metres(54) } },
+    { id: 'aero-taxiway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1], 'line-color': p.shoulder, 'line-width': metres(66) } },
     { id: 'aero-runway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1], 'line-color': p.shoulder, 'line-width': metres(61) } },
     { id: 'aero-apron', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: vis(base), paint: { 'fill-color': p.apron } },
-    { id: 'aero-taxiway', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0.35, 13.5, 1], 'line-color': p.taxiway, 'line-width': metres(38) } },
+    { id: 'aero-taxiway', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0.35, 13.5, 1], 'line-color': p.taxiway, 'line-width': metres(48) } },
     // OpenStreetMap runway outlines often take in the paved shoulders, so they are
     // shoulder-coloured: the runway proper is the stroke and generated surface on top.
     { id: 'aero-runway-area', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'runway']], layout: vis(base), paint: { 'fill-color': p.shoulder } },
@@ -331,11 +333,11 @@ function layers(p: Palette): LayerSpecification[] {
     { id: 'road-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13.5, filter: ['in', ['get', 'class'], ['literal', ['minor', 'tertiary']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.roadMinor, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 12, 0.5, 16, 4] } },
     // Service roads across the aprons: thin grey dashes, as painted on real ramps.
     { id: 'road-service', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 14.5, filter: ['==', ['get', 'class'], 'service'], layout: { ...vis(roads), 'line-join': 'round' }, paint: { 'line-color': sat ? 'rgba(255,255,255,0.35)' : '#3B4563', 'line-width': ['interpolate', ['linear'], ['zoom'], 14.5, 0.8, 18, 1.6], 'line-dasharray': [4, 3] } },
-    { id: 'road-major-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12.5, filter: ['in', ['get', 'class'], ['literal', ['secondary', 'primary', 'trunk']]], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.roadCase, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 9, 1.2, 16, 9] } },
+    { id: 'road-major-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12.5, filter: ['in', ['get', 'class'], ['literal', ['secondary', 'primary', 'trunk']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.roadCase, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 9, 1.2, 16, 9] } },
     { id: 'road-major', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12.5, filter: ['in', ['get', 'class'], ['literal', ['secondary', 'primary', 'trunk']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.roadMajor, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 9, 0.6, 16, 6] } },
-    { id: 'road-motorway-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 11.5, filter: ['==', ['get', 'class'], 'motorway'], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.roadCase, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 6, 1.4, 16, 12] } },
+    { id: 'road-motorway-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 11.5, filter: ['==', ['get', 'class'], 'motorway'], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.roadCase, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 6, 1.4, 16, 12] } },
     { id: 'road-motorway', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 11.5, filter: ['==', ['get', 'class'], 'motorway'], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.motorway, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 6, 0.7, 16, 8] } },
-    { id: 'rail', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12, filter: ['==', ['get', 'class'], 'rail'], layout: vis(base), paint: { 'line-color': p.rail, 'line-width': 1, 'line-dasharray': [4, 2] } },
+    { id: 'rail', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12, filter: ['==', ['get', 'class'], 'rail'], layout: vis(roads), paint: { 'line-color': p.rail, 'line-width': 1, 'line-dasharray': [4, 2] } },
     { id: 'boundary', type: 'line', source: 'omt', 'source-layer': 'boundary', filter: ['in', ['get', 'admin_level'], ['literal', [2, 4]]], layout: vis(roads), paint: { 'line-color': p.boundary, 'line-width': 1, 'line-dasharray': [3, 2] } },
 
     // Precipitation radar, drawn over the ground but under the airfield paint and aircraft.
@@ -352,9 +354,10 @@ function layers(p: Palette): LayerSpecification[] {
     // A dashed centreline makes runways read as runways long before the paint is legible.
     { id: 'aero-runway-dash', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, maxzoom: 14.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: vis(base), paint: { 'line-color': p.paint, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0.35, 13, 0.6, 14.2, 0], 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 14, 1.2], 'line-dasharray': [5, 4] } },
     // Taxiway centrelines go under the runway pavement, so they stop at the runway edge as in the reference.
-    { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.9], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.6, 16, 1.7, 19, 7] } },
+    { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 14.6, 0, 15.4, 0.9], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.6, 16, 1.7, 19, 7] } },
     // Blast pads beyond the runway ends, with their yellow chevrons.
-    { id: 'apt-pad', type: 'fill', source: SRC.pads, minzoom: 12.5, filter: ['==', ['get', 'kind'], 'pad'], layout: vis(paint), paint: { 'fill-color': p.pad } },
+    // Blast pads: the newest reference draws only the chevrons, straight on the grass.
+    { id: 'apt-pad', type: 'fill', source: SRC.pads, minzoom: 12.5, filter: ['==', ['get', 'kind'], 'pad'], layout: vis(paint), paint: { 'fill-color': p.pad, 'fill-opacity': 0 } },
     // Yellow at about 70%, so they read olive over the pad as in the reference.
     { id: 'apt-pad-chevron', type: 'line', source: SRC.pads, minzoom: 14, filter: ['==', ['get', 'kind'], 'chevron'], layout: { ...vis(paint), 'line-join': 'miter' }, paint: { 'line-color': p.taxiLine, 'line-opacity': 0.75, 'line-width': metres(ownWidth(1.4), 0.6) } },
     { id: 'apt-surface', type: 'fill', source: SRC.surface, minzoom: 10, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'surface'], 'concrete', p.runwayConcrete, p.runway] } },
@@ -444,15 +447,15 @@ function layers(p: Palette): LayerSpecification[] {
     },
 
     // ---- runways in use and occupied gates (fed by RunwayGateLayer) ------------
-    // A soft glow along both edges of an active runway's first stretch, in the
-    // colour of what it is used for; the pavement itself stays as painted.
+    // A glow along an active runway's first stretch, kept but hidden: the
+    // reference map shows runways in use only by the badge on the runway chip.
     {
       id: LAYER.runwayGlow,
       type: 'line',
       source: SRC.runwayUse,
       minzoom: 11,
       filter: ['==', ['get', 'kind'], 'glow'],
-      layout: { 'line-cap': 'butt' },
+      layout: { 'line-cap': 'butt', visibility: 'none' },
       paint: {
         'line-color': ['match', ['get', 'role'], 'arrivals', RUNWAY_USE_COLOR.arrivals, 'departures', RUNWAY_USE_COLOR.departures, RUNWAY_USE_COLOR.both],
         'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0.45, 14, 0.32, 17, 0.26],
@@ -876,7 +879,7 @@ export function applyGroundCover(map: MapLibreMap, theme: MapTheme, arid: boolea
 }
 
 function groundCover(p: Palette, arid: boolean): unknown[] {
-  return ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield]
+  return ['interpolate', ['linear'], ['zoom'], 10.5, p.far, 12.3, arid ? p.shoulder : p.infield]
 }
 
 // ---------------------------------------------------------------------------
@@ -885,38 +888,38 @@ function groundCover(p: Palette, arid: boolean): unknown[] {
 
 /**
  * How each ground colour changes after dark: [brightness kept, saturation kept].
- * Vegetation loses the most colour; pavement and paint dim least, so the
- * airfield still reads under its lights.
+ * Kept gentle on purpose: the reference look (green grass, slate terminals,
+ * navy pavement) must still read at night, with the lights on top.
  */
 const NIGHT_SHADE: Partial<Record<keyof Palette, [number, number]>> = {
-  bg: [0.72, 0.75],
-  water: [0.7, 0.85],
-  land: [0.72, 0.75],
-  wood: [0.6, 0.55],
-  grass: [0.6, 0.55],
-  infield: [0.6, 0.55],
-  far: [0.66, 0.6],
-  farLand: [0.72, 0.75],
-  apron: [0.8, 0.8],
-  taxiway: [0.8, 0.8],
-  shoulder: [0.7, 0.7],
-  pad: [0.7, 0.7],
-  runway: [0.82, 0.8],
-  runwayConcrete: [0.82, 0.8],
-  paint: [0.72, 0.8],
-  paintMid: [0.72, 0.8],
-  paintDim: [0.72, 0.8],
-  paintFaint: [0.72, 0.8],
-  centreLine: [0.78, 1],
-  taxiLine: [0.72, 0.8],
-  building: [0.72, 0.75],
-  buildingEdge: [0.72, 0.75],
-  roadMinor: [0.75, 0.75],
-  roadMajor: [0.75, 0.75],
-  motorway: [0.75, 0.75],
-  roadCase: [0.75, 0.75],
-  rail: [0.75, 0.75],
-  boundary: [0.75, 0.75],
+  bg: [0.902, 0.912],
+  water: [0.895, 0.948],
+  land: [0.902, 0.912],
+  wood: [0.86, 0.843],
+  grass: [0.86, 0.843],
+  infield: [0.86, 0.843],
+  far: [0.881, 0.86],
+  farLand: [0.902, 0.912],
+  apron: [0.93, 0.93],
+  taxiway: [0.93, 0.93],
+  shoulder: [0.895, 0.895],
+  pad: [0.895, 0.895],
+  runway: [0.937, 0.93],
+  runwayConcrete: [0.937, 0.93],
+  paint: [0.902, 0.93],
+  paintMid: [0.902, 0.93],
+  paintDim: [0.902, 0.93],
+  paintFaint: [0.902, 0.93],
+  centreLine: [0.923, 1.0],
+  taxiLine: [0.902, 0.93],
+  building: [0.902, 0.912],
+  buildingEdge: [0.902, 0.912],
+  roadMinor: [0.912, 0.912],
+  roadMajor: [0.912, 0.912],
+  motorway: [0.912, 0.912],
+  roadCase: [0.912, 0.912],
+  rail: [0.912, 0.912],
+  boundary: [0.912, 0.912],
 }
 
 function nightPalette(p: Palette): Palette {
@@ -1226,7 +1229,7 @@ function atmosphereLayers(p: Palette): [string, unknown][] {
     ['waterway', { id: ATMO_LAYER.grassEdge, type: 'line', source: 'omt', 'source-layer': 'landcover', minzoom: 14, filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland', 'wetland']]], layout: vis(base), paint: { 'line-color': rim, 'line-width': 0.5, 'line-opacity': fadeIn(14, 15, 0.3) } }],
     // Under the shoulders, so only the outermost rim shows where bands meet.
     ['aero-apron-shoulder', { id: ATMO_LAYER.apronRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(16), 'line-opacity': fadeIn(14, 15, 0.8) } }],
-    ['aero-apron-shoulder', { id: ATMO_LAYER.taxiwayRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: isTaxiway, layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(54), 'line-opacity': fadeIn(14, 15, 0.8) } }],
+    ['aero-apron-shoulder', { id: ATMO_LAYER.taxiwayRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: isTaxiway, layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(66), 'line-opacity': fadeIn(14, 15, 0.8) } }],
     ['aero-apron-shoulder', { id: ATMO_LAYER.runwayRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(61), 'line-opacity': fadeIn(14, 15, 0.8) } }],
     // Concrete and asphalt grain, only up close.
     ['aero-taxiway', { id: ATMO_LAYER.apronGrain, type: 'fill', source: 'omt', 'source-layer': 'aeroway', minzoom: 15, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: vis(base), paint: { 'fill-pattern': NOISE_IMAGE, 'fill-opacity': fadeIn(15, 16.5) } }],
