@@ -11,7 +11,8 @@
  */
 import type { LayerSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import type { MapTheme } from '../settings/settingsStore'
-import { differs, nightShade } from './lighting/color'
+import { NOISE_IMAGE, SHEEN_IMAGE } from './atmosphere/textures'
+import { differs, formatColor, mixColor, nightShade, parseColor } from './lighting/color'
 
 /** Ids other modules need to reference. */
 export const SRC = {
@@ -95,6 +96,8 @@ type Palette = {
   hideBase: boolean
   /** Hide generated pavement and paint because the imagery already shows the real thing. */
   hidePaint: boolean
+  /** Soft navy aircraft shadows instead of black ones (the neutral and paper themes, where black reads as dirty grey). */
+  softShadows?: { color: string; opacity: number }
 }
 
 const NAVY: Palette = {
@@ -174,6 +177,7 @@ const GRAPHITE: Palette = {
   labelHalo: '#17191C',
   waterLabel: '#4A5A6B',
   approach: '#9AA1AA',
+  softShadows: { color: '#0C1533', opacity: 0.34 },
 }
 
 const SATELLITE: Palette = {
@@ -203,6 +207,7 @@ const CHART: Palette = {
   plane: '#14203B',
   planeEdge: 'rgba(255,255,255,0.95)',
   raster: 'chart',
+  softShadows: { color: '#1B2A55', opacity: 0.17 },
   hideBase: true,
   hidePaint: false,
 }
@@ -296,7 +301,7 @@ function layers(p: Palette): LayerSpecification[] {
     { id: 'aero-runway-line', type: 'line', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-color': p.runway, 'line-width': metres(46) } },
 
     // ---- buildings ----------------------------------------------------------
-    { id: LAYER.buildings, type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 12, layout: vis(base), paint: { 'fill-color': p.building, 'fill-outline-color': p.buildingEdge, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.25, 14.5, 1] } },
+    { id: LAYER.buildings, type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 12, layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 14, p.building, 16.5, roofTone(p)], 'fill-outline-color': p.buildingEdge, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.25, 14.5, 1] } },
 
     // ---- roads --------------------------------------------------------------
     { id: 'road-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13.5, filter: ['in', ['get', 'class'], ['literal', ['minor', 'tertiary']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.roadMinor, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 12, 0.5, 16, 4] } },
@@ -400,7 +405,7 @@ function layers(p: Palette): LayerSpecification[] {
       minzoom: 11.2,
       maxzoom: sat ? 24 : 14,
       layout: {
-        'text-field': ['get', 'ident'],
+        'text-field': runwaySignText(chart),
         'text-font': FONT_BOLD,
         'text-size': ['interpolate', ['linear'], ['zoom'], 11.2, 9, 14, 12],
         'text-letter-spacing': 0.04,
@@ -414,7 +419,7 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.trails, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 0], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 1.6], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(160,178,220,0)', 1, chart ? 'rgba(27,37,64,0.55)' : 'rgba(160,178,220,0.42)'] } },
     { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7C5CFC', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
     { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(124,92,252,0.02)', 0.5, 'rgba(124,92,252,0.5)', 1, 'rgba(168,140,255,1)'] } },
-    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#000000', 'icon-opacity': ['*', chart ? 0.22 : 0.42, ['get', 'o']], 'icon-halo-color': 'rgba(0,0,0,0.4)', 'icon-halo-width': 1.6, 'icon-halo-blur': 1.6 } },
+    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': p.softShadows?.color ?? '#000000', 'icon-opacity': ['*', p.softShadows?.opacity ?? 0.42, ['get', 'o']], 'icon-halo-color': p.softShadows ? tone(p.softShadows.color, 'rgba(0,0,0,0)', 0.6) : 'rgba(0,0,0,0.4)', 'icon-halo-width': p.softShadows ? 2.2 : 1.6, 'icon-halo-blur': p.softShadows ? 2.4 : 1.6 } },
     { id: LAYER.event, type: 'circle', source: SRC.events, paint: { 'circle-radius': ['get', 'r'], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2, 'circle-stroke-opacity': ['get', 'o'], 'circle-pitch-alignment': 'map' } },
     { id: LAYER.ping, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'tx'], 1], paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#F5C518', 'circle-stroke-width': 2, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } },
     // Two flat discs, one inside the other, under whoever is selected or being talked to.
@@ -463,7 +468,7 @@ function layers(p: Palette): LayerSpecification[] {
       paint: { 'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.7, 1]]] },
     },
   ]
-  return list as LayerSpecification[]
+  return withAtmosphere(list as LayerSpecification[], p)
 }
 
 /**
@@ -549,6 +554,7 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.shadows]: { type: 'geojson', data: empty },
       [SRC.trails]: { type: 'geojson', data: empty, lineMetrics: true },
       [SRC.events]: { type: 'geojson', data: empty },
+      ...atmosphereSources(),
     },
     layers: layers(PALETTES[theme]),
   }
@@ -782,4 +788,139 @@ export function lightingLayers(): { layer: LayerSpecification; before: string }[
     { before: 'water-name', layer: bloom(LIGHT_LAYER.runwayBloom, LIGHT_SRC.runway) },
     { before: 'water-name', layer: core(LIGHT_LAYER.runwayCore, LIGHT_SRC.runway) },
   ]
+}
+
+// ---------------------------------------------------------------------------
+// Atmosphere and surface detail: water sheen, pavement grain, tyre marks,
+// hairline edges, roof highlights, jet bridges, stand lead-in lines and painted
+// gate numbers. Each layer is slotted in under a named neighbour, so the rest
+// of the style never has to list them; colours come from the palette, so
+// they darken at night with everything else. Animated and screen-space
+// effects (weather, wind, vignette) live in `atmosphere/AtmosphereLayer`.
+// ---------------------------------------------------------------------------
+
+export const ATMO_SRC = { tyres: 'atmo-tyres', stands: 'atmo-stands' } as const
+
+export const ATMO_LAYER = {
+  sheen: 'atmo-water-sheen',
+  grassEdge: 'atmo-grass-edge',
+  apronRim: 'atmo-apron-rim',
+  taxiwayRim: 'atmo-taxiway-rim',
+  runwayRim: 'atmo-runway-rim',
+  apronGrain: 'atmo-apron-grain',
+  runwayGrain: 'atmo-runway-grain',
+  tyres: 'atmo-tyres',
+  buildingShade: 'atmo-building-shade',
+  leadIn: 'atmo-lead-in',
+  stopBar: 'atmo-stop-bar',
+  roofEdge: 'atmo-roof-edge',
+  jetBridge: 'atmo-jet-bridge',
+  jetBridgeWalk: 'atmo-jet-bridge-walk',
+  gatePaint: 'atmo-gate-paint',
+} as const
+
+/** `a` moved `t` of the way toward `b` (both CSS colours), for tones derived from the palette. */
+function tone(a: string, b: string, t: number): string {
+  const x = parseColor(a)
+  const y = parseColor(b)
+  return x && y ? formatColor(mixColor(x, y, t)) : a
+}
+
+/** Roofs up close: a touch lighter and cooler than the building colour, as sunlit roofs read from above. */
+function roofTone(p: Palette): string {
+  return tone(p.building, '#C9D2EA', 0.09)
+}
+
+/**
+ * Runway designators set like an airfield sign: bold digits, the L/C/R a
+ * lighter weight and tone.
+ */
+function runwaySignText(chart: boolean): unknown[] {
+  const id = ['get', 'ident']
+  const n = ['length', id]
+  const last = ['slice', id, ['-', n, 1]]
+  const letter = chart ? 'rgba(27,37,64,0.75)' : 'rgba(196,204,224,0.8)'
+  return [
+    'case',
+    ['all', ['>', n, 1], ['in', last, 'LCR']],
+    ['format', ['slice', id, 0, ['-', n, 1]], { 'text-font': ['literal', FONT_BOLD] }, last, { 'text-font': ['literal', FONT], 'font-scale': 0.94, 'text-color': letter }],
+    ['format', id, { 'text-font': ['literal', FONT_BOLD] }],
+  ]
+}
+
+function atmosphereSources(): Record<string, { type: 'geojson'; data: typeof empty }> {
+  return { [ATMO_SRC.tyres]: { type: 'geojson', data: empty }, [ATMO_SRC.stands]: { type: 'geojson', data: empty } }
+}
+
+const fadeIn = (z0: number, z1: number, to: unknown = 1): unknown[] => ['interpolate', ['linear'], ['zoom'], z0, 0, z1, to]
+
+/** The detail layers, each with the layer it goes under. */
+function atmosphereLayers(p: Palette): [string, unknown][] {
+  const base = !p.hideBase
+  const paint = !p.hidePaint
+  const isTaxiway = ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']]
+  const rim = tone(p.shoulder, '#FFFFFF', 0.14)
+  const bridge = tone(p.building, '#FFFFFF', 0.12)
+  return [
+    // A slow sheen drifting over open water (the pattern image animates itself).
+    ['landuse-residential', { id: ATMO_LAYER.sheen, type: 'fill', source: 'omt', 'source-layer': 'water', layout: vis(base), paint: { 'fill-pattern': SHEEN_IMAGE, 'fill-opacity': fadeIn(9, 11) } }],
+    // Hairlines: the outer edge of every shoulder band and of the grass, a shade lighter, for crisp islands on retina screens.
+    ['waterway', { id: ATMO_LAYER.grassEdge, type: 'line', source: 'omt', 'source-layer': 'landcover', minzoom: 14, filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland', 'wetland']]], layout: vis(base), paint: { 'line-color': rim, 'line-width': 0.5, 'line-opacity': fadeIn(14, 15, 0.3) } }],
+    // Under the shoulders, so only the outermost rim shows where bands meet.
+    ['aero-apron-shoulder', { id: ATMO_LAYER.apronRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(16), 'line-opacity': fadeIn(14, 15, 0.8) } }],
+    ['aero-apron-shoulder', { id: ATMO_LAYER.taxiwayRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: isTaxiway, layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(54), 'line-opacity': fadeIn(14, 15, 0.8) } }],
+    ['aero-apron-shoulder', { id: ATMO_LAYER.runwayRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(61), 'line-opacity': fadeIn(14, 15, 0.8) } }],
+    // Concrete and asphalt grain, only up close.
+    ['aero-taxiway', { id: ATMO_LAYER.apronGrain, type: 'fill', source: 'omt', 'source-layer': 'aeroway', minzoom: 15, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: vis(base), paint: { 'fill-pattern': NOISE_IMAGE, 'fill-opacity': fadeIn(15, 16.5) } }],
+    ['apt-hold-band', { id: ATMO_LAYER.runwayGrain, type: 'fill', source: SRC.surface, minzoom: 15, layout: vis(paint), paint: { 'fill-pattern': NOISE_IMAGE, 'fill-opacity': fadeIn(15, 16.5) } }],
+    // Rubber laid down in the touchdown zones: soft dark streaks along the main-gear tracks.
+    [
+      'apt-hold-band',
+      {
+        id: ATMO_LAYER.tyres,
+        type: 'line',
+        source: ATMO_SRC.tyres,
+        minzoom: 13.6,
+        layout: { ...vis(paint), 'line-cap': 'round' },
+        paint: {
+          'line-color': tone(p.runway, '#000000', 0.6),
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 15, ['get', 'o']],
+          'line-width': metres(ownWidth(1.5)),
+          'line-blur': ['interpolate', ['linear'], ['zoom'], 14, ['*', 0.25, ['get', 'w']], 16, ['*', 1, ['get', 'w']], 18, ['*', 4, ['get', 'w']]],
+        },
+      },
+    ],
+    // Buildings cast a small soft shadow down and to the right, so they sit up off the apron.
+    [LAYER.buildings, { id: ATMO_LAYER.buildingShade, type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 14, layout: vis(base), paint: { 'fill-color': tone(p.bg, '#000000', 0.7), 'fill-opacity': fadeIn(14, 15.5, 0.42), 'fill-translate': ['interpolate', ['linear'], ['zoom'], 14, ['literal', [0.8, 1.2]], 17, ['literal', [2.5, 3.5]]], 'fill-translate-anchor': 'viewport', 'fill-antialias': false } }],
+    // Stand lead-in lines and stop bars, painted on the apron under the jet bridges.
+    [LAYER.buildings, { id: ATMO_LAYER.leadIn, type: 'line', source: ATMO_SRC.stands, minzoom: 15.6, filter: ['==', ['get', 'kind'], 'lead'], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': fadeIn(15.6, 16.4, 0.85), 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 15.6, 0.7, 17, 1.2, 19, 4.2] } }],
+    [LAYER.buildings, { id: ATMO_LAYER.stopBar, type: 'line', source: ATMO_SRC.stands, minzoom: 16, filter: ['==', ['get', 'kind'], 'stop'], layout: { ...vis(paint), 'line-cap': 'butt' }, paint: { 'line-color': p.taxiLine, 'line-opacity': fadeIn(16, 16.8, 0.85), 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 16, 1, 17, 1.6, 19, 6] } }],
+    // A lighter rim along every roof edge, and the jet bridges (picked out of the bridge outlines by size) as their own pale shapes.
+    ['road-minor', { id: ATMO_LAYER.roofEdge, type: 'line', source: 'omt', 'source-layer': 'building', minzoom: 14.5, layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-color': tone(p.building, '#FFFFFF', 0.2), 'line-width': 0.75, 'line-opacity': fadeIn(14.5, 16, 0.75) } }],
+    ['road-minor', { id: ATMO_LAYER.jetBridge, type: 'fill', source: ATMO_SRC.stands, minzoom: 15.2, filter: ['==', ['get', 'kind'], 'bridge'], layout: vis(base), paint: { 'fill-color': bridge, 'fill-outline-color': tone(p.building, '#FFFFFF', 0.26), 'fill-opacity': fadeIn(15.2, 15.8) } }],
+    ['road-minor', { id: ATMO_LAYER.jetBridgeWalk, type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 15, filter: ['all', ['==', ['get', 'class'], 'path'], ['==', ['get', 'brunnel'], 'bridge']], layout: { ...vis(base), 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': bridge, 'line-width': metres(3.4, 1), 'line-opacity': fadeIn(15, 16) } }],
+    // Gate numbers painted on the stand, read along the lead-in line, once the stands are big enough.
+    [
+      'aero-gate-dot',
+      {
+        id: ATMO_LAYER.gatePaint,
+        type: 'symbol',
+        source: ATMO_SRC.stands,
+        minzoom: 16.6,
+        filter: ['==', ['get', 'kind'], 'num'],
+        layout: { ...vis(paint), 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['exponential', 2], ['zoom'], 16.6, 8, 18, 16, 19, 24], 'text-rotate': ['get', 'rot'], 'text-rotation-alignment': 'map', 'text-pitch-alignment': 'map', 'text-letter-spacing': 0.06, 'text-padding': 1 },
+        paint: { 'text-color': p.taxiLine, 'text-opacity': fadeIn(16.6, 17.2, 0.85) },
+      },
+    ],
+  ]
+}
+
+/** The style's layers with the detail layers slotted in under their neighbours. */
+function withAtmosphere(list: LayerSpecification[], p: Palette): LayerSpecification[] {
+  const out = [...list]
+  for (const [before, layer] of atmosphereLayers(p)) {
+    const i = out.findIndex((l) => l.id === before)
+    out.splice(i < 0 ? out.length : i, 0, layer as LayerSpecification)
+  }
+  return out
 }
