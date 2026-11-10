@@ -25,7 +25,7 @@ import { CloseButton } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
 import { buildAirportDiagram, runwayEnds, widthScale } from './airportDiagram'
 import { distanceM, offset, type LngLat } from './geo'
-import { LAYER, RUNWAY_USE_COLOR, SRC } from './mapStyle'
+import { LAYER, SRC } from './mapStyle'
 
 const TICK_MS = 2000
 /** Gates further than this from the airport's centre belong to someone else's map. */
@@ -41,25 +41,20 @@ function setData(map: MapLibreMap, id: string, data: FeatureCollection) {
 
 // ---- images ---------------------------------------------------------------
 
-// Google Material Icons "flight_land" and "flight_takeoff" (round style; Apache License 2.0,
-// https://github.com/google/material-design-icons): the familiar airport-signage pictograms.
-const LANDING =
-  'M20.5 19h-17c-.55 0-1 .45-1 1s.45 1 1 1h17c.55 0 1-.45 1-1s-.45-1-1-1zM3.51 11.61l15.83 4.24c.8.21 1.62-.26 1.84-1.06.21-.8-.26-1.62-1.06-1.84l-5.31-1.42-2.58-8.45a1.08 1.08 0 0 0-.75-.73c-.68-.18-1.35.33-1.35 1.04v6.88L5.15 8.95 4.4 7.09a.991.991 0 0 0-.67-.59l-.33-.09a.495.495 0 0 0-.63.48v3.75c0 .46.3.85.74.97z'
-const TAKEOFF =
-  'M20.5 19h-17c-.55 0-1 .45-1 1s.45 1 1 1h17c.55 0 1-.45 1-1s-.45-1-1-1zm1.57-9.36c-.22-.8-1.04-1.27-1.84-1.06L14.92 10 8.46 3.98a1.06 1.06 0 0 0-1.02-.25c-.68.19-1 .97-.65 1.58l3.44 5.96-4.97 1.33-1.57-1.24c-.25-.19-.57-.26-.88-.18l-.33.09c-.32.08-.47.45-.3.73l1.88 3.25c.23.39.69.58 1.12.47L21 11.48c.8-.22 1.28-1.04 1.07-1.84z'
+/** Badge colours: the runway-use hues, a shade muted so the badge stays quiet on the map. */
+const BADGE_COLOR = { arrivals: '#3BB56A', departures: '#4A8FE0' } as const
 
 /**
- * Runway-in-use badge: a small, quiet disc beside the runway's designator,
- * with a landing pictogram in green for arrivals or a takeoff pictogram in
- * blue for departures; two discs, slightly overlapped, when the runway does
- * both. Small and translucent so it reads as a hint, not a marker.
+ * Runway-in-use badge (style 7 of the options the owner picked from): a solid,
+ * slightly translucent disc in a muted green for arrivals or blue for
+ * departures, a white arrow (down: landing, up: takeoff) and a thin white
+ * border. Two overlapping discs when the runway does both.
  */
 function badge(role: 'arrivals' | 'departures' | 'both'): ImageData {
   const s = 2 // drawn at 2× for sharpness
   const r = 7 * s // disc radius: 14 px across on screen
   const pad = 2 * s // room for the soft shadow
   const step = r * 1.6 // centre-to-centre when two discs share a badge
-  const glyph = 9.5 * s // pictogram size inside the disc
   const roles: ('arrivals' | 'departures')[] = role === 'both' ? ['arrivals', 'departures'] : [role]
   const canvas = document.createElement('canvas')
   canvas.width = Math.ceil(pad * 2 + r * 2 + (roles.length - 1) * step)
@@ -68,29 +63,35 @@ function badge(role: 'arrivals' | 'departures' | 'both'): ImageData {
   const cy = canvas.height / 2
   roles.forEach((kind, i) => {
     const cx = pad + r + i * step
-    const colour = RUNWAY_USE_COLOR[kind]
-    // Dark centre with a faint shadow, so it sits on grass or pavement alike.
+    // Disc, with a faint shadow so it lifts off grass and pavement alike.
     ctx.save()
     ctx.shadowColor = 'rgba(0,0,0,0.35)'
     ctx.shadowBlur = 2 * s
     ctx.beginPath()
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(16,20,34,0.85)'
+    ctx.fillStyle = BADGE_COLOR[kind] + 'D9'
     ctx.fill()
     ctx.restore()
-    // Thin ring in the runway's colour.
+    // Thin white border.
+    const ring = 0.12 * r
     ctx.beginPath()
-    ctx.arc(cx, cy, r - 0.6 * s, 0, Math.PI * 2)
-    ctx.lineWidth = 1 * s
-    ctx.strokeStyle = colour + '99'
+    ctx.arc(cx, cy, r - ring / 2, 0, Math.PI * 2)
+    ctx.lineWidth = ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'
     ctx.stroke()
-    // The pictogram, centred (the glyphs sit in a 24-unit box with the plane slightly high).
-    ctx.save()
-    ctx.translate(cx - glyph / 2, cy - glyph / 2 - 0.3 * s)
-    ctx.scale(glyph / 24, glyph / 24)
-    ctx.fillStyle = colour
-    ctx.fill(new Path2D(kind === 'arrivals' ? LANDING : TAKEOFF))
-    ctx.restore()
+    // White arrow: up for takeoff, down for landing.
+    const d = kind === 'departures' ? -1 : 1
+    ctx.strokeStyle = '#FFFFFF'
+    ctx.lineWidth = 0.18 * r
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    ctx.moveTo(cx, cy - d * r * 0.45)
+    ctx.lineTo(cx, cy + d * r * 0.45)
+    ctx.moveTo(cx - r * 0.36, cy + d * r * 0.1)
+    ctx.lineTo(cx, cy + d * r * 0.47)
+    ctx.lineTo(cx + r * 0.36, cy + d * r * 0.1)
+    ctx.stroke()
   })
   return ctx.getImageData(0, 0, canvas.width, canvas.height)
 }
