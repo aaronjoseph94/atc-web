@@ -171,7 +171,7 @@ export type Weather = {
 }
 
 // ---------------------------------------------------------------------------
-// Flight details (route, airframe, photo)
+// Flight details (route, airframe)
 // ---------------------------------------------------------------------------
 
 export type RouteAirport = {
@@ -193,10 +193,4 @@ export type FlightInfo = {
   manufacturer: string | null
   registration: string | null
   owner: string | null
-  photo: {
-    thumbnail: string
-    /** Page to link to; photo sites require the link back. */
-    link: string | null
-    photographer: string | null
-  } | null
 }

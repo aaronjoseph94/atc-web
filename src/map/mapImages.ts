@@ -2,311 +2,102 @@
  * Every bitmap the map style references, drawn at runtime with canvas so the
  * app ships no image assets:
  *
- *  - aircraft silhouettes (self-authored, CC0), one per broad airframe class,
- *    as shaded artwork in white and in yellow, plus a signed-distance-field
- *    mask of each for the soft shadow;
+ *  - aircraft, one drawing per broad airframe class (see `src/aircraft`), as
+ *    shaded artwork in white and in yellow (the highlighted aircraft), plus a
+ *    signed-distance-field silhouette of each for the soft shadow;
  *  - the callsign tag plates.
  */
 import type { Map as MapLibreMap } from 'maplibre-gl'
+import { shapeFor } from '../aircraft/classify'
+import { maskToSdf } from '../aircraft/distance'
+import { paintPrepared, prepareAircraft, silhouetteRGBA } from '../aircraft/render'
+import { getShape, SHAPE_IDS, type ShapeId } from '../aircraft/shapes'
 
-const SIZE = 96
-const C = SIZE / 2
+export { maskToSdf }
 
-type Draw = (ctx: CanvasRenderingContext2D) => void
+export type AircraftIcon = ShapeId
 
-/** Fill a shape given as its right-hand half; the left half is mirrored. */
-function mirrored(ctx: CanvasRenderingContext2D, half: [number, number][]) {
-  ctx.beginPath()
-  half.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)))
-  for (let i = half.length - 1; i >= 0; i--) ctx.lineTo(-half[i][0], half[i][1])
-  ctx.closePath()
-  ctx.fill()
+/**
+ * Every icon fills the same box: 48 CSS px at `icon-size` 1, with the
+ * drawing's longer side across 78% of it. `ICON_SCALE` then sizes the classes
+ * against each other.
+ */
+const BOX = 48
+const FILL = 0.78
+/** Pixel size of the shaded artwork. Large, because close in the icons are drawn several times their base size (and twice that on retina). */
+const ART = 384
+/** Pixel size of the distance-field silhouettes; shadows are soft, so they can be coarse. */
+const SDF = 96
+
+const REFERENCE_LENGTH = 39.5 // the narrow-body drawing (737-800)
+
+/**
+ * Relative drawn size per class, so a 747 reads bigger than a Cessna. Real
+ * size compressed (to the power 0.62, about what the reference app does), with
+ * a floor so light aircraft and helicopters stay easy to see and tap (the
+ * helicopter a little larger, so its rotor disc reads).
+ */
+export const ICON_SCALE = Object.fromEntries(
+  SHAPE_IDS.map((id) => {
+    const s = getShape(id)
+    const rel = (Math.max(s.span, s.length) / REFERENCE_LENGTH) ** 0.62
+    const floor = id === 'ac-vehicle' || id === 'ac-dot' ? 0 : id === 'ac-heli' ? 0.68 : 0.62
+    const fixed: Partial<Record<ShapeId, number>> = { 'ac-vehicle': 0.4, 'ac-dot': 0.42 }
+    return [id, Math.round((fixed[id] ?? Math.max(floor, rel)) * 1000) / 1000]
+  }),
+) as Record<AircraftIcon, number>
+
+/** Rotor frames for helicopters in the air: the blades turn a third of a quarter-turn per frame. */
+export const ROTOR_FRAMES = 3
+const ROTOR_FRAME_MS = 70
+
+/**
+ * Image id to draw for an aircraft this frame: helicopters in the air cycle
+ * through rotor frames (held still when motion is reduced).
+ */
+export function iconImage(icon: AircraftIcon, airborne: boolean, tMs: number, reduceMotion: boolean): string {
+  if (icon !== 'ac-heli' || !airborne || reduceMotion) return icon
+  const f = Math.floor(tMs / ROTOR_FRAME_MS) % ROTOR_FRAMES
+  return f === 0 ? icon : `${icon}-r${f}`
 }
 
-/** Rounded fuselage from nose (−len/2) to tail (+len/2). */
-function fuselage(ctx: CanvasRenderingContext2D, len: number, width: number) {
-  const h = len / 2
-  const w = width / 2
-  ctx.beginPath()
-  ctx.moveTo(0, -h)
-  ctx.bezierCurveTo(w, -h, w, -h + width * 1.6, w, -h + width * 2.4)
-  ctx.lineTo(w, h - width * 2.2)
-  ctx.bezierCurveTo(w, h - width, w * 0.4, h, 0, h)
-  ctx.bezierCurveTo(-w * 0.4, h, -w, h - width, -w, h - width * 2.2)
-  ctx.lineTo(-w, -h + width * 2.4)
-  ctx.bezierCurveTo(-w, -h + width * 1.6, -w, -h, 0, -h)
-  ctx.closePath()
-  ctx.fill()
+/** Image ids drawn from one shape: the shape itself, plus rotor frames for the helicopter, each with its rotor angle. */
+function frames(shape: ShapeId): { id: string; angle: number }[] {
+  // Blades start on the diagonals, like an X over the cabin.
+  const base = Math.PI / 4
+  if (shape !== 'ac-heli') return [{ id: shape, angle: base }]
+  return Array.from({ length: ROTOR_FRAMES }, (_, f) => ({ id: f === 0 ? shape : `${shape}-r${f}`, angle: base + (f * Math.PI) / 2 / ROTOR_FRAMES }))
 }
 
-function pod(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  for (const sx of [-1, 1]) {
-    ctx.beginPath()
-    ctx.roundRect(sx * x - w / 2, y, w, h, w / 2)
-    ctx.fill()
-  }
+/** Which shape an image id belongs to (`ac-heli-r2-hi` → `ac-heli`), or null if it isn't an aircraft image. */
+export function shapeOfImage(id: string): ShapeId | null {
+  const base = id.replace(/-(hi|sdf)$/, '').replace(/-r\d+$/, '')
+  return (SHAPE_IDS as string[]).includes(base) ? (base as ShapeId) : null
 }
 
-/** Swept-wing airliner; the parameters cover narrow-bodies through the 747. */
-function airliner(o: { len: number; body: number; span: number; sweep: number; chord: number; wingY: number; engines: [number, number][]; engine: [number, number]; tail: number }): Draw {
-  return (ctx) => {
-    fuselage(ctx, o.len, o.body)
-    const b = o.body / 2
-    // Main wing: leading edge sweeps back to the tip, trailing edge kinks at the root.
-    mirrored(ctx, [
-      [b - 1, o.wingY],
-      [o.span, o.wingY + o.sweep],
-      [o.span, o.wingY + o.sweep + 3.4],
-      [b + 6, o.wingY + o.chord + 1],
-      [b - 1, o.wingY + o.chord + 4],
-    ])
-    for (const [x, y] of o.engines) pod(ctx, x, y, o.engine[0], o.engine[1])
-    // Tailplane.
-    const ty = o.len / 2 - 11
-    mirrored(ctx, [
-      [b - 1.5, ty],
-      [o.tail, ty + 7],
-      [o.tail, ty + 9.5],
-      [1, ty + 7.5],
-    ])
-  }
-}
-
-const SHAPES: Record<string, Draw> = {
-  // Narrow-body twin: 737, A320 family, 757.
-  'ac-jet': airliner({ len: 72, body: 9.2, span: 34, sweep: 14, chord: 11.5, wingY: -9, engines: [[13.5, -10]], engine: [6.6, 12], tail: 14.5 }),
-  // Wide-body twin: 777, 787, A330, A350.
-  'ac-heavy': airliner({ len: 80, body: 11, span: 40, sweep: 17, chord: 13.5, wingY: -11, engines: [[15.5, -13]], engine: [8, 15], tail: 17 }),
-  // Four engines: 747, A380, A340.
-  'ac-quad': airliner({ len: 82, body: 11.6, span: 42, sweep: 18, chord: 14, wingY: -12, engines: [[14, -14], [26, -5]], engine: [6.8, 13], tail: 17.5 }),
-  // Rear-engined regional and business jets: CRJ, ERJ-145, Citation, Gulfstream.
-  'ac-regional': (ctx) => {
-    fuselage(ctx, 68, 7.6)
-    mirrored(ctx, [
-      [2.2, -1],
-      [27, 11],
-      [27, 14],
-      [8, 9],
-      [2.2, 11],
-    ])
-    pod(ctx, 6.6, 12, 4.6, 11)
-    mirrored(ctx, [
-      [0.8, 25],
-      [12, 31],
-      [12, 33.5],
-      [0.8, 31],
-    ])
-  },
-  // Twin turboprop: Dash 8, ATR, King Air.
-  'ac-turboprop': (ctx) => {
-    fuselage(ctx, 62, 7.8)
-    mirrored(ctx, [
-      [2.4, -9],
-      [31, -6.5],
-      [31, -2.5],
-      [2.4, 0.5],
-    ])
-    pod(ctx, 11.5, -16, 5, 13)
-    mirrored(ctx, [
-      [1, 21],
-      [12.5, 23],
-      [12.5, 26.5],
-      [1, 27.5],
-    ])
-  },
-  // Light piston single: Cessna 172, Cirrus, Piper.
-  'ac-light': (ctx) => {
-    fuselage(ctx, 50, 6)
-    ctx.beginPath()
-    ctx.roundRect(-33, -12, 66, 9, 3)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.roundRect(-12, 16, 24, 6, 2.5)
-    ctx.fill()
-  },
-  // Helicopter: body, tail boom, crossed rotor blades.
-  'ac-heli': (ctx) => {
-    ctx.beginPath()
-    ctx.ellipse(0, -4, 8, 14, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.roundRect(-2, 6, 4, 26, 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.roundRect(-7, 28, 14, 3.4, 1.7)
-    ctx.fill()
-    ctx.save()
-    ctx.translate(0, -4)
-    for (const a of [Math.PI / 4, -Math.PI / 4]) {
-      ctx.save()
-      ctx.rotate(a)
-      ctx.beginPath()
-      ctx.roundRect(-34, -2, 68, 4, 2)
-      ctx.fill()
-      ctx.restore()
+/**
+ * Add one shape's images: shaded white, shaded yellow for the highlighted
+ * aircraft, and a distance-field mask the shadow layer can tint and blur
+ * (times the rotor frames for the helicopter). The shading is worked out once
+ * and coloured twice.
+ */
+function addShape(map: MapLibreMap, id: ShapeId) {
+  const shape = getShape(id)
+  const maxDim = Math.max(shape.span, shape.length)
+  const list = frames(id)
+  const opts = { pixelRatio: ART / BOX }
+  if (list.some((f) => !map.hasImage(f.id) || !map.hasImage(`${f.id}-hi`))) {
+    const prepared = prepareAircraft(shape, { width: ART, height: ART, ppm: (ART * FILL) / maxDim, halo: true })
+    for (const f of list) {
+      if (!map.hasImage(f.id)) map.addImage(f.id, paintPrepared(prepared, 'white', f.angle), opts)
+      if (!map.hasImage(`${f.id}-hi`)) map.addImage(`${f.id}-hi`, paintPrepared(prepared, 'yellow', f.angle), opts)
     }
-    ctx.restore()
-  },
-  // Heading unknown (usually parked): a plain marker that doesn't pretend to point anywhere.
-  'ac-dot': (ctx) => {
-    ctx.beginPath()
-    ctx.arc(0, 0, 13, 0, Math.PI * 2)
-    ctx.fill()
-  },
-  // Ground vehicles that carry a transponder (tugs, follow-me cars, fire trucks).
-  'ac-vehicle': (ctx) => {
-    ctx.beginPath()
-    ctx.roundRect(-10, -17, 20, 34, 5)
-    ctx.fill()
-  },
-}
-
-export type AircraftIcon = 'ac-jet' | 'ac-heavy' | 'ac-quad' | 'ac-regional' | 'ac-turboprop' | 'ac-light' | 'ac-heli' | 'ac-dot' | 'ac-vehicle'
-
-/** Relative drawn size per class, so a 747 reads bigger than a Cessna. */
-export const ICON_SCALE: Record<AircraftIcon, number> = {
-  'ac-jet': 1,
-  'ac-heavy': 1.22,
-  'ac-quad': 1.34,
-  'ac-regional': 0.84,
-  'ac-turboprop': 0.8,
-  'ac-light': 0.6,
-  'ac-heli': 0.7,
-  'ac-dot': 0.42,
-  'ac-vehicle': 0.4,
-}
-
-// ---------------------------------------------------------------------------
-// Signed distance field (Felzenszwalb & Huttenlocher exact transform)
-// ---------------------------------------------------------------------------
-
-const INF = 1e20
-
-function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array) {
-  let k = 0
-  v[0] = 0
-  z[0] = -INF
-  z[1] = INF
-  for (let q = 1; q < n; q++) {
-    let s: number
-    do {
-      const r = v[k]
-      s = (f[q] + q * q - (f[r] + r * r)) / (2 * q - 2 * r)
-    } while (s <= z[k] && --k > -1)
-    k++
-    v[k] = q
-    z[k] = s
-    z[k + 1] = INF
   }
-  k = 0
-  for (let q = 0; q < n; q++) {
-    while (z[k + 1] < q) k++
-    const r = v[k]
-    d[q] = (q - r) * (q - r) + f[r]
+  for (const f of list) {
+    if (map.hasImage(`${f.id}-sdf`)) continue
+    const mask = silhouetteRGBA(shape, SDF, SDF, (SDF * FILL) / maxDim, f.angle)
+    map.addImage(`${f.id}-sdf`, new ImageData(maskToSdf(mask.data, SDF, SDF) as Uint8ClampedArray<ArrayBuffer>, SDF, SDF), { sdf: true, pixelRatio: SDF / BOX })
   }
-}
-
-function edt(grid: Float64Array, w: number, h: number) {
-  const n = Math.max(w, h)
-  const f = new Float64Array(n)
-  const d = new Float64Array(n)
-  const v = new Int32Array(n)
-  const z = new Float64Array(n + 1)
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) f[y] = grid[y * w + x]
-    edt1d(f, h, d, v, z)
-    for (let y = 0; y < h; y++) grid[y * w + x] = d[y]
-  }
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) f[x] = grid[y * w + x]
-    edt1d(f, w, d, v, z)
-    for (let x = 0; x < w; x++) grid[y * w + x] = Math.sqrt(d[x])
-  }
-}
-
-/**
- * Turn an alpha mask into the distance field MapLibre expects for
- * `sdf: true` images: 0.75 on the edge, falling off over an 8 px radius.
- */
-export function maskToSdf(alpha: Uint8ClampedArray, w: number, h: number, radius = 8): Uint8ClampedArray {
-  const outside = new Float64Array(w * h)
-  const inside = new Float64Array(w * h)
-  for (let i = 0; i < w * h; i++) {
-    const a = alpha[i * 4 + 3] / 255
-    // Anti-aliased edge pixels seed sub-pixel distances.
-    outside[i] = a >= 1 ? 0 : a <= 0 ? INF : Math.max(0, 0.5 - a) ** 2
-    inside[i] = a >= 1 ? INF : a <= 0 ? 0 : Math.max(0, a - 0.5) ** 2
-  }
-  edt(outside, w, h)
-  edt(inside, w, h)
-  const out = new Uint8ClampedArray(w * h * 4)
-  for (let i = 0; i < w * h; i++) {
-    const d = outside[i] - inside[i]
-    out[i * 4 + 3] = Math.round(255 * Math.min(1, Math.max(0, 0.75 - d / radius)))
-  }
-  return out
-}
-
-function silhouette(draw: Draw): ImageData {
-  const canvas = document.createElement('canvas')
-  canvas.width = SIZE
-  canvas.height = SIZE
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
-  ctx.translate(C, C)
-  ctx.fillStyle = '#fff'
-  draw(ctx)
-  const mask = ctx.getImageData(0, 0, SIZE, SIZE)
-  return new ImageData(maskToSdf(mask.data, SIZE, SIZE) as Uint8ClampedArray<ArrayBuffer>, SIZE, SIZE)
-}
-
-/** Pixel size of the shaded artwork. Large, because close in the icons are drawn several times their base size. */
-const ART = 256
-
-const TONES = {
-  // Bright along the fuselage, falling to a cool grey at the wingtips.
-  white: { core: '#FFFFFF', edge: '#BFC8D8', rim: 'rgba(8,12,28,0.6)' },
-  // The highlighted aircraft: the same shading in signal yellow.
-  yellow: { core: '#FFE06A', edge: '#F0A400', rim: 'rgba(70,40,0,0.7)' },
-} as const
-
-/**
- * The silhouette as shaded artwork: lit down the centreline, darker toward
- * the wingtips, with a soft dark rim so it reads on any background.
- */
-function artwork(draw: Draw, tone: keyof typeof TONES): ImageData {
-  const t = TONES[tone]
-  const canvas = document.createElement('canvas')
-  canvas.width = ART
-  canvas.height = ART
-  const ctx = canvas.getContext('2d')!
-  ctx.scale(ART / SIZE, ART / SIZE)
-  ctx.translate(C, C)
-  ctx.fillStyle = '#fff'
-  draw(ctx)
-
-  // Shade only where the silhouette already is.
-  ctx.globalCompositeOperation = 'source-atop'
-  const across = ctx.createLinearGradient(-42, 0, 42, 0)
-  across.addColorStop(0, t.edge)
-  across.addColorStop(0.42, t.core)
-  across.addColorStop(0.58, t.core)
-  across.addColorStop(1, t.edge)
-  ctx.fillStyle = across
-  ctx.fillRect(-C, -C, SIZE, SIZE)
-  // A little weight toward the tail so the nose reads as the front.
-  const along = ctx.createLinearGradient(0, -40, 0, 40)
-  along.addColorStop(0, 'rgba(255,255,255,0.18)')
-  along.addColorStop(1, 'rgba(20,30,60,0.16)')
-  ctx.fillStyle = along
-  ctx.fillRect(-C, -C, SIZE, SIZE)
-
-  // Rim, drawn underneath.
-  ctx.globalCompositeOperation = 'destination-over'
-  ctx.shadowColor = t.rim
-  ctx.shadowBlur = 5
-  ctx.fillStyle = t.rim
-  draw(ctx)
-  return ctx.getImageData(0, 0, ART, ART)
 }
 
 // ---------------------------------------------------------------------------
@@ -343,21 +134,21 @@ function plate(p: Plate): { data: ImageData; inset: number } {
   return { data: ctx.getImageData(0, 0, s, s), inset: Math.ceil(p.radius + sw) }
 }
 
-/** Register every image the style uses. Safe to call again (e.g. after a context restore). */
-export function ensureMapImages(map: MapLibreMap) {
-  const artRatio = (2 * ART) / SIZE
-  for (const [id, draw] of Object.entries(SHAPES)) {
-    // Three versions of each: shaded white, shaded yellow for the highlighted
-    // aircraft, and a distance-field mask the shadow layer can tint and blur.
-    if (!map.hasImage(id)) map.addImage(id, artwork(draw, 'white'), { pixelRatio: artRatio })
-    if (!map.hasImage(`${id}-hi`)) map.addImage(`${id}-hi`, artwork(draw, 'yellow'), { pixelRatio: artRatio })
-    if (!map.hasImage(`${id}-sdf`)) map.addImage(`${id}-sdf`, silhouette(draw), { sdf: true, pixelRatio: 2 })
-  }
-  for (const [id, p] of Object.entries(PLATES)) {
-    if (map.hasImage(id)) continue
+/**
+ * Register the images the style uses. Safe to call again (e.g. after a context
+ * restore). Aircraft artwork takes a few tens of milliseconds per class to
+ * shade, so with `id` (from MapLibre's `styleimagemissing`) only that class is
+ * drawn; without it, only the classes in `eager` are drawn up front.
+ */
+export function ensureMapImages(map: MapLibreMap, id?: string, eager: ShapeId[] = ['ac-jet']) {
+  const shape = id ? shapeOfImage(id) : null
+  if (shape) addShape(map, shape)
+  else if (!id) for (const s of eager) addShape(map, s)
+  for (const [plateId, p] of Object.entries(PLATES)) {
+    if (map.hasImage(plateId)) continue
     const { data, inset } = plate(p)
     const s = data.width
-    map.addImage(id, data, {
+    map.addImage(plateId, data, {
       pixelRatio: 2,
       stretchX: [[inset, s - inset]],
       stretchY: [[inset, s - inset]],
@@ -366,50 +157,10 @@ export function ensureMapImages(map: MapLibreMap) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Which silhouette for which aircraft
-// ---------------------------------------------------------------------------
-
-const QUAD = /^(B74|A38|A34|IL9|A124|A225|C5M|B52|IL76|C17)/
-const HEAVY = /^(B76|B77|B78|A30|A31|A33|A35|MD11|DC10|L101|B3XM|IL96|C135|K35)/
-const REGIONAL = /^(CRJ|CL[236]|E13|E14|E45|E35|E50P|E55P|E545|E550|C25|C5[0-9]|C6[0-9]|C7[0-9]|GL|G[1-7][0-9]{2}|GLF|GLEX|LJ|F2TH|F900|FA[5-8]|H25|HA4T|BE40|PC24|SF50|PRM1|ASTR|G150|G280)/
-const TURBOPROP = /^(DH8|AT[4-7]|B190|B350|BE20|BE9|BE99|SW[34]|SF34|E120|C208|PC12|TBM|P180|JS[34]|D328|AN2[46]|L410|PA4[26]|C441|C425|DHC[67]|SH3|F50|E110|M28|P46T)/
-const HELI = /^(H[0-9]|EC|AS[3-6]|B0[67]|B2[01]|B4[0-9]|R22|R44|R66|S76|S92|UH|AH|CH|MD[56]|A10[59]|A139|A169|B429|B505|BK17|EH10|S61|S70|KMAX|MI)/
-const LIGHT = /^(C1[0-9]{2}|C2[0-1][0-9]|C17|C18|C20|C21|P28|PA[1-3]|SR2|DA[24]|M20|BE[23][356]|BE5[58]|BE76|AA5|RV|DR40|TB[12]|C77|C82|P32|PA32|PA34|PA44|DV20|EV97|TECN|P92|P20|C150|C152|C162|CH7|S22T|LA4|GLID|ULAC|BALL)/
-
 /**
- * Pick a silhouette from the type designator when we have one, else from the
- * ADS-B emitter category, else assume an airliner (by far the commonest thing
- * at these airports).
+ * Pick a drawing from the type designator when we have one, else from the
+ * ADS-B emitter category, else assume an airliner. See `src/aircraft/classify.ts`.
  */
 export function iconFor(a: { type?: string | null; category?: string | null; headingKnown?: boolean; onGround: boolean; speedKt: number | null }): AircraftIcon {
-  const cat = a.category ?? ''
-  if (cat.startsWith('C')) return 'ac-vehicle'
-  // No heading and not moving: don't draw something that points.
-  if (a.headingKnown === false && a.onGround && (a.speedKt ?? 0) < 4) return 'ac-dot'
-
-  const t = (a.type ?? '').toUpperCase()
-  if (t) {
-    if (QUAD.test(t)) return 'ac-quad'
-    if (HEAVY.test(t)) return 'ac-heavy'
-    if (HELI.test(t)) return 'ac-heli'
-    if (TURBOPROP.test(t)) return 'ac-turboprop'
-    if (REGIONAL.test(t)) return 'ac-regional'
-    if (LIGHT.test(t)) return 'ac-light'
-    if (/^(B7[0-5]|B3[7-9]|A2[0-2]|A31[89]|A32|BCS|E1[79]|E29|E75|MD[89]|B71|DC9|F100|F70|SU95|C919|A19N|A20N|A21N)/.test(t)) return 'ac-jet'
-  }
-  switch (cat) {
-    case 'A1':
-    case 'B1':
-    case 'B4':
-      return 'ac-light'
-    case 'A2':
-      return 'ac-regional'
-    case 'A5':
-      return 'ac-heavy'
-    case 'A7':
-      return 'ac-heli'
-    default:
-      return 'ac-jet'
-  }
+  return shapeFor(a)
 }

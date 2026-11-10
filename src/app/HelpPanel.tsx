@@ -21,7 +21,8 @@ const CREDITS: [string, string, string][] = [
   ['Runways', 'OurAirports', 'https://ourairports.com/data/'],
   ['Weather, ATIS', 'aviationweather.gov, atis.info', 'https://aviationweather.gov'],
   ['Radar', 'NOAA NEXRAD via Iowa Environmental Mesonet', 'https://mesonet.agron.iastate.edu/'],
-  ['Routes, photos', 'adsbdb.com, airport-data.com', 'https://www.adsbdb.com'],
+  ['Routes, airframes', 'adsbdb.com', 'https://www.adsbdb.com'],
+  ['Aircraft drawings', 'Openclipart (public domain), drawn from published dimensions', 'https://openclipart.org'],
 ]
 
 export function HelpPanel() {

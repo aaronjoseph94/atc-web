@@ -16,7 +16,7 @@ import { playbackInstant, usePlayhead } from '../playback/playheadStore'
 import type { LabelMode } from '../settings/settingsStore'
 import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
 import type { LiveAircraft, LivePositionBuffer } from './livePositions'
-import { ensureMapImages, ICON_SCALE, iconFor } from './mapImages'
+import { ensureMapImages, ICON_SCALE, iconFor, iconImage } from './mapImages'
 import { LAYER, SRC } from './mapStyle'
 
 type Props = {
@@ -61,7 +61,8 @@ export function AircraftLayer(props: Props) {
     if (!map) return
     ensureMapImages(map)
     // A lost WebGL context drops images; MapLibre asks for them again by id.
-    const onMissing = () => ensureMapImages(map)
+    // Aircraft artwork is drawn per class when a feature first asks for it.
+    const onMissing = (e: { id: string }) => ensureMapImages(map, e.id)
     map.on('styleimagemissing', onMissing)
 
     const pick = (e: MapLayerMouseEvent) => {
@@ -138,6 +139,8 @@ export function AircraftLayer(props: Props) {
         const transmitting = a.icao24 === active
         const hi = isSelected || transmitting
         const icon = iconFor(a)
+        // Image for this frame (airborne helicopters cycle rotor frames).
+        const image = iconImage(icon, !a.onGround, t, L.reduceMotion)
         const parked = a.onGround && (a.speedKt ?? 0) < 5
         const state = a.onGround ? (parked ? 0 : 1) : 2
         const agl = a.onGround || a.altitudeFt == null ? 0 : Math.max(0, a.altitudeFt - L.elevationFt)
@@ -153,7 +156,7 @@ export function AircraftLayer(props: Props) {
             icao24: a.icao24,
             callsign: a.callsign,
             sub: wantLabel && L.dataBlocks && (hi || zoom >= 13.4) ? dataBlock(a, agl) : '',
-            icon,
+            icon: image,
             scale: ICON_SCALE[icon],
             heading: icon === 'ac-dot' ? 0 : a.heading,
             hi: hi ? 1 : 0,
@@ -168,14 +171,15 @@ export function AircraftLayer(props: Props) {
           geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
         })
 
-        if (L.shadows && agl > 40 && icon !== 'ac-dot') {
-          // Offset grows with height and is capped, in screen pixels.
+        if (L.shadows && icon !== 'ac-dot') {
+          // Offset grows with height and is capped, in screen pixels; on the
+          // ground it is a soft contact shadow just below and to the right.
           const px = Math.min(26, 3 + agl / 260)
           const east = sx * px * mpp
           const north = sy * px * mpp
           shadows.push({
             type: 'Feature',
-            properties: { icon, scale: ICON_SCALE[icon] * (1 + Math.min(0.25, agl / 40000)), heading: a.heading, o: a.opacity * Math.max(0.35, 1 - agl / 14000) },
+            properties: { icon: image, scale: ICON_SCALE[icon] * (hi ? 1.25 : 1) * (1 + Math.min(0.25, agl / 40000)), heading: a.heading, o: a.opacity * (parked && !hi ? 0.6 : 1) * Math.max(0.35, 1 - agl / 14000) },
             geometry: { type: 'Point', coordinates: [a.lon + east / metersPerDegLon(a.lat), a.lat + north / metersPerDegLat(a.lat)] },
           })
         }

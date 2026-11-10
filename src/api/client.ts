@@ -43,7 +43,7 @@ export function getWeather(airport = 'ORD'): Promise<Weather> {
   return getJson(`/api/weather?airport=${encodeURIComponent(airport)}`, 'weather')
 }
 
-/** Scheduled route, airframe details and a credited photo for one flight. */
+/** Scheduled route and airframe details for one flight. */
 export function getFlightInfo(hex: string | null, callsign: string | null): Promise<FlightInfo> {
   const q = new URLSearchParams()
   if (hex) q.set('hex', hex)

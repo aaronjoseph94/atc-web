@@ -136,7 +136,7 @@ export function useFlight(): FlightView | null {
   }
 }
 
-/** Route, airframe and photo for real traffic. Scripted scenes use invented flights, so nothing is looked up. */
+/** Route and airframe for real traffic. Scripted scenes use invented flights, so nothing is looked up. */
 export function useFlightInfo(flight: FlightView | null) {
   const hex = flight?.real && /^[0-9a-f]{6}$/.test(flight.icao24) ? flight.icao24 : null
   const callsign = flight?.real ? flight.callsign : null

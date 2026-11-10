@@ -15,7 +15,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 - 37 airports (29 US, 8 Canada) from free ADS-B feeds, smoothly predicted between polls and faded in and out at the edge of coverage.
 - **Tower log.** Takeoffs, landings, go-arounds and line-ups are detected from positions, matched to a runway, and shown as captions. The free feeds carry no radio, so these are stated as facts, not quotes.
 - **Automatic map.** The camera moves to whoever is in the news and drifts back; drag the map to take over, tap "Back to automatic map" to hand it back.
-- **Flight card.** Tap a plane: the camera locks on (TRACK), and a card shows its scheduled route, speed and altitude trends, and what it is doing ("On final for runway 27R, 2.2 nm out"). Drag it up for the airframe photo, route progress and every number.
+- **Flight card.** Tap a plane: the camera locks on (TRACK), and a card shows its scheduled route, speed and altitude trends, and what it is doing ("On final for runway 27R, 2.2 nm out"). Drag it up for a drawing of the aircraft type with its facts (engines, size, seats, range), route progress and every number.
 - **Channel switcher.** Every published position at the airport: one tower per runway, each ground sector, approach, departure, clearance, ATIS.
 - **Weather.** Decoded METAR, a wind rose against the runways, head- and cross-wind per runway, and the real digital ATIS, which can be read aloud.
 - **Traffic list** with search by flight, airline, type or tail number.
@@ -120,7 +120,8 @@ Functions under `functions/` are picked up automatically; no environment variabl
 - Aerial imagery: [USGS The National Map](https://www.usgs.gov/programs/national-geospatial-program/national-map) (public domain).
 - Charts, US runways and frequencies: [FAA Aeronautical Information Services](https://www.faa.gov/air_traffic/flight_info/aeronav/) (US government work). Canadian airports and field elevations: [OurAirports](https://ourairports.com/data/) (public domain). Snapshot in `src/api/airportData.json`.
 - Weather: [aviationweather.gov](https://aviationweather.gov) (US National Weather Service). ATIS text: [atis.info](https://atis.info). Radar: NOAA NEXRAD via the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/).
-- Routes and airframes: [adsbdb.com](https://www.adsbdb.com). Photos: [airport-data.com](https://www.airport-data.com), shown with the photographer's name and a link back.
+- Routes and airframes: [adsbdb.com](https://www.adsbdb.com).
+- Aircraft drawings: outlines traced from public-domain [Openclipart](https://openclipart.org) silhouettes or drawn for this project; see `src/aircraft/CREDITS.md`.
 - Fonts: Outfit and Anton (Google Fonts, OFL). Icons: Lucide (ISC). Aircraft silhouettes and sign plates: self-authored, drawn at runtime.
 - Replay audio is synthetic: voiced with [Piper](https://github.com/OHF-Voice/piper1-gpl) using the LibriTTS and Cori Samuel voices (CC BY 4.0) and the Joe voice (CC0), then run through a radio effect. No real ATC recordings are redistributed. LiveATC streams can't be embedded, so the channel switcher links out to them instead.
 
