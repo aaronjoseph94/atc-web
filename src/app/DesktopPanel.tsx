@@ -177,7 +177,7 @@ export function DesktopPanel() {
           type="button"
           className="display-tight pressable shrink-0 rounded-lg px-1.5 font-display text-[26px] leading-none hover:bg-white/10"
           onClick={() => setPanel('airports')}
-          aria-label={`Change airport. Showing ${getAirport(airportIcao).name}`}
+          aria-label={`Side panel airport ${airportIcao}. Change airport`}
           aria-keyshortcuts="A"
         >
           {airportIcao}
