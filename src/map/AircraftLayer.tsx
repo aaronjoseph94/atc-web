@@ -16,6 +16,7 @@ import { playbackInstant, usePlayhead } from '../playback/playheadStore'
 import type { LabelMode } from '../settings/settingsStore'
 import { ATC_COLORS, speakerColors, type SpeakerColors } from '../ui/speaker'
 import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
+import { AircraftFx } from './fx/aircraftFx'
 import type { LiveAircraft, LivePositionBuffer } from './livePositions'
 import { ensureMapImages, ICON_SCALE, iconFor, iconImage } from './mapImages'
 import { LAYER, SRC } from './mapStyle'
@@ -103,6 +104,9 @@ export function AircraftLayer(props: Props) {
     map.on('mousemove', LAYER.hit, move)
     map.on('mouseleave', LAYER.hit, leave)
 
+    // Lights, banking, contrails and the other aircraft effects (src/map/fx).
+    const fx = new AircraftFx(map)
+
     const wakes = new Map<string, Feature<LineString>>()
     let wakesAt = 0
     // Speaker colours last pushed to the halo layers (only re-sent when they change).
@@ -139,6 +143,8 @@ export function AircraftLayer(props: Props) {
       const br = (map.getBearing() * Math.PI) / 180
       const sx = Math.cos(br) * 0.55 + Math.sin(br) * 0.83
       const sy = Math.sin(br) * 0.55 - Math.cos(br) * 0.83
+      const canvas = map.getCanvas()
+      fx.begin({ t, zoom, reduceMotion: L.reduceMotion, width: canvas.clientWidth, height: canvas.clientHeight })
 
       for (const a of list) {
         const isSelected = a.icao24 === selected
@@ -156,6 +162,7 @@ export function AircraftLayer(props: Props) {
           (hi || a.icao24 === hover || L.labels === 'always' || zoom >= (parked ? LABEL_PARKED_ZOOM : a.onGround ? LABEL_MOVING_ZOOM : LABEL_AIRBORNE_ZOOM))
         const alert = a.emergency || a.squawk === '7700' || a.squawk === '7600' || a.squawk === '7500'
         const sub = wantLabel && L.dataBlocks && (hi || zoom >= 13.4) ? dataBlock(a, agl) : ''
+        const fxa = fx.aircraft(a, icon, image, agl, parked, hi, wantLabel)
 
         features.push({
           type: 'Feature',
@@ -164,8 +171,8 @@ export function AircraftLayer(props: Props) {
             callsign: a.callsign,
             sub,
             tag: wantLabel ? tagKey(a.callsign, a.icao24, hi, sub, t) : '',
-            icon: image,
-            scale: ICON_SCALE[icon],
+            icon: fxa.image,
+            scale: ICON_SCALE[icon] * fxa.scale,
             heading: icon === 'ac-dot' ? 0 : a.heading,
             hi: hi ? 1 : 0,
             tx: transmitting ? 1 : 0,
@@ -175,6 +182,7 @@ export function AircraftLayer(props: Props) {
             o: a.opacity,
             // Higher aircraft draw on top; the highlighted one above all.
             z: hi ? 1e6 : agl,
+            ...fxa.props,
           },
           geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
         })
@@ -182,12 +190,16 @@ export function AircraftLayer(props: Props) {
         if (L.shadows && icon !== 'ac-dot') {
           // Offset grows with height and is capped, in screen pixels; on the
           // ground it is a soft contact shadow just below and to the right.
-          const px = Math.min(26, 3 + agl / 260)
+          // It opens up quickly just after lift-off (square root), so a
+          // departure visibly leaves the ground, and a climbing aircraft's
+          // shadow is a touch larger and further out (nose up, closer to the sun).
+          const climb = a.onGround ? 0 : Math.max(0, Math.min(1, ((a.verticalRateFpm ?? 0) - 300) / 2000))
+          const px = Math.min(28, 3 + 0.36 * Math.sqrt(agl) + 3 * climb)
           const east = sx * px * mpp
           const north = sy * px * mpp
           shadows.push({
             type: 'Feature',
-            properties: { icon: image, scale: ICON_SCALE[icon] * (hi ? 1.25 : 1) * (1 + Math.min(0.25, agl / 40000)), heading: a.heading, o: a.opacity * (parked && !hi ? 0.6 : 1) * Math.max(0.35, 1 - agl / 14000) },
+            properties: { icon: fxa.shadowImage, sh: icon, bl: fxa.shadowBlur, scale: ICON_SCALE[icon] * fxa.scale * (hi ? 1.25 : 1) * (1 + Math.min(0.25, agl / 40000) + 0.05 * climb), heading: a.heading, o: a.opacity * (parked && !hi ? 0.6 : 1) * fxa.shadowFade },
             geometry: { type: 'Point', coordinates: [a.lon + east / metersPerDegLon(a.lat), a.lat + north / metersPerDegLat(a.lat)] },
           })
         }
@@ -212,11 +224,14 @@ export function AircraftLayer(props: Props) {
       }
       const lines: Feature<LineString>[] = []
       const focus = selected ?? active
-      for (const [id, f] of wakes) if (id !== focus) lines.push(f)
+      // A contrail replaces the wake of an aircraft that leaves one.
+      for (const [id, f] of wakes) if (id !== focus && !fx.hasContrail(id)) lines.push(f)
       if (focus) {
         const coords = playing ? trailAt(playing.tracks[trackKeyFor(playing, focus) ?? ''] ?? [], tMs, L.trailLength * 4) : liveBuffer.trail(focus, L.trailLength, t)
         if (coords.length >= 2) lines.push(line(coords, 1))
       }
+      // Contrails behind anything cruising high overhead, rebuilt every frame so they stay attached.
+      for (const c of fx.contrails(list, (id) => (playing ? trailAt(playing.tracks[trackKeyFor(playing, id) ?? ''] ?? [], tMs, 16) : liveBuffer.trail(id, 16, t)))) lines.push(c)
       trailSrc.setData({ type: 'FeatureCollection', features: lines })
 
       // ---- highlight rings ---------------------------------------------------
@@ -247,6 +262,7 @@ export function AircraftLayer(props: Props) {
 
     return () => {
       cancelAnimationFrame(raf)
+      fx.clear()
       detachTags()
       map.off('styleimagemissing', onMissing)
       map.off('click', LAYER.hit, click)

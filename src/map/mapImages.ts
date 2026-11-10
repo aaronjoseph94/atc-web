@@ -11,7 +11,9 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 import { shapeFor } from '../aircraft/classify'
 import { maskToSdf } from '../aircraft/distance'
 import { paintPrepared, prepareAircraft, silhouetteRGBA } from '../aircraft/render'
-import { getShape, SHAPE_IDS, type ShapeId } from '../aircraft/shapes'
+import { getShape, SHAPE_IDS, type Shape, type ShapeId } from '../aircraft/shapes'
+import { BANK_DRAWN, bankSpanScale } from './fx/geometry'
+import { ensureFxImage } from './fx/sprites'
 
 export { maskToSdf }
 
@@ -69,10 +71,19 @@ function frames(shape: ShapeId): { id: string; angle: number }[] {
   return Array.from({ length: ROTOR_FRAMES }, (_, f) => ({ id: f === 0 ? shape : `${shape}-r${f}`, angle: base + (f * Math.PI) / 2 / ROTOR_FRAMES }))
 }
 
-/** Which shape an image id belongs to (`ac-heli-r2-hi` → `ac-heli`), or null if it isn't an aircraft image. */
+/** Which shape an image id belongs to (`ac-heli-r2-hi` → `ac-heli`, `ac-jet-bL2-sdf` → `ac-jet`), or null if it isn't an aircraft image. */
 export function shapeOfImage(id: string): ShapeId | null {
-  const base = id.replace(/-(hi|sdf)$/, '').replace(/-r\d+$/, '')
+  const base = id
+    .replace(/-(hi|sdf)$/, '')
+    .replace(/-(pk|b[LR][12])$/, '')
+    .replace(/-r\d+$/, '')
   return (SHAPE_IDS as string[]).includes(base) ? (base as ShapeId) : null
+}
+
+/** The bank variant an image id asks for (`ac-jet-bR2-hi` → right, steep), or null. */
+export function bankOfImage(id: string): { dir: 'L' | 'R'; level: 1 | 2 } | null {
+  const m = /-b([LR])([12])(?:-(?:hi|sdf))?$/.exec(id)
+  return m ? { dir: m[1] as 'L' | 'R', level: Number(m[2]) as 1 | 2 } : null
 }
 
 /**
@@ -89,15 +100,143 @@ function addShape(map: MapLibreMap, id: ShapeId) {
   if (list.some((f) => !map.hasImage(f.id) || !map.hasImage(`${f.id}-hi`))) {
     const prepared = prepareAircraft(shape, { width: ART, height: ART, ppm: (ART * FILL) / maxDim, halo: true })
     for (const f of list) {
-      if (!map.hasImage(f.id)) map.addImage(f.id, paintPrepared(prepared, 'white', f.angle), opts)
+      if (!map.hasImage(f.id)) {
+        const white = paintPrepared(prepared, 'white', f.angle)
+        map.addImage(f.id, white, opts)
+        // Parked aircraft use a greyer, flatter copy (see `parkedTone`).
+        if (f.id === id && !map.hasImage(`${id}-pk`)) map.addImage(`${id}-pk`, parkedTone(white), opts)
+      }
       if (!map.hasImage(`${f.id}-hi`)) map.addImage(`${f.id}-hi`, paintPrepared(prepared, 'yellow', f.angle), opts)
     }
+  }
+  if (!map.hasImage(`${id}-pk`) && list[0]) {
+    const prepared = prepareAircraft(shape, { width: ART, height: ART, ppm: (ART * FILL) / maxDim, halo: true })
+    map.addImage(`${id}-pk`, parkedTone(paintPrepared(prepared, 'white', list[0].angle)), opts)
   }
   for (const f of list) {
     if (map.hasImage(`${f.id}-sdf`)) continue
     const mask = silhouetteRGBA(shape, SDF, SDF, (SDF * FILL) / maxDim, f.angle)
     map.addImage(`${f.id}-sdf`, new ImageData(maskToSdf(mask.data, SDF, SDF) as Uint8ClampedArray<ArrayBuffer>, SDF, SDF), { sdf: true, pixelRatio: SDF / BOX })
   }
+}
+
+/**
+ * Parked aircraft: the white artwork drained a little toward a neutral grey
+ * and darkened, so a parked aircraft drawn nearly opaque reads as switched off
+ * rather than as a faded, blue-tinted ghost of a moving one.
+ */
+export function parkedTone(src: ImageData): ImageData {
+  const out = new ImageData(new Uint8ClampedArray(src.data), src.width, src.height)
+  const d = out.data
+  for (let i = 0; i < d.length; i += 4) {
+    const grey = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]
+    for (let c = 0; c < 3; c++) d[i + c] = (grey * 0.35 + d[i + c] * 0.65) * 0.8
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// Banked artwork
+// ---------------------------------------------------------------------------
+
+/** Classes drawn banked; helicopters, vehicles and markers aren't. */
+const BANKS = new Set<ShapeId>(SHAPE_IDS.filter((id) => id !== 'ac-heli' && id !== 'ac-vehicle' && id !== 'ac-dot'))
+
+/**
+ * The outline of an aircraft rolled `deg` degrees (positive: right wing
+ * down), seen from above (see `bankSpanScale`). The fuselage barely changes.
+ */
+export function bankShape(shape: Shape, deg: number): Shape {
+  const lowSide = Math.sign(deg) // +1: the right (x > 0) wing is the lower one
+  const { low, high } = bankSpanScale(deg)
+  const tx = (x: number) => x * (Math.sign(x) === lowSide ? low : high)
+  const map = (path: string) => path.replace(/(-?\d*\.?\d+) (-?\d*\.?\d+)/g, (_, x: string, y: string) => `${Math.round(tx(Number(x)) * 100) / 100} ${y}`)
+  return { ...shape, outline: map(shape.outline), body: shape.body ? map(shape.body) : null, over: shape.over.map(map) }
+}
+
+/** Shade the lower wing a touch darker and the raised one a touch brighter, as the light now falls on them. */
+function bankLight(img: ImageData, deg: number): ImageData {
+  const { width: w, height: h, data } = img
+  const k = 0.16 * Math.sin((Math.abs(deg) * Math.PI) / 180) * 2.2
+  const lowSide = Math.sign(deg)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const xn = (x - w / 2) / (w / 2)
+      const f = 1 - lowSide * k * xn
+      const i = (y * w + x) * 4
+      for (let c = 0; c < 3; c++) data[i + c] = data[i + c] * f
+    }
+  }
+  return img
+}
+
+function addBank(map: MapLibreMap, id: ShapeId, dir: 'L' | 'R', level: 1 | 2) {
+  const vid = `${id}-b${dir}${level}`
+  const deg = BANK_DRAWN[level] * (dir === 'R' ? 1 : -1)
+  const shape = bankShape(getShape(id), deg)
+  const maxDim = Math.max(getShape(id).span, getShape(id).length)
+  const opts = { pixelRatio: ART / BOX }
+  if (!map.hasImage(vid) || !map.hasImage(`${vid}-hi`)) {
+    const prepared = prepareAircraft(shape, { width: ART, height: ART, ppm: (ART * FILL) / maxDim, halo: true })
+    if (!map.hasImage(vid)) map.addImage(vid, bankLight(paintPrepared(prepared, 'white', Math.PI / 4), deg), opts)
+    if (!map.hasImage(`${vid}-hi`)) map.addImage(`${vid}-hi`, bankLight(paintPrepared(prepared, 'yellow', Math.PI / 4), deg), opts)
+  }
+  if (!map.hasImage(`${vid}-sdf`)) {
+    const mask = silhouetteRGBA(shape, SDF, SDF, (SDF * FILL) / maxDim)
+    map.addImage(`${vid}-sdf`, new ImageData(maskToSdf(mask.data, SDF, SDF) as Uint8ClampedArray<ArrayBuffer>, SDF, SDF), { sdf: true, pixelRatio: SDF / BOX })
+  }
+}
+
+/** Banked drawings waiting to be shaded, drawn one at a time when the browser is idle. */
+const bankQueue = new Map<string, () => void>()
+let bankScheduled = false
+
+function drainBanks() {
+  bankScheduled = false
+  const next = bankQueue.entries().next()
+  if (next.done) return
+  const [key, run] = next.value
+  bankQueue.delete(key)
+  run()
+  scheduleBanks()
+}
+
+function scheduleBanks() {
+  if (bankScheduled || bankQueue.size === 0) return
+  bankScheduled = true
+  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback
+  if (idle) idle(drainBanks, { timeout: 1500 })
+  else setTimeout(drainBanks, 60)
+}
+
+/**
+ * The image to draw for an aircraft banked to `level` (0, ±1, ±2; positive =
+ * turning right). Banked drawings take tens of milliseconds to shade, so the
+ * first time one is wanted it is queued for idle time and the level drawing
+ * is used meanwhile: a turn never makes an aircraft blink out or stutter.
+ */
+export function bankedImage(map: MapLibreMap, image: string, level: number): string {
+  if (level === 0) return image
+  const shape = shapeOfImage(image)
+  if (!shape || !BANKS.has(shape) || image !== shape) return image
+  const dir = level > 0 ? 'R' : 'L'
+  const mag = Math.min(2, Math.abs(level)) as 1 | 2
+  const vid = `${shape}-b${dir}${mag}`
+  if (map.hasImage(vid) && map.hasImage(`${vid}-hi`) && map.hasImage(`${vid}-sdf`)) return vid
+  if (!bankQueue.has(vid)) {
+    bankQueue.set(vid, () => {
+      // The map may have gone (airport change, unmount) by the time this runs.
+      try {
+        if (map.getStyle()) addBank(map, shape, dir, mag)
+      } catch {
+        // Nothing to draw into; the level drawing stays in use.
+      }
+    })
+    scheduleBanks()
+  }
+  // A steep bank that isn't drawn yet can borrow the slight one.
+  const slight = `${shape}-b${dir}1`
+  return mag === 2 && map.hasImage(slight) && map.hasImage(`${slight}-hi`) && map.hasImage(`${slight}-sdf`) ? slight : image
 }
 
 // ---------------------------------------------------------------------------
@@ -141,8 +280,13 @@ function plate(p: Plate): { data: ImageData; inset: number } {
  * drawn; without it, only the classes in `eager` are drawn up front.
  */
 export function ensureMapImages(map: MapLibreMap, id?: string, eager: ShapeId[] = ['ac-jet']) {
+  // Effect sprites (lights, exhaust, fin colour, soft shadows) are cheap and drawn on request.
+  if (id && ensureFxImage(map, id)) return
   const shape = id ? shapeOfImage(id) : null
-  if (shape) addShape(map, shape)
+  const bank = id ? bankOfImage(id) : null
+  // A banked drawing asked for by id (normally they are queued, see `bankedImage`; this is after a context loss).
+  if (shape && bank) addBank(map, shape, bank.dir, bank.level)
+  else if (shape) addShape(map, shape)
   else if (!id) for (const s of eager) addShape(map, s)
   for (const [plateId, p] of Object.entries(PLATES)) {
     if (map.hasImage(plateId)) continue
