@@ -32,8 +32,8 @@ import { showTaxiRoute } from '../live/taxi/watch'
 import { trackId } from '../playback/interpolate'
 import { formatClock } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
-import { CloseButton, FullPanel } from '../ui/Panel'
-import { usePresence } from '../ui/usePresence'
+import { PanelFrame } from '../ui/Panel'
+import { ATC_COLORS, PILOT_COLORS } from '../ui/speaker'
 
 const EVENT_ICON: Record<LiveEventKind, typeof ArrowUp> = { departed: ArrowUp, landed: ArrowDown, goaround: RotateCcw, lineup: ArrowUpFromLine, emergency: Siren }
 
@@ -47,22 +47,10 @@ type Item = HistoryEntry | CueItem
 
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
-function useIsDesktop() {
-  const query = '(min-width: 768px)'
-  const [wide, setWide] = useState(() => typeof matchMedia !== 'undefined' && matchMedia(query).matches)
-  useEffect(() => {
-    if (typeof matchMedia === 'undefined') return
-    const m = matchMedia(query)
-    const on = () => setWide(m.matches)
-    m.addEventListener('change', on)
-    return () => m.removeEventListener('change', on)
-  }, [])
-  return wide
-}
-
 /** Keep the history and the call audio from the moment the app starts, not when this panel opens. */
-function useHistoryRecorder() {
+function useHistoryRecorder(enabled: boolean) {
   useEffect(() => {
+    if (!enabled) return
     const stopHistory = startHistory()
     const stopClips = startClipCapture()
     void loadClipIndex()
@@ -71,7 +59,7 @@ function useHistoryRecorder() {
       stopClips()
       stopClip()
     }
-  }, [])
+  }, [enabled])
 }
 
 /** Light up the aircraft a call was about while its audio plays. */
@@ -87,74 +75,27 @@ function lightUp(ids: string[], speaker: HistoryEntry['speaker'], ms: number) {
   return true
 }
 
-export function TranscriptsView() {
-  useHistoryRecorder()
-  const open = usePlayhead((s) => s.panel === 'transcripts')
+/** `docked`: rendered in the desktop side panel instead of as a sheet. */
+export function TranscriptsView({ docked = false }: { docked?: boolean }) {
+  // The sheet instance is always mounted (the docked one comes and goes with its tab), so it keeps the history.
+  useHistoryRecorder(!docked)
+  const open = usePlayhead((s) => s.panel === 'transcripts') || docked
   const setPanel = usePlayhead((s) => s.setPanel)
   const mode = usePlayhead((s) => s.mode)
   const clip = usePlayhead((s) => s.clip)
   const airportIcao = usePlayhead((s) => s.airportIcao)
   const stationId = usePlayhead((s) => s.stationId)
-  const desktop = useIsDesktop()
   const close = useCallback(() => setPanel(null), [setPanel])
   const playback = mode === 'playback' && !!clip
   const airport = getAirport(airportIcao)
   const station = resolveStation(airport, stationId)
   const title = playback ? 'Transcript' : 'Transcripts'
   const subtitle = `${airport.icao} ${station?.label ?? ''}${station?.frequencyMhz != null ? `, ${formatMhz(station.frequencyMhz)}` : ''}`
-
-  // Only instantiated while the panel is mounted (including its exit), so a closed panel costs nothing.
-  const body = <TranscriptBody desktop={desktop} onClose={close} subtitle={subtitle} />
-  if (desktop) {
-    return (
-      <Dock open={open} title={title} onClose={close}>
-        {body}
-      </Dock>
-    )
-  }
   return (
-    <FullPanel open={open} title={title} onClose={close} tone="black">
-      {body}
-    </FullPanel>
-  )
-}
-
-/** Wide screens: a panel docked on the right; the map beside it stays live and tappable. */
-function Dock({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
-  const { mounted, closing } = usePresence(open, 280)
-  // Stop above the station bar, so it stays whole and the panel reads as part of the map's chrome.
-  const [bottom, setBottom] = useState(12)
-  useEffect(() => {
-    const bar = document.getElementById('bottom-stack')
-    if (!open || !bar) return
-    const fit = () => setBottom(bar.offsetHeight + 24)
-    fit()
-    const ro = new ResizeObserver(fit)
-    ro.observe(bar)
-    return () => ro.disconnect()
-  }, [open])
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement && e.target.value)) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-  if (!mounted) return null
-  return (
-    <aside
-      aria-label={title}
-      style={{ bottom }}
-      data-closing={closing ? '' : undefined}
-      className="absolute right-3 top-3 z-50 flex w-[min(27rem,44vw)] flex-col overflow-hidden rounded-sheet bg-black shadow-pop ring-1 ring-white/[0.09] transition-[translate,opacity] duration-[var(--duration-sheet)] ease-[var(--ease-sheet)] starting:translate-x-[calc(100%+1rem)] starting:opacity-0 data-[closing]:pointer-events-none data-[closing]:translate-x-[calc(100%+1rem)] data-[closing]:opacity-0 data-[closing]:duration-[var(--duration-exit)] data-[closing]:ease-[var(--ease-exit)]"
-    >
-      <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 px-5 pt-3">
-        <h2 className="truncate text-title3 font-bold">{title}</h2>
-        <CloseButton onClick={onClose} />
-      </div>
-      <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-6">{children}</div>
-    </aside>
+    <PanelFrame docked={docked} open={open} title={title} onClose={close} tone="black">
+      {/* Only instantiated while the sheet is mounted (including its exit) or the docked tab is showing. */}
+      <TranscriptBody docked={docked} onClose={close} subtitle={subtitle} />
+    </PanelFrame>
   )
 }
 
@@ -204,10 +145,11 @@ function PlayingBars() {
   )
 }
 
-function TranscriptBody({ desktop, onClose, subtitle }: { desktop: boolean; onClose: () => void; subtitle: string }) {
+function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClose: () => void; subtitle: string }) {
   const mode = usePlayhead((s) => s.mode)
   const clip = usePlayhead((s) => s.clip)
-  const tMs = usePlayhead((s) => s.tMs)
+  // The clock only matters in a replay; live, the list shouldn't re-render on every tick.
+  const tMs = usePlayhead((s) => (s.mode === 'playback' ? s.tMs : 0))
   const airportIcao = usePlayhead((s) => s.airportIcao)
   const stationId = usePlayhead((s) => s.stationId)
   const selectedIcao = usePlayhead((s) => s.selectedIcao)
@@ -265,10 +207,15 @@ function TranscriptBody({ desktop, onClose, subtitle }: { desktop: boolean; onCl
   useLayoutEffect(() => {
     const el = head.current
     if (!el) return
-    const ro = new ResizeObserver(() => setHeadH(el.offsetHeight))
+    // The side panel fades content at its top edge; start that fade below the pinned search box.
+    const fade = docked ? el.closest<HTMLElement>('.scroll-fade') : null
+    const ro = new ResizeObserver(() => {
+      setHeadH(el.offsetHeight)
+      fade?.style.setProperty('--fade-offset', `${el.offsetHeight}px`)
+    })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [docked])
 
   // Open at the newest.
   useLayoutEffect(() => {
@@ -302,21 +249,23 @@ function TranscriptBody({ desktop, onClose, subtitle }: { desktop: boolean; onCl
     if (e.ids[0] && parseTaxi(e.text)) void showTaxiRoute(e.text, e.ids[0], e.airport)
     if (!meta && e.ids[0] && liveBuffer.get(e.ids[0])) select(e.ids[0])
     // On a phone the sheet covers the map: get out of the way so the aircraft can be seen.
-    if (!desktop && (lit || !meta)) onClose()
+    if (!docked && (lit || !meta)) onClose()
   }
   const openEvent = (e: HistoryEntry) => {
     if (!e.ids[0] || !liveBuffer.get(e.ids[0])) return
     select(e.ids[0])
-    if (!desktop) onClose()
+    if (!docked) onClose()
   }
   const openCue = (c: CueItem) => {
     setTMs(c.startMs)
     setPlaying(true)
     if (c.key && clip?.kind === 'rewind') select(trackId(c.key))
-    if (!desktop) onClose()
+    if (!docked) onClose()
   }
 
   // ---- rendering ----------------------------------------------------------------------
+  // The sheet's body is inset 16 px (20 on wider screens); the side panel's 16 px throughout.
+  const gutter = docked ? '-mx-4 px-4' : '-mx-4 px-4 md:-mx-5 md:px-5'
   const stationLabel = (id: string) => resolveStation(airport, id)?.label ?? ''
   const radioCount = entries.filter((e) => e.source === 'radio').length
   const empty = !filtering && hits.length === 0
@@ -324,7 +273,7 @@ function TranscriptBody({ desktop, onClose, subtitle }: { desktop: boolean; onCl
   return (
     <div className="relative">
       <style>{'@keyframes tt-eq { from { transform: scaleY(0.25) } to { transform: scaleY(1) } }'}</style>
-      <div ref={head} className="sticky top-0 z-20 -mx-4 bg-black px-4 pb-2.5 md:-mx-5 md:px-5">
+      <div ref={head} className={`sticky top-0 z-20 pb-2.5 ${gutter} ${docked ? 'bg-atc-panel' : 'bg-black'}`}>
         <p className="-mt-1.5 mb-3 px-1 text-footnote text-white/55">{subtitle}</p>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-white/45" strokeWidth={2.25} />
@@ -349,7 +298,7 @@ function TranscriptBody({ desktop, onClose, subtitle }: { desktop: boolean; onCl
             </button>
           )}
         </div>
-        <div className="no-scrollbar -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4 md:-mx-5 md:px-5" role="toolbar" aria-label="Filters">
+        <div className={`no-scrollbar mt-2.5 flex gap-1.5 overflow-x-auto ${gutter}`} role="toolbar" aria-label="Filters">
           {!playback && (
             <>
               <Chip active={filters.source === 'radio'} onClick={() => patch({ source: filters.source === 'radio' ? 'all' : 'radio' })}>
@@ -423,7 +372,7 @@ function TranscriptBody({ desktop, onClose, subtitle }: { desktop: boolean; onCl
           )}
           {groups.map((g) => (
             <section key={g.key} aria-label={g.label}>
-              <h3 className="sticky z-10 -mx-4 flex items-baseline justify-between bg-black/90 px-5 pb-1.5 pt-3 text-caption font-semibold uppercase tracking-[0.06em] text-white/45 backdrop-blur-md md:-mx-5 md:px-6" style={{ top: headH }}>
+              <h3 className={`sticky z-10 flex items-baseline justify-between pb-1.5 pt-3 text-caption font-semibold uppercase tracking-[0.06em] text-white/45 ${docked ? '-mx-4 bg-atc-panel px-5' : '-mx-4 bg-black px-5 md:-mx-5 md:px-6'}`} style={{ top: headH }}>
                 <span>{g.label}</span>
                 {!playback && g.hits[0] && <span className="font-medium normal-case tracking-normal tabular-nums text-white/35">{new Date(g.hits[0].item.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
               </h3>
@@ -489,7 +438,7 @@ function TranscriptBody({ desktop, onClose, subtitle }: { desktop: boolean; onCl
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-x-2 text-caption font-medium text-white/45">
                             {who && (
-                              <span className={`flex items-center gap-1.5 font-semibold ${it.speaker === 'pilot' ? 'text-[#7DB3FF]' : 'text-white/70'}`}>
+                              <span className="flex items-center gap-1.5 font-semibold" style={{ color: it.speaker === 'pilot' ? PILOT_COLORS.light : it.speaker === 'controller' ? ATC_COLORS.light : 'rgb(255 255 255 / 0.7)' }}>
                                 <AirlineLogo callsign={who} icao24={it.ids[0] ?? null} height={13} maxWidth={22} />
                                 {filters.callsign || query ? <Marked text={who} ranges={rangesIn(who, query)} /> : who}
                               </span>

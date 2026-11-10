@@ -9,11 +9,14 @@ import { icaoCode } from '../api/airportData'
 import { getAirport } from '../api/airports'
 import { useNow } from '../hooks/useNow'
 import type { Atis, Metar } from '../api/types'
-import { runwaysInUse } from '../live/events'
+import { useAirfield } from '../live/airfield'
+import { summariseRunwayUse, type ActiveRunways } from '../live/runwayUse'
 import { runwayEnds, type RunwayEndGeometry } from '../map/airportDiagram'
+import { RUNWAY_USE_COLOR } from '../map/mapStyle'
 import { usePlayhead } from '../playback/playheadStore'
 import { CATEGORY_COLOR, useWeather } from '../station/StationBar'
-import { FullPanel, SectionLabel } from '../ui/Panel'
+import { PanelFrame, SectionLabel } from '../ui/Panel'
+import { EmptyState, OfflineArt, StateAction, WeatherSkeleton } from '../ui/States'
 import { ceilingFt, phonetic, readableAtis, runwayWinds, sentenceCase } from './atis'
 
 const CATEGORY_TEXT = {
@@ -46,6 +49,34 @@ function WindRose({ metar, ends }: { metar: Metar; ends: RunwayEndGeometry[] }) 
         </g>
       )}
     </svg>
+  )
+}
+
+/** `↓ Landing 22L 22R · ↑ Departing 22R 31L`: from the traffic, else the ATIS, else the wind's guess. */
+function RunwaysInUse({ active }: { active: ActiveRunways }) {
+  const arrow = (up: boolean) => (
+    <span aria-hidden className="grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold leading-none text-white" style={{ background: up ? RUNWAY_USE_COLOR.departures : RUNWAY_USE_COLOR.arrivals }}>
+      {up ? '↑' : '↓'}
+    </span>
+  )
+  if (active.basis === 'wind') return <p className="mb-2.5 text-white/70">No landings or departures seen yet. {summariseRunwayUse(active)}.</p>
+  return (
+    <>
+      <p className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold tabular-nums text-white" aria-label={summariseRunwayUse(active) ?? undefined}>
+        {active.landing.length > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            {arrow(false)}Landing {active.landing.join(' ')}
+          </span>
+        )}
+        {active.landing.length > 0 && active.departing.length > 0 && <span className="text-white/35">·</span>}
+        {active.departing.length > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            {arrow(true)}Departing {active.departing.join(' ')}
+          </span>
+        )}
+      </p>
+      {active.basis === 'atis' && <p className="-mt-1.5 mb-2.5 text-caption text-atc-muted">As announced on the ATIS; no landings or departures seen yet.</p>}
+    </>
   )
 }
 
@@ -84,10 +115,11 @@ function useSpeech() {
   }
 }
 
-export function WeatherPanel() {
-  const open = usePlayhead((s) => s.panel === 'weather')
+/** `docked`: rendered in the desktop side panel instead of as a sheet. */
+export function WeatherPanel({ docked = false }: { docked?: boolean }) {
+  const open = usePlayhead((s) => s.panel === 'weather') || docked
   const airportIcao = usePlayhead((s) => s.airportIcao)
-  const events = usePlayhead((s) => s.events)
+  const active = useAirfield((s) => s.runways)
   const setPanel = usePlayhead((s) => s.setPanel)
   const query = useWeather(airportIcao)
   const speech = useSpeech()
@@ -99,8 +131,7 @@ export function WeatherPanel() {
   const metar = query.data?.metar ?? null
   const atis = query.data?.atis ?? []
   const winds = useMemo(() => runwayWinds(metar, ends), [metar, ends])
-  // Only as fresh as the last render; fine for "in the last twenty minutes".
-  const inUse = useMemo(() => runwaysInUse(events, (events[0]?.at ?? 0) - 20 * 60_000), [events])
+  const inUse = summariseRunwayUse(active)
 
   const close = () => {
     speech.stop()
@@ -138,20 +169,21 @@ export function WeatherPanel() {
   }
 
   return (
-    <FullPanel open={open} title={`Weather at ${airport.icao}`} onClose={close}>
+    <PanelFrame docked={docked} open={open} title={`Weather at ${airport.icao}`} onClose={close}>
       {query.isPending ? (
-        <div className="space-y-3">
-          <div className="skeleton h-36 w-full rounded-2xl" />
-          <div className="skeleton h-24 w-full rounded-2xl" />
-        </div>
+        <WeatherSkeleton />
       ) : !metar && atis.length === 0 ? (
-        <div className="py-10 text-center">
-          <p className="text-body font-semibold">Weather isn’t available right now</p>
-          <p className="mt-2 text-footnote text-atc-muted">The weather service didn’t answer for {icao}.</p>
-          <button type="button" className="pressable mt-4 rounded-full bg-atc-yellow px-4 py-2 text-subhead font-semibold text-black" onClick={() => void query.refetch()}>
-            Try again
-          </button>
-        </div>
+        <EmptyState
+          art={<OfflineArt />}
+          title="Weather isn’t available right now"
+          actions={
+            <StateAction primary busy={query.isFetching} onClick={() => void query.refetch()}>
+              {query.isFetching ? 'Trying…' : 'Try again'}
+            </StateAction>
+          }
+        >
+          The weather service didn’t answer for {icao}.
+        </EmptyState>
       ) : (
         <>
           {metar && (
@@ -173,27 +205,22 @@ export function WeatherPanel() {
                 </div>
               </div>
 
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-2 @xl:grid-cols-4">
                 <Fact label="Visibility" value={metar.visibilitySm != null ? `${metar.visibilitySm}${metar.visibilityPlus ? '+' : ''} mi` : '—'} hint={metar.weather ?? undefined} />
                 <Fact label="Cloud ceiling" value={ceiling != null ? `${ceiling.toLocaleString()} ft` : 'None'} hint={metar.clouds[0] ? metar.clouds.map((c) => c.cover).join(' ') : 'clear'} />
                 <Fact label="Temperature" value={metar.tempC != null ? `${Math.round(metar.tempC)}°C` : '—'} hint={metar.tempC != null ? `${Math.round((metar.tempC * 9) / 5 + 32)}°F, dew point ${metar.dewpointC != null ? Math.round(metar.dewpointC) : '—'}°C` : undefined} />
                 <Fact label="Altimeter" value={metar.altimeterInHg != null ? `${metar.altimeterInHg.toFixed(2)}` : '—'} hint="inches of mercury" />
               </div>
 
-              {(winds.length > 0 || inUse.landing.length > 0 || inUse.departing.length > 0) && (
+              {(winds.length > 0 || inUse) && (
                 <>
                   <SectionLabel>Runways</SectionLabel>
                   <div className="rounded-2xl bg-white/[0.05] p-3.5 text-footnote">
-                    {(inUse.landing.length > 0 || inUse.departing.length > 0) && (
-                      <p className="mb-2.5 text-white/85">
-                        Seen in the last 20 minutes:{' '}
-                        {[inUse.landing.length ? `landing ${inUse.landing.slice(0, 4).join(', ')}` : '', inUse.departing.length ? `departing ${inUse.departing.slice(0, 4).join(', ')}` : ''].filter(Boolean).join('; ')}.
-                      </p>
-                    )}
+                    {active && inUse && <RunwaysInUse active={active} />}
                     {winds.length > 0 && (
                       <>
                         <p className="mb-2 text-caption text-atc-muted">Aircraft land and take off into the wind. Best aligned right now:</p>
-                        <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        <ul className="grid grid-cols-1 gap-1.5 @xl:grid-cols-2">
                           {winds.slice(0, 4).map((w) => (
                             <li key={w.ident} className="flex items-center gap-3 rounded-xl bg-white/[0.06] px-3 py-2">
                               <span className="rounded-md bg-[#C8102E] px-1.5 py-0.5 text-caption font-bold text-white ring-1 ring-white/70">{w.ident}</span>
@@ -234,7 +261,7 @@ export function WeatherPanel() {
           )}
 
           <SectionLabel>More about {airport.icao}</SectionLabel>
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-1.5 @xl:grid-cols-3">
             {[
               ['Live tower radio', 'liveatc.net', `https://www.liveatc.net/search/?icao=${icao}`],
               ['Official airport diagram', 'airnav.com', `https://www.airnav.com/airport/${icao}`],
@@ -252,6 +279,6 @@ export function WeatherPanel() {
           <p className="mt-4 px-1 text-caption text-atc-muted">Weather from aviationweather.gov (US National Weather Service); ATIS text via atis.info. For interest only, not for flight planning.</p>
         </>
       )}
-    </FullPanel>
+    </PanelFrame>
   )
 }

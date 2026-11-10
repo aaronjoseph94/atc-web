@@ -11,6 +11,7 @@
  */
 import type { LayerSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import type { MapTheme } from '../settings/settingsStore'
+import { differs, nightShade } from './lighting/color'
 
 /** Ids other modules need to reference. */
 export const SRC = {
@@ -25,6 +26,13 @@ export const SRC = {
   shadows: 'aircraft-shadows',
   trails: 'aircraft-trails',
   events: 'aircraft-events',
+  procAll: 'proc-all',
+  procNet: 'proc-net',
+  procFinal: 'proc-final',
+  procHi: 'proc-hi',
+  runwayUse: 'apt-runway-use',
+  gateUse: 'apt-gate-use',
+  ripple: 'radio-ripple',
 } as const
 
 export const LAYER = {
@@ -44,6 +52,11 @@ export const LAYER = {
   aircraft: 'ac-icon',
   label: 'ac-label',
   event: 'ac-event',
+  procHit: 'proc-hit',
+  runwayGlow: 'apt-runway-use-glow',
+  runwayUseMark: 'apt-runway-use-mark',
+  gateBusyDot: 'apt-gate-busy-dot',
+  gateBusy: 'apt-gate-busy',
 } as const
 
 type Palette = {
@@ -210,7 +223,7 @@ const PALETTES: Record<MapTheme, Palette> = { navy: NAVY, graphite: GRAPHITE, sa
 
 /** Display metadata for the theme picker. */
 export const MAP_THEMES: { id: MapTheme; label: string; hint: string; usOnly: boolean; swatch: [string, string, string] }[] = [
-  { id: 'navy', label: 'Night', hint: 'Navy airfield chart', usOnly: false, swatch: ['#161B2F', '#33594C', '#10182F'] },
+  { id: 'navy', label: 'Navy', hint: 'Navy airfield chart', usOnly: false, swatch: ['#161B2F', '#33594C', '#10182F'] },
   { id: 'graphite', label: 'Graphite', hint: 'Neutral dark', usOnly: false, swatch: ['#1B1D20', '#34493C', '#141618'] },
   { id: 'satellite', label: 'Satellite', hint: 'USGS aerial photos', usOnly: true, swatch: ['#3A4A3C', '#6E7A63', '#9AA08F'] },
   { id: 'chart', label: 'FAA chart', hint: 'VFR sectional', usOnly: true, swatch: ['#E9E2CF', '#8FB7D9', '#C7B8E0'] },
@@ -225,6 +238,9 @@ export function effectiveTheme(theme: MapTheme, isUs: boolean): MapTheme {
 /** Transparent square the runway keep-out layer is made of, and its size in pixels. */
 export const KEEPOUT_IMAGE = 'runway-keepout'
 export const KEEPOUT_PX = 8
+
+/** Runway-in-use colours: arrivals green, departures blue, both cyan (as in iOS's system palette). */
+export const RUNWAY_USE_COLOR = { arrivals: '#34C759', departures: '#3D9BFF', both: '#5AC8FA' } as const
 
 const FONT = ['Noto Sans Regular']
 const FONT_BOLD = ['Noto Sans Bold']
@@ -314,6 +330,9 @@ function layers(p: Palette): LayerSpecification[] {
     // ---- extended centrelines (generated) -------------------------------------
     { id: LAYER.approach, type: 'line', source: SRC.approach, filter: ['==', ['get', 'kind'], 'centreline'], minzoom: 9, paint: { 'line-color': p.approach, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.12, 12, 0.28, 15, 0.16], 'line-width': 1, 'line-dasharray': [6, 5] } },
     { id: LAYER.approachTick, type: 'line', source: SRC.approach, filter: ['==', ['get', 'kind'], 'tick'], minzoom: 10.5, paint: { 'line-color': p.approach, 'line-opacity': 0.32, 'line-width': 1 } },
+
+    // ---- instrument procedures (CIFP; empty unless "Procedures" is on) ----------
+    ...procedureLayers(p),
 
     // ---- runway pavement and paint (generated from the runway data) ----------------
     // A dashed centreline makes runways read as runways long before the paint is legible.
@@ -408,12 +427,55 @@ function layers(p: Palette): LayerSpecification[] {
       paint: { 'text-color': chart ? '#1B2540' : 'rgba(232,236,245,0.9)', 'text-halo-color': chart ? 'rgba(255,255,255,0.85)' : 'rgba(12,16,34,0.9)', 'text-halo-width': 1.6 },
     },
 
+    // ---- runways in use and occupied gates (fed by RunwayGateLayer) ------------
+    // A soft glow along both edges of an active runway's first stretch, in the
+    // colour of what it is used for; the pavement itself stays as painted.
+    {
+      id: LAYER.runwayGlow,
+      type: 'line',
+      source: SRC.runwayUse,
+      minzoom: 11,
+      filter: ['==', ['get', 'kind'], 'glow'],
+      layout: { 'line-cap': 'butt' },
+      paint: {
+        'line-color': ['match', ['get', 'role'], 'arrivals', RUNWAY_USE_COLOR.arrivals, 'departures', RUNWAY_USE_COLOR.departures, RUNWAY_USE_COLOR.both],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0.45, 14, 0.32, 17, 0.26],
+        'line-gap-width': metres(ownWidth(45), 1),
+        'line-width': ['interpolate', ['exponential', 2], ['zoom'], 11, 2.5, 14, 7, 17, 36],
+        'line-blur': ['interpolate', ['exponential', 2], ['zoom'], 11, 2, 14, 6, 17, 30],
+      },
+    },
+    // Occupied gates: the same chips as `aero-gate`, filled with the parked airline's colour.
+    // Placed first (top layer), they win the collision and hide the plain chip underneath.
+    { id: LAYER.gateBusyDot, type: 'symbol', source: SRC.gateUse, minzoom: 14.4, maxzoom: 15.8, layout: { 'icon-image': ['get', 'chip'], 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.36, 15.8, 0.6], 'icon-allow-overlap': true }, paint: {} },
+    { id: LAYER.gateBusy, type: 'symbol', source: SRC.gateUse, minzoom: 15.8, filter: ['!=', ['get', 'ref'], ''], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.8, 10.5, 18.5, 14], 'icon-image': ['get', 'chip'], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 2, 4], 'text-padding': 2 }, paint: { 'text-color': ['get', 'tc'] } },
+    // Arrival / departure badge just right of an active runway's designator chip.
+    {
+      id: LAYER.runwayUseMark,
+      type: 'symbol',
+      source: SRC.runwayUse,
+      minzoom: 11.2,
+      filter: ['==', ['get', 'kind'], 'mark'],
+      layout: {
+        'icon-image': ['get', 'icon'],
+        'icon-anchor': 'left',
+        // Clear of the designator, whose width depends on its length and the zoom (text 9 → 12 px).
+        'icon-offset': ['interpolate', ['linear'], ['zoom'], 11.2, ['match', ['get', 'len'], 1, ['literal', [6, 0]], 2, ['literal', [9, 0]], ['literal', [12, 0]]], 14, ['match', ['get', 'len'], 1, ['literal', [7, 0]], 2, ['literal', [11, 0]], ['literal', [15, 0]]]],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 11.2, 0.8, 14, 1],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+      paint: {},
+    },
+
     // ---- aircraft ----------------------------------------------------------------
     // Faint wake behind every airborne aircraft; the selected one gets the bright trail.
     { id: LAYER.trails, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 0], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 1.6], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(160,178,220,0)', 1, chart ? 'rgba(27,37,64,0.55)' : 'rgba(160,178,220,0.42)'] } },
     { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7C5CFC', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
     { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(124,92,252,0.02)', 0.5, 'rgba(124,92,252,0.5)', 1, 'rgba(168,140,255,1)'] } },
     { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#000000', 'icon-opacity': ['*', chart ? 0.22 : 0.42, ['get', 'o']], 'icon-halo-color': 'rgba(0,0,0,0.4)', 'icon-halo-width': 1.6, 'icon-halo-blur': 1.6 } },
+    // Radio ripple between tower and aircraft, under the aircraft and their halos.
+    ...rippleLayers(),
     { id: LAYER.event, type: 'circle', source: SRC.events, paint: { 'circle-radius': ['get', 'r'], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2, 'circle-stroke-opacity': ['get', 'o'], 'circle-pitch-alignment': 'map' } },
     { id: LAYER.ping, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'tx'], 1], paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#F5C518', 'circle-stroke-width': 2, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } },
     // Two flat discs, one inside the other, under whoever is selected or being talked to.
@@ -488,6 +550,90 @@ const USGS_ATTR = 'Imagery: <a href="https://www.usgs.gov/programs/national-geos
 const FAA_ATTR = 'Charts: <a href="https://www.faa.gov/air_traffic/flight_info/aeronav/" target="_blank" rel="noreferrer">FAA Aeronautical Information Services</a> (not for navigation)'
 const RADAR_ATTR = 'Radar: NOAA NEXRAD via <a href="https://mesonet.agron.iastate.edu/" target="_blank" rel="noreferrer">Iowa Environmental Mesonet</a>'
 
+/** Triangle drawn for procedure fixes (registered by `ProceduresLayer`, signed-distance so it takes any colour). */
+export const PROC_FIX_IMAGE = 'proc-fix'
+
+/**
+ * Arrivals, departures and approaches from the FAA's CIFP, filled in by
+ * `ProceduresLayer`. Thin blue-grey routes that are strongest at the
+ * approach-control zooms and fade away over the airfield; finals of the
+ * runways in use drawn brighter; the procedure the selected aircraft is
+ * flying (or a tapped one) in the selection lilac.
+ */
+function procedureLayers(p: Palette): LayerSpecification[] {
+  const sat = p.raster === 'satellite'
+  const chart = p.raster === 'chart'
+  const route = chart ? '#33406A' : sat ? '#E4EAFF' : '#8E9CC4'
+  const finalOn = chart ? '#141B33' : sat ? '#FFFFFF' : '#DCE4FF'
+  const hi = chart ? '#5B3DF5' : '#B9A5FF'
+  const label = chart ? '#26304F' : sat ? '#F2F5FF' : '#AEB9D8'
+  const altLabel = chart ? '#4A5680' : sat ? '#D5DCF0' : '#8592B6'
+  const on = ['==', ['get', 'on'], 1]
+  // Strongest where the procedures are what you look at (approach control), quiet over the field.
+  const routeOpacity = (k: number) => ['interpolate', ['linear'], ['zoom'], 7, 0.32 * k, 9, 0.55 * k, 10.5, 0.42 * k, 11.5, 0.22 * k, 12.5, 0.12 * k, 14, 0.05 * k]
+  const fixText = (minZoom: number) => [
+    'step',
+    ['zoom'],
+    '',
+    minZoom,
+    ['format', ['get', 'n'], {}],
+    minZoom + 0.75,
+    ['format', ['get', 'n'], {}, ['case', ['has', 'a'], ['concat', '\n', ['get', 'a']], ''], { 'font-scale': 0.88, 'text-color': altLabel }],
+  ]
+  const fixLayer = (id: string, filter: unknown[], minzoom: number, textZoom: number): LayerSpecification =>
+    ({
+      id,
+      type: 'symbol',
+      source: SRC.procAll,
+      minzoom,
+      filter,
+      layout: {
+        'icon-image': PROC_FIX_IMAGE,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], minzoom, 0.5, 13, 0.7],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'text-field': fixText(textZoom),
+        'text-font': FONT,
+        'text-size': 10,
+        'text-letter-spacing': 0.05,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.55],
+        'text-optional': true,
+        'text-padding': 4,
+      },
+      paint: {
+        'icon-color': route,
+        'icon-opacity': ['interpolate', ['linear'], ['zoom'], minzoom, 0, minzoom + 0.6, 0.85, 13.5, 0.7, 15, 0.25],
+        'text-color': label,
+        'text-opacity': ['interpolate', ['linear'], ['zoom'], textZoom, 0, textZoom + 0.4, 0.9, 13.5, 0.75, 15, 0.3],
+        'text-halo-color': p.labelHalo,
+        'text-halo-width': 1.2,
+      },
+    }) as unknown as LayerSpecification
+  return [
+    { id: 'proc-star', type: 'line', source: SRC.procNet, filter: ['==', ['get', 'k'], 'star'], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': route, 'line-opacity': routeOpacity(1), 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 1.2, 15, 1.4] } },
+    { id: 'proc-sid', type: 'line', source: SRC.procNet, filter: ['==', ['get', 'k'], 'sid'], layout: { 'line-join': 'round' }, paint: { 'line-color': route, 'line-opacity': routeOpacity(0.75), 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 1.2, 15, 1.4], 'line-dasharray': [3, 2.5] } },
+    {
+      id: 'proc-final',
+      type: 'line',
+      source: SRC.procFinal,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': ['case', on, finalOn, route],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 7, ['case', on, 0.55, 0.3], 10, ['case', on, 0.85, 0.5], 13, ['case', on, 0.7, 0.32], 15, ['case', on, 0.35, 0.12]],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 8, ['case', on, 1.3, 0.9], 12, ['case', on, 1.8, 1.2], 15, ['case', on, 2.2, 1.4]],
+      },
+    },
+    { id: 'proc-hi-glow', type: 'line', source: SRC.procHi, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': hi, 'line-opacity': 0.28, 'line-width': 7, 'line-blur': 4 } },
+    { id: 'proc-hi', type: 'line', source: SRC.procHi, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': hi, 'line-opacity': 0.95, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.6, 13, 2.4] } },
+    { id: 'proc-hi-label', type: 'symbol', source: SRC.procHi, minzoom: 8.5, layout: { 'symbol-placement': 'line', 'symbol-spacing': 420, 'text-field': ['get', 'n'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-letter-spacing': 0.04, 'text-offset': [0, -0.9], 'text-max-angle': 30 }, paint: { 'text-color': hi, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
+    // Invisible, finger-wide: what a tap on a procedure finds.
+    { id: LAYER.procHit, type: 'line', source: SRC.procAll, filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 18 } },
+    fixLayer('proc-fix-approach', ['all', ['==', ['get', 'k'], 'fix'], ['has', 'f']], 9.5, 11),
+    fixLayer('proc-fix-route', ['all', ['==', ['get', 'k'], 'fix'], ['!', ['has', 'f']]], 10.5, 11.75),
+  ] as unknown as LayerSpecification[]
+}
+
 /**
  * NEXRAD base-reflectivity mosaic (US, public domain data). The mosaic
  * refreshes every five minutes; `stamp` changes the URL so tiles are refetched.
@@ -548,6 +694,13 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.shadows]: { type: 'geojson', data: empty },
       [SRC.trails]: { type: 'geojson', data: empty, lineMetrics: true },
       [SRC.events]: { type: 'geojson', data: empty },
+      [SRC.procAll]: { type: 'geojson', data: empty },
+      [SRC.procNet]: { type: 'geojson', data: empty },
+      [SRC.procFinal]: { type: 'geojson', data: empty },
+      [SRC.procHi]: { type: 'geojson', data: empty },
+      [SRC.runwayUse]: { type: 'geojson', data: empty },
+      [SRC.gateUse]: { type: 'geojson', data: empty },
+      [SRC.ripple]: { type: 'geojson', data: empty },
     },
     layers: layers(PALETTES[theme]),
   }
@@ -583,8 +736,220 @@ export function themeHasVectorBase(theme: MapTheme): boolean {
  */
 export function applyGroundCover(map: MapLibreMap, theme: MapTheme, arid: boolean) {
   if (!map.getLayer('landcover-grass')) return
+  map.setPaintProperty('landcover-grass', 'fill-color', groundCover(PALETTES[theme], arid) as never)
+}
+
+function groundCover(p: Palette, arid: boolean): unknown[] {
+  return ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield]
+}
+
+// ---------------------------------------------------------------------------
+// Night: the darker ground and the airfield lights (driven by `lighting/LightingLayer`)
+// ---------------------------------------------------------------------------
+
+/**
+ * How each ground colour changes after dark: [brightness kept, saturation kept].
+ * Vegetation loses the most colour; pavement and paint dim least, so the
+ * airfield still reads under its lights.
+ */
+const NIGHT_SHADE: Partial<Record<keyof Palette, [number, number]>> = {
+  bg: [0.72, 0.75],
+  water: [0.7, 0.85],
+  land: [0.72, 0.75],
+  wood: [0.6, 0.55],
+  grass: [0.6, 0.55],
+  infield: [0.6, 0.55],
+  far: [0.66, 0.6],
+  farLand: [0.72, 0.75],
+  apron: [0.8, 0.8],
+  taxiway: [0.8, 0.8],
+  shoulder: [0.7, 0.7],
+  pad: [0.7, 0.7],
+  runway: [0.82, 0.8],
+  runwayConcrete: [0.82, 0.8],
+  paint: [0.72, 0.8],
+  paintMid: [0.72, 0.8],
+  paintDim: [0.72, 0.8],
+  paintFaint: [0.72, 0.8],
+  centreLine: [0.78, 1],
+  taxiLine: [0.72, 0.8],
+  building: [0.72, 0.75],
+  buildingEdge: [0.72, 0.75],
+  roadMinor: [0.75, 0.75],
+  roadMajor: [0.75, 0.75],
+  motorway: [0.75, 0.75],
+  roadCase: [0.75, 0.75],
+  rail: [0.75, 0.75],
+  boundary: [0.75, 0.75],
+}
+
+function nightPalette(p: Palette): Palette {
+  const out = { ...p }
+  for (const [key, [dim, sat]] of Object.entries(NIGHT_SHADE) as [keyof Palette, [number, number]][]) {
+    const v = out[key]
+    if (typeof v === 'string') (out as Record<string, unknown>)[key] = nightShade(v, dim, sat)
+  }
+  return out
+}
+
+/** One paint property that changes between day and night, with both values. */
+export type NightPaint = { layer: string; prop: string; day: unknown; night: unknown }
+
+/**
+ * Every base-map paint value that differs at night for a theme, worked out by
+ * building the style with the day and the night palette and comparing them,
+ * so layers added later darken without being listed here. Blend each pair
+ * with `mixValue` and push it with `setPaintProperty`.
+ */
+export function nightPaint(theme: MapTheme, arid: boolean): NightPaint[] {
   const p = PALETTES[theme]
-  map.setPaintProperty('landcover-grass', 'fill-color', ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield] as never)
+  // A paper chart has no night.
+  if (p.raster === 'chart') return []
+  const n = nightPalette(p)
+  const day = layers(p)
+  const night = layers(n)
+  const out: NightPaint[] = []
+  day.forEach((l, i) => {
+    const hidden = (l.layout as { visibility?: string } | undefined)?.visibility === 'none' && !RUNTIME_VISIBILITY.has(l.id)
+    if (hidden || l.id === LAYER.halo || l.id === LAYER.haloOuter || l.id === LAYER.ping) return
+    const a = (l.paint ?? {}) as Record<string, unknown>
+    const b = (night[i].paint ?? {}) as Record<string, unknown>
+    for (const prop of Object.keys(a)) if (differs(a[prop], b[prop])) out.push({ layer: l.id, prop, day: a[prop], night: b[prop] })
+  })
+  // The grass colour is set per airport (`applyGroundCover`), not by the theme.
+  const grass = out.find((e) => e.layer === 'landcover-grass' && e.prop === 'fill-color')
+  if (grass) Object.assign(grass, { day: groundCover(p, arid), night: groundCover(n, arid) })
+  // Aerial photos are daylight pictures: darken and drain them instead.
+  if (p.raster === 'satellite') {
+    out.push({ layer: 'raster-satellite', prop: 'raster-brightness-max', day: 0.82, night: 0.42 })
+    out.push({ layer: 'raster-satellite', prop: 'raster-saturation', day: -0.15, night: -0.55 })
+  }
+  return out
+}
+
+/** Does this theme show airfield lights at night? (Not on the paper chart.) */
+export function themeHasLights(theme: MapTheme): boolean {
+  return PALETTES[theme].raster !== 'chart'
+}
+
+export const LIGHT_SRC = { runway: 'lights-runway', taxi: 'lights-taxi', apron: 'lights-apron' } as const
+
+export const LIGHT_LAYER = {
+  apronWash: 'lights-apron-wash',
+  apron: 'lights-apron-glow',
+  taxiBloom: 'lights-taxi-bloom',
+  taxiCore: 'lights-taxi-core',
+  runwayBloom: 'lights-runway-bloom',
+  runwayCore: 'lights-runway-core',
+} as const
+
+/**
+ * Taxiway lights and floodlights fade in over 12.8–13.6 and are absent below.
+ * Runway lights start a little further out, so the overview of the whole
+ * airfield already shows its runways drawn in light.
+ */
+export const LIGHT_MIN_ZOOM = 12.8
+const RUNWAY_LIGHT_MIN_ZOOM = 11.8
+
+/** Each light layer's zoom fade (none at the first zoom, full at the second) and opacity at full night. */
+const LIGHT_FADE: Record<string, [number, number, number]> = {
+  [LIGHT_LAYER.apronWash]: [LIGHT_MIN_ZOOM, 13.6, 0.04],
+  [LIGHT_LAYER.apron]: [LIGHT_MIN_ZOOM, 13.6, 0.2],
+  // Taxiway lights outline every taxiway, so they come up more slowly than the rest, keeping the wide view calm.
+  [LIGHT_LAYER.taxiBloom]: [LIGHT_MIN_ZOOM, 14.2, 0.4],
+  [LIGHT_LAYER.taxiCore]: [LIGHT_MIN_ZOOM, 14.2, 0.9],
+  [LIGHT_LAYER.runwayBloom]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 0.45],
+  [LIGHT_LAYER.runwayCore]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 1],
+}
+
+/** The opacity property of a light layer and its value at night factor `t` (0..1). */
+export function lightOpacity(layer: string, t: number): { prop: string; value: unknown[] } {
+  const [z0, z1, peak] = LIGHT_FADE[layer] ?? [LIGHT_MIN_ZOOM, 13.6, 1]
+  return { prop: layer === LIGHT_LAYER.apronWash ? 'fill-opacity' : 'circle-opacity', value: ['interpolate', ['linear'], ['zoom'], z0, 0, z1, peak * t] }
+}
+
+/** Screen size of a light by zoom (times its own size factor `s`): point sources, growing gently. */
+function lightRadius(stops: [number, number][]): unknown[] {
+  return ['interpolate', ['exponential', 1.6], ['zoom'], ...stops.flatMap(([z, r]) => [z, ['*', r, ['coalesce', ['get', 's'], 1]]])]
+}
+
+const CORE_RADIUS: [number, number][] = [
+  [12, 0.75],
+  [13, 0.9],
+  [15, 1.4],
+  [17, 2.5],
+  [19, 4.6],
+]
+const BLOOM_RADIUS: [number, number][] = [
+  [12, 2],
+  [13, 2.6],
+  [15, 4.4],
+  [17, 8.5],
+  [19, 16],
+]
+
+/**
+ * The light layers, each with the layer it goes under. They start hidden and
+ * transparent; `LightingLayer` adds them at runtime and fades them in. Each
+ * light is a soft, wide disc under a small, whiter core, which reads as a
+ * gentle bloom without any post-processing.
+ */
+export function lightingLayers(): { layer: LayerSpecification; before: string }[] {
+  const hidden = { visibility: 'none' as const }
+  const bloom = (id: string, source: string) =>
+    ({ id, type: 'circle', source, minzoom: LIGHT_FADE[id][0], layout: hidden, paint: { 'circle-color': ['get', 'c'], 'circle-radius': lightRadius(BLOOM_RADIUS) as never, 'circle-blur': 1, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' } }) as LayerSpecification
+  const core = (id: string, source: string) =>
+    ({ id, type: 'circle', source, minzoom: LIGHT_FADE[id][0], layout: hidden, paint: { 'circle-color': ['get', 'k'], 'circle-radius': lightRadius(CORE_RADIUS) as never, 'circle-blur': 0.45, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' } }) as LayerSpecification
+  return [
+    // A faint warm cast over every apron, the spill of the floodlights, under the apron's own paint and buildings.
+    {
+      before: LAYER.buildings,
+      layer: {
+        id: LIGHT_LAYER.apronWash,
+        type: 'fill',
+        source: 'omt',
+        'source-layer': 'aeroway',
+        minzoom: LIGHT_MIN_ZOOM,
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']],
+        layout: hidden,
+        paint: { 'fill-color': '#FFD6A0', 'fill-opacity': 0 },
+      } as LayerSpecification,
+    },
+    // Floodlight pools by the gates, over the buildings (they light the terminal faces) and under the roads.
+    {
+      before: 'road-minor',
+      layer: {
+        id: LIGHT_LAYER.apron,
+        type: 'circle',
+        source: LIGHT_SRC.apron,
+        minzoom: LIGHT_MIN_ZOOM,
+        layout: hidden,
+        // `r` is the pool's radius in pixels at zoom 0; it doubles with every zoom level, like the ground.
+        paint: { 'circle-color': '#FFB45E', 'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 0, ['get', 'r'], 22, ['*', ['get', 'r'], 2 ** 22]], 'circle-blur': 1, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' },
+      } as LayerSpecification,
+    },
+    // Taxiway and runway lights over all the paint, under the labels and aircraft.
+    { before: 'water-name', layer: bloom(LIGHT_LAYER.taxiBloom, LIGHT_SRC.taxi) },
+    { before: 'water-name', layer: core(LIGHT_LAYER.taxiCore, LIGHT_SRC.taxi) },
+    { before: 'water-name', layer: bloom(LIGHT_LAYER.runwayBloom, LIGHT_SRC.runway) },
+    { before: 'water-name', layer: core(LIGHT_LAYER.runwayCore, LIGHT_SRC.runway) },
+  ]
+}
+
+/**
+ * The transmission ripple (`RippleLayer.tsx` writes the features): a faint
+ * guide line between tower and aircraft, travelling arcs drawn twice (a wide
+ * soft glow under a thin bright core) and a small light at the tower. Colour
+ * and opacity come from each feature, so these layers never change at runtime.
+ */
+export function rippleLayers(): LayerSpecification[] {
+  const opacity = (k: number): unknown => ['*', k, ['get', 'o']]
+  return [
+    { id: 'radio-ripple-beam', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'beam'], layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(1), 'line-width': 2, 'line-blur': 0.8, 'line-dasharray': [1.4, 2.2] } },
+    { id: 'radio-ripple-glow', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'wave'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(0.38), 'line-width': 9, 'line-blur': 6 } },
+    { id: 'radio-ripple-wave', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'wave'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(0.85), 'line-width': 2, 'line-blur': 0.6 } },
+    { id: 'radio-ripple-tower', type: 'circle', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'tower'], paint: { 'circle-radius': 4, 'circle-color': ['get', 'c'], 'circle-opacity': opacity(0.8), 'circle-blur': 0.35, 'circle-stroke-color': ['get', 'c'], 'circle-stroke-width': 6, 'circle-stroke-opacity': opacity(0.16), 'circle-pitch-alignment': 'map' } },
+  ] as unknown as LayerSpecification[]
 }
 
 // ---------------------------------------------------------------------------

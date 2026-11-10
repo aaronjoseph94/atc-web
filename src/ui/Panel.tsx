@@ -99,7 +99,7 @@ function Header({ title, onClose, headerExtra }: Pick<BaseProps, 'title' | 'onCl
 }
 
 export function Grabber({ dark = false }: { dark?: boolean }) {
-  return <div className={`mx-auto mt-2 h-[5px] w-9 shrink-0 rounded-full ${dark ? 'bg-black/25' : 'bg-white/25'}`} aria-hidden />
+  return <div className={`sheet-grabber mx-auto mt-2 h-[5px] w-9 shrink-0 rounded-full ${dark ? 'bg-black/25' : 'bg-white/25'}`} aria-hidden />
 }
 
 /**
@@ -139,9 +139,9 @@ function Overlay({ open, title, onClose, children, headerExtra, tone = 'dark', f
         aria-label={title}
         tabIndex={-1}
         data-closing={state}
-        className={`motion-modal relative flex w-full flex-col overflow-hidden rounded-t-sheet shadow-pop ring-1 ring-white/[0.08] outline-none will-change-transform md:rounded-sheet ${
+        className={`motion-modal grain relative flex w-full flex-col overflow-hidden rounded-t-sheet shadow-pop ring-1 ring-white/[0.08] outline-none will-change-transform md:rounded-sheet ${
           full ? 'mt-[max(2.5rem,var(--safe-top))] md:mt-0 md:max-h-[86dvh] md:w-[min(94vw,44rem)]' : 'max-h-[88dvh] md:max-h-[82dvh] md:w-[min(92vw,34rem)]'
-        } ${tone === 'black' ? 'bg-black' : 'bg-atc-panel'}`}
+        } ${tone === 'black' ? 'bg-black' : 'glass-sheet'}`}
       >
         <div {...handlers} className="shrink-0 cursor-grab touch-none select-none active:cursor-grabbing md:cursor-default">
           <div className="md:hidden">
@@ -151,7 +151,7 @@ function Overlay({ open, title, onClose, children, headerExtra, tone = 'dark', f
             <Header title={title} onClose={onClose} headerExtra={headerExtra} />
           </div>
         </div>
-        <div ref={attachScroll} className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1.5rem,var(--safe-bottom))] md:px-5">
+        <div ref={attachScroll} className="scroll-quiet scroll-fade @container min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1.5rem,var(--safe-bottom))] md:px-5">
           {children}
         </div>
       </div>
@@ -167,6 +167,21 @@ export function Sheet(props: BaseProps) {
 /** Full-height panel (mobile) / wide centred card (desktop) for list-heavy views. */
 export function FullPanel(props: BaseProps) {
   return <Overlay {...props} full />
+}
+
+/**
+ * A `FullPanel`, or, with `docked`, just its scrolling body for the desktop
+ * side panel (which supplies the frame, tabs and close). Lets one component
+ * serve both layouts with a one-line change.
+ */
+export function PanelFrame({ docked = false, ...props }: BaseProps & { docked?: boolean }) {
+  if (!docked) return <FullPanel {...props} />
+  return (
+    <div className="scroll-quiet scroll-fade @container h-full overflow-y-auto overscroll-contain px-4 pb-6 pt-3">
+      <h2 className="sr-only">{props.title}</h2>
+      {props.children}
+    </div>
+  )
 }
 
 /** Small section label used inside panels. */
@@ -229,8 +244,8 @@ export function GlassButton({
       aria-keyshortcuts={shortcut}
       data-closing={closing ? '' : undefined}
       onClick={onClick}
-      className={`has-tooltip pressable pointer-events-auto relative grid size-11 place-items-center rounded-full shadow-float ring-1 backdrop-blur-xl ${
-        active ? 'bg-atc-yellow text-black ring-black/10' : 'bg-atc-glass/75 text-white ring-white/[0.13] hover:bg-atc-glass-hover/90'
+      className={`has-tooltip pressable pointer-events-auto relative grid size-11 place-items-center rounded-full shadow-float ring-1 ${
+        active ? 'bg-atc-yellow text-black ring-black/10' : 'glass-chip text-white ring-white/[0.13] hover:bg-atc-glass-hover/90'
       } ${className}`}
     >
       {children}

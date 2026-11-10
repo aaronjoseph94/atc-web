@@ -12,6 +12,8 @@ export type AltitudeUnit = 'ft' | 'm'
 export type SpeedUnit = 'kt' | 'kmh' | 'mph'
 export type LabelMode = 'auto' | 'always' | 'never'
 export type MapTheme = 'navy' | 'graphite' | 'satellite' | 'chart'
+/** Map lighting: follow the sun at the airport, or hold day or night. */
+export type LightingMode = 'auto' | 'day' | 'night'
 
 export type Settings = {
   /** Airport shown on launch. */
@@ -28,7 +30,11 @@ export type Settings = {
   trailLength: 24 | 48 | 96
   /** Disable pulse/camera easing for motion-sensitive users. */
   reduceMotion: boolean
+  /** Light vibration ticks on phones that can (dial detents, sheet snaps, selections, radio calls). */
+  haptics: boolean
   mapTheme: MapTheme
+  /** Day/night look and airfield lights. */
+  lighting: LightingMode
   /** Second label line with altitude, trend and type, like a controller's data block. */
   dataBlocks: boolean
   /** Faint wake behind every airborne aircraft. */
@@ -39,6 +45,8 @@ export type Settings = {
   approachPaths: boolean
   /** Precipitation radar overlay (US). */
   weatherRadar: boolean
+  /** Arrival, departure and approach paths from the FAA's procedure data (US). */
+  procedures: boolean
   /** Let the camera move to whoever is in the news unless the user takes over. */
   autoCamera: boolean
   /** Pinned airports, shown first in the picker. */
@@ -67,12 +75,15 @@ export const DEFAULT_SETTINGS: Settings = {
   hideGround: false,
   trailLength: 48,
   reduceMotion: false,
+  haptics: true,
   mapTheme: 'navy',
+  lighting: 'auto',
   dataBlocks: true,
   trails: true,
   shadows: true,
   approachPaths: true,
   weatherRadar: false,
+  procedures: false,
   autoCamera: true,
   favourites: [],
   recents: [],

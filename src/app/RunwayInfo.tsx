@@ -6,9 +6,9 @@
  */
 import type { MapMouseEvent, MapTouchEvent } from 'maplibre-gl'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { runwaysInUse } from '../live/events'
+import { useAirfield } from '../live/airfield'
 import { metersPerPixel, type LngLat } from '../map/geo'
-import { LAYER } from '../map/mapStyle'
+import { LAYER, RUNWAY_USE_COLOR } from '../map/mapStyle'
 import { runwayEnds } from '../map/airportDiagram'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
@@ -16,7 +16,7 @@ import { useWeather } from '../station/StationBar'
 import { runwayWinds } from '../weather/atis'
 import { CloseButton } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
-import { formatRunwaySize, runwayAt, type RunwayFacts } from './runwayInfo'
+import { formatRunwaySize, liveRunwayStatus, runwayAt, type RunwayFacts } from './runwayInfo'
 import { useMap } from './useMap'
 
 /** Finger-sized reach around a runway, in screen pixels. */
@@ -105,20 +105,15 @@ export function RunwayInfo() {
 
 function Card({ facts, onClose }: { facts: RunwayFacts; onClose: () => void }) {
   const airportIcao = usePlayhead((s) => s.airportIcao)
-  const events = usePlayhead((s) => s.events)
   const metric = useSettings((s) => s.altitudeUnit === 'm')
   const metar = useWeather(airportIcao).data?.metar
   const ends = useMemo(() => runwayEnds(airportIcao).filter((e) => facts.ends.some((f) => f.ident === e.ident)), [airportIcao, facts])
   const best = runwayWinds(metar, ends)[0]
-  const inUse = useMemo(() => {
-    const used = runwaysInUse(events, (events[0]?.at ?? 0) - 30 * 60_000)
-    const mine = (list: string[]) => list.filter((r) => facts.ends.some((e) => e.ident === r))
-    return { landing: mine(used.landing), departing: mine(used.departing) }
-  }, [events, facts])
+  const live = liveRunwayStatus(facts, useAirfield((s) => s.runways))
   const size = formatRunwaySize(facts, metric)
 
   return (
-    <div role="dialog" aria-label={`Runway ${facts.name}`} className="pointer-events-auto w-[17rem] rounded-2xl bg-[#1d2535]/95 p-3.5 shadow-pop ring-1 ring-white/[0.12] backdrop-blur-xl">
+    <div role="dialog" aria-label={`Runway ${facts.name}`} className="pointer-events-auto w-[17rem] rounded-2xl glass-pop p-3.5 shadow-pop ring-1 ring-white/[0.12]">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-caption font-semibold text-white/55">Runway</div>
@@ -139,7 +134,7 @@ function Card({ facts, onClose }: { facts: RunwayFacts; onClose: () => void }) {
           <Fact key={e.ident} k={`Heading ${e.ident}`} v={`${String(e.headingDeg).padStart(3, '0')}°`} />
         ))}
       </dl>
-      {(best || inUse.landing.length > 0 || inUse.departing.length > 0) && (
+      {(best || live) && (
         <div className="mt-3 space-y-1 border-t border-white/10 pt-2.5 text-footnote text-white/80">
           {best && (
             <p className="tabular-nums">
@@ -147,8 +142,12 @@ function Card({ facts, onClose }: { facts: RunwayFacts; onClose: () => void }) {
               {best.crosswindKt > 0 ? `, ${best.crosswindKt} kt across` : ''}
             </p>
           )}
-          {inUse.landing.length > 0 && <p>Landings on {inUse.landing.join(', ')} recently</p>}
-          {inUse.departing.length > 0 && <p>Departures from {inUse.departing.join(', ')} recently</p>}
+          {live && (
+            <p className={`flex items-start gap-1.5 ${live.tone === 'active' ? 'text-white' : 'text-white/60'}`}>
+              {live.tone === 'active' && <span aria-hidden className="mt-[0.3rem] size-2 shrink-0 rounded-full" style={{ background: RUNWAY_USE_COLOR[live.ends[0].role] }} />}
+              <span>{live.text}</span>
+            </p>
+          )}
         </div>
       )}
     </div>

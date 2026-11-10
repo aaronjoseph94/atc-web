@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { AIRPORTS } from '../api/airports'
 import { getAiStatus, getHealth } from '../api/client'
 import { usePlayhead } from '../playback/playheadStore'
+import { supportsHaptics } from '../ui/haptics'
 import { Group, Row, SectionLabel, Segmented, Sheet, Toggle } from '../ui/Panel'
 import { DEFAULT_SETTINGS, useSettings, type Settings } from './settingsStore'
 
@@ -19,6 +20,7 @@ export function SettingsView() {
   const setCameraMode = usePlayhead((s) => s.setCameraMode)
   const settings = useSettings()
   const [more, setMore] = useState(false)
+  const [hasHaptics] = useState(supportsHaptics)
 
   const set = <K extends keyof Settings>(key: K) => (value: Settings[K]) => settings.update(key, value)
 
@@ -64,6 +66,12 @@ export function SettingsView() {
         <Row label="Reduce motion">
           <Toggle checked={settings.reduceMotion} onChange={set('reduceMotion')} label="Reduce motion" />
         </Row>
+        {/* Only phones with a vibration motor (or iPhone's switch tick) get the option. */}
+        {hasHaptics && (
+          <Row label="Haptics" hint="Light taps on the dial, the card and radio calls">
+            <Toggle checked={settings.haptics} onChange={set('haptics')} label="Haptics" />
+          </Row>
+        )}
       </Group>
 
       <SectionLabel>Units</SectionLabel>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { haptic } from './haptics'
 import { createVelocityTracker, DURATION, projectMomentum, releaseDuration, rubberband } from './motion'
 
 type Options = {
@@ -80,8 +81,20 @@ export function useSheetDrag({ onDown, onUp, threshold = 64, enabled }: Options)
       transform: dy ? `translateY(${dy}px)` : undefined,
       transition: dragging ? 'none' : `transform ${settleMs}ms var(--ease-sheet)`,
       touchAction: 'none' as const,
+      // Read by the grabber inside (see `.sheet-grabber` in index.css).
+      ['--sheet-stretch' as string]: dragging ? sheetStretch(dy, !!onDown, !!onUp) : 0,
     },
   }
+}
+
+/**
+ * 0..1: how hard a sheet is being pulled in a direction that does nothing
+ * (up on a sheet that can't grow, down on one that can't be dismissed). The
+ * offset is already rubber-banded, so this saturates gently.
+ */
+export function sheetStretch(visual: number, canGoDown: boolean, canGoUp: boolean): number {
+  const past = visual < 0 && !canGoUp ? -visual : visual > 0 && !canGoDown ? visual : 0
+  return Math.min(1, past / 36)
 }
 
 type Latest = { onDown?: () => void; onUp?: () => void; threshold: number; enabled?: () => boolean }
@@ -115,6 +128,11 @@ function createEngine({ setDy, setDragging, setSettleMs }: Setters) {
     },
   }
 
+  /** How far past its limit the sheet is being pulled, for the grabber's stretch. */
+  function stretchOf(g: Gesture) {
+    return sheetStretch(g.visual, !!self.latest.onDown, !!self.latest.onUp)
+  }
+
   /** Where the sheet sits for a finger `d` pixels from where it started. */
   function visualOffset(d: number) {
     // Upward drags never lift a sheet off its resting edge; they only hint.
@@ -127,6 +145,7 @@ function createEngine({ setDy, setDragging, setSettleMs }: Setters) {
     if (!node) return
     node.style.transition = 'none'
     node.style.transform = g.visual ? `translateY(${g.visual}px)` : ''
+    node.style.setProperty('--sheet-stretch', String(stretchOf(g)))
     const scrim = self.backdrop
     if (scrim) {
       scrim.style.transition = 'none'
@@ -142,6 +161,7 @@ function createEngine({ setDy, setDragging, setSettleMs }: Setters) {
       node.style.transition = ''
       node.style.transform = ''
       node.style.opacity = ''
+      node.style.removeProperty('--sheet-stretch')
       // The custom pace is for this one motion; a later tap-to-close uses the default.
       const clear = () => node.style.removeProperty('--motion-ms')
       window.setTimeout(clear, ms + 60)
@@ -181,6 +201,8 @@ function createEngine({ setDy, setDragging, setSettleMs }: Setters) {
 
     const commitDown = !cancelled && !!down && d > SLOP && ((v > 0.45 && d > 12) || (d > limit && v > -0.2) || d + projectMomentum(v) > g.height * 0.5)
     const commitUp = !cancelled && !commitDown && !!up && d < -SLOP && ((v < -0.45 && d < -12) || (d < -limit && v < 0.2))
+    // The sheet snapping to its next stop is felt as well as seen.
+    if (commitDown || commitUp) haptic('tick')
 
     if (self.el) {
       if (commitDown) {

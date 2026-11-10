@@ -36,6 +36,15 @@ const SCRIM =
   'pointer-events-auto w-full bg-gradient-to-b from-transparent via-[rgba(16,20,30,0.55)] to-[rgba(16,20,30,0.82)] px-4 pb-3 pt-14 text-left md:w-[min(92vw,40rem)] md:rounded-b-none md:rounded-t-3xl md:px-5'
 
 /**
+ * Caption text sits in a soft, wide, faint glow of the scrim's own navy
+ * rather than a tight dark shadow: it lifts the words off bright runway
+ * paint without the outlined, embossed look a hard shadow gives. Earlier
+ * lines, already dim, get a lighter glow.
+ */
+const GLOW = '[text-shadow:0_0_22px_rgba(6,10,22,0.5),0_0_44px_rgba(6,10,22,0.3),0_2px_16px_rgba(6,10,22,0.32)]'
+const GLOW_SOFT = '[text-shadow:0_0_20px_rgba(6,10,22,0.42),0_0_40px_rgba(6,10,22,0.24)]'
+
+/**
  * How far through a live call the highlight has swept. Live transcripts
  * arrive just after the call ends, so the words light up briskly (at about
  * twice speaking pace) rather than pretending to be in sync.
@@ -97,9 +106,9 @@ function RadioCaption() {
 
   return (
     <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the radio transcript">
-      {previous && <p className="line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 [text-shadow:0_1px_8px_rgba(0,0,0,0.8)]">{previous.text}</p>}
+      {previous && <p className={`line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 ${GLOW_SOFT}`}>{previous.text}</p>}
       {call && (
-        <p key={call.id} className="animate-caption line-clamp-4 text-[21px] font-semibold leading-snug [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]">
+        <p key={call.id} className={`animate-caption line-clamp-4 text-[21px] font-semibold leading-snug ${GLOW}`}>
           {words.map((w, i) => (
             <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
               {w}{' '}
@@ -134,8 +143,8 @@ export function Subtitles() {
     if (!caption) return null
     return (
       <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the tower log">
-        {previousEvent && <p className="line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 [text-shadow:0_1px_8px_rgba(0,0,0,0.8)]">{previousEvent.text}</p>}
-        <p key={caption.id} className="animate-caption text-[21px] font-semibold leading-snug text-white [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]">
+        {previousEvent && <p className={`line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 ${GLOW_SOFT}`}>{previousEvent.text}</p>}
+        <p key={caption.id} className={`animate-caption text-[21px] font-semibold leading-snug text-white ${GLOW}`}>
           {caption.text}
         </p>
       </button>
@@ -151,7 +160,7 @@ export function Subtitles() {
       {earlier.map((c, i) => (
         <p
           key={c.id}
-          className={`text-[19px] font-semibold leading-snug [text-shadow:0_1px_8px_rgba(0,0,0,0.6)] ${
+          className={`text-[19px] font-semibold leading-snug ${GLOW_SOFT} ${
             i < earlier.length - 1 ? 'line-clamp-1 text-white/25' : `line-clamp-2 ${active ? 'text-white/50' : 'text-white/60'}`
           }`}
         >
@@ -159,7 +168,7 @@ export function Subtitles() {
         </p>
       ))}
       {active && (
-        <p key={active.id} className="animate-caption text-[21px] font-semibold leading-snug [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]" aria-live="off">
+        <p key={active.id} className={`animate-caption text-[21px] font-semibold leading-snug ${GLOW}`} aria-live="off">
           {words.map((w, i) => (
             <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
               {w}{' '}

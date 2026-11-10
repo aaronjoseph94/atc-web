@@ -51,7 +51,8 @@ export function RadioStatusLine() {
           : null
   return (
     <p className="flex min-w-0 items-center gap-1.5 px-4 pb-0.5 text-[11px] font-semibold leading-4 text-black/70" role="status" aria-live="polite">
-      {status === 'live' && <span className="size-1.5 shrink-0 animate-pulse-dot rounded-full bg-atc-live" />}
+      {/* A slow, calm breath (not a blink): on the air, nothing urgent. */}
+      {status === 'live' && <span className="size-1.5 shrink-0 animate-[pulse-dot_3.6s_ease-in-out_infinite] rounded-full bg-atc-live shadow-[0_0_6px_1px_rgba(255,59,48,0.45)]" />}
       <span className="shrink-0 uppercase tracking-wide">{text}</span>
       {note && status === 'live' ? (
         <span className="min-w-0 truncate font-medium text-black/55">· {note}</span>
