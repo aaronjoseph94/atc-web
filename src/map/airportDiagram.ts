@@ -701,3 +701,98 @@ export function holdBars(path: LngLat[], runways: RunwayEndGeometry[], holdOffse
   }
   return changed
 }
+
+// ---------------------------------------------------------------------------
+// Wear and stand markings (drawn by the atmosphere layers)
+// ---------------------------------------------------------------------------
+
+/** Small seeded random numbers, so each runway's tyre marks look the same on every load. */
+function seeded(text: string): () => number {
+  let h = 2166136261
+  for (const c of text) h = Math.imul(h ^ c.charCodeAt(0), 16777619)
+  return () => {
+    h = (h + 0x6d2b79f5) | 0
+    let t = Math.imul(h ^ (h >>> 15), 1 | h)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** Point `along` metres past an end's threshold and `cross` metres to the right of its centreline. */
+function onRunway(end: RunwayEndGeometry, along: number, cross: number): LngLat {
+  const b = (end.bearing * Math.PI) / 180
+  return offset(end.threshold, along * Math.sin(b) + cross * Math.cos(b), along * Math.cos(b) - cross * Math.sin(b))
+}
+
+/**
+ * Rubber deposits in each touchdown zone: one broad, faint smudge down the
+ * middle and a scatter of darker streaks along the main-gear tracks, densest
+ * near the aiming point. Longer runways (the busier ones at most airports)
+ * get more and darker marks. Each line carries its width `w` (m), opacity `o`
+ * and latitude factor `k`.
+ */
+export function tyreMarks(airport: string): FeatureCollection<LineString> {
+  const ends = runwayEnds(airport)
+  const features: Feature<LineString>[] = []
+  if (!ends.length) return { type: 'FeatureCollection', features }
+  const longest = Math.max(...ends.map((e) => e.lengthM))
+  const k = widthScale(ends[0].threshold[1])
+  const line = (end: RunwayEndGeometry, a0: number, c0: number, a1: number, c1: number, w: number, o: number) =>
+    features.push({ type: 'Feature', properties: { w, o: Math.round(o * 1000) / 1000, k }, geometry: { type: 'LineString', coordinates: [onRunway(end, a0, c0), onRunway(end, a1, c1)] } })
+  for (const end of ends) {
+    if (end.lengthM < 900) continue
+    const rand = seeded(`${airport}:${end.ident}`)
+    const busy = 0.55 + 0.45 * (end.lengthM / longest)
+    const zoneEnd = Math.min(950, end.lengthM * 0.3)
+    line(end, 140, 0, zoneEnd, 0, Math.min(20, end.widthM * 0.42), 0.2 * busy)
+    const n = Math.round(30 * busy)
+    for (let i = 0; i < n; i++) {
+      const a0 = 120 + rand() ** 1.7 * (zoneEnd - 220)
+      const len = 25 + rand() * 120
+      const side = rand() < 0.5 ? -1 : 1
+      // Main gear tracks: narrow-bodies about 3 m either side of the centreline, wide-bodies about 5.5 m.
+      const c = side * (2.4 + rand() * 3.6)
+      const drift = (rand() - 0.5) * 0.8
+      line(end, a0, c, Math.min(a0 + len, zoneEnd + 60), c + drift, 0.9 + rand() * 1.5, (0.22 + rand() * 0.34) * busy)
+    }
+  }
+  return { type: 'FeatureCollection', features }
+}
+
+/** The straight run of a stand's lead-in line out from the nose position, and the radius it turns on. */
+export const STAND_STRAIGHT_M = 42
+export const STAND_TURN_RADIUS_M = 30
+
+/**
+ * Painted stand markings for one gate: a yellow lead-in line running straight
+ * out from the nose position along `outBearing` (away from the terminal) and
+ * then curving 90° toward `turn` (1 right, -1 left, looking outward) onto the
+ * taxilane, a stop bar across the nose position, and a point where the gate
+ * number is painted, with `rot` the text rotation that reads along the stand.
+ */
+export function standMarkings(nose: LngLat, outBearing: number, turn: 1 | -1, ref: string | null): Feature[] {
+  const b = (outBearing * Math.PI) / 180
+  const ux = Math.sin(b)
+  const uy = Math.cos(b)
+  // Right of the outward direction.
+  const rx = uy
+  const ry = -ux
+  const at = (along: number, right: number): LngLat => offset(nose, ux * along + rx * right, uy * along + ry * right)
+  const pts: LngLat[] = [at(0, 0), at(STAND_STRAIGHT_M, 0)]
+  const R = STAND_TURN_RADIUS_M
+  for (let i = 1; i <= 8; i++) {
+    const t = (i / 8) * (Math.PI / 2)
+    pts.push(at(STAND_STRAIGHT_M + R * Math.sin(t), turn * R * (1 - Math.cos(t))))
+  }
+  const out: Feature[] = [
+    { type: 'Feature', properties: { kind: 'lead' }, geometry: { type: 'LineString', coordinates: pts } },
+    { type: 'Feature', properties: { kind: 'stop' }, geometry: { type: 'LineString', coordinates: [at(0, -3), at(0, 3)] } },
+  ]
+  if (ref) {
+    // Text runs along the stand; keep it the right way up for a north-up map.
+    let rot = (((outBearing - 90) % 360) + 360) % 360
+    if (rot > 90 && rot < 270) rot -= 180
+    out.push({ type: 'Feature', properties: { kind: 'num', ref, rot: Math.round(rot) }, geometry: { type: 'Point', coordinates: at(22, turn * -5) } })
+  }
+  return out
+}

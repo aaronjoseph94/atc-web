@@ -19,6 +19,7 @@ import { CAMERA_EASE } from '../ui/motion'
 import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
+import { AtmosphereLayer } from './atmosphere/AtmosphereLayer'
 import { LightingLayer } from './lighting/LightingLayer'
 import { RunwayGateLayer } from './RunwayGateLayer'
 import type { LiveAircraft } from './livePositions'
@@ -356,6 +357,7 @@ export function MapView() {
           />
         </MapGL>
       </Suspense>
+      <AtmosphereLayer map={map} airportIcao={airportIcao} />
       {!map && <MapSkeleton />}
     </div>
   )

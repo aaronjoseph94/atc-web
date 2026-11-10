@@ -85,6 +85,9 @@ export function LayersPanel() {
         <Row label="Weather radar" hint={isUs ? undefined : 'US only'}>
           <Toggle checked={s.weatherRadar} onChange={(v) => s.update('weatherRadar', v)} label="Weather radar" />
         </Row>
+        <Row label="Wind lines" hint="Drift with the reported wind">
+          <Toggle checked={s.windStreamlines} onChange={(v) => s.update('windStreamlines', v)} label="Wind lines" />
+        </Row>
         <Row label="Only aircraft in the air">
           <Toggle checked={s.hideGround} onChange={(v) => s.update('hideGround', v)} label="Hide aircraft on the ground" />
         </Row>
