@@ -278,16 +278,16 @@ export function AircraftLayer(props: Props) {
         map.setPaintProperty(LAYER.ping, 'circle-stroke-color', talk.light)
       }
       if (anyHi) {
-        map.setPaintProperty(LAYER.halo, 'circle-opacity', 0.36 + 0.06 * wave)
+        map.setPaintProperty(LAYER.halo, 'circle-opacity', fading(0.36 + 0.06 * wave))
         map.setPaintProperty(LAYER.halo, 'circle-radius', 20 + 2 * wave)
-        map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', 0.2 + 0.05 * wave)
+        map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', fading(0.2 + 0.05 * wave))
         map.setPaintProperty(LAYER.haloOuter, 'circle-radius', 36 + 5 * wave)
       }
       if (anyTx) {
         // Radar-style ping expanding from whoever is transmitting.
         const phase = L.reduceMotion ? 0.4 : (t % 1500) / 1500
         map.setPaintProperty(LAYER.ping, 'circle-radius', 12 + 34 * phase)
-        map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6)
+        map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', fading(L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6))
       }
 
       L.onFrame?.(list, dt)
@@ -319,6 +319,11 @@ function replayed(clip: ClipPack, tMs: number): LiveAircraft[] {
   const list = positionsAt(clip, tMs) as LiveAircraft[]
   for (const a of list) a.opacity = 1
   return list
+}
+
+/** A ring's opacity scaled by its aircraft's own fade, so the halo leaves with an aircraft that drops out of the feed instead of pulsing on over empty ground. */
+function fading(v: number): never {
+  return ['*', v, ['get', 'o']] as never
 }
 
 function line(coordinates: [number, number][], sel: 0 | 1): Feature<LineString> {

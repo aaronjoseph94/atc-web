@@ -576,10 +576,13 @@ function layers(p: Palette): LayerSpecification[] {
  * that was several megabytes uploaded (and premultiplied in JavaScript) per
  * frame. A copy only needs to be as big as the aircraft is drawn on this
  * screen at its top zoom; the style picks the copy with a `step` on zoom.
+ * Layout properties are evaluated at the tile's whole zoom level (a map at
+ * 14.9 lays out z14 tiles), so the thresholds are whole numbers and each copy
+ * is sized for the very top of its range.
  */
 const ART_TIERS = [
-  { below: 14.6, suffix: '~s' },
-  { below: 16.2, suffix: '~m' },
+  { below: 15, suffix: '~s' },
+  { below: 16, suffix: '~m' },
 ] as const
 
 /** Full-size artwork in pixels (see `mapImages`). */

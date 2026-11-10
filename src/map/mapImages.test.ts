@@ -60,9 +60,9 @@ describe('iconZoomFactor', () => {
 
 describe('reduced artwork copies', () => {
   it('are sized to the drawn size on the screen, never above full size', () => {
-    expect(artTierPx(14.6, 1, 1)).toBe(64)
-    expect(artTierPx(14.6, 1, 3)).toBeGreaterThan(artTierPx(14.6, 1, 2))
-    expect(artTierPx(16.2, 1.5, 3)).toBe(384)
+    expect(artTierPx(15, 1, 1)).toBe(80)
+    expect(artTierPx(15, 1, 3)).toBeGreaterThan(artTierPx(15, 1, 2))
+    expect(artTierPx(16, 1.5, 3)).toBe(384)
   })
 
   it('leave out a tier that would be about full size anyway', () => {
