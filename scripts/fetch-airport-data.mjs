@@ -12,6 +12,11 @@
  *   - the full controller-position list: one tower frequency per runway, each
  *     ground sector, approach and departure sectors, clearance and ATIS.
  * OurAirports carries one frequency per type and can lag on runway changes.
+ * Runways the FAA has announced as decommissioned are left out.
+ *
+ * Elsewhere (Canada) the OurAirports end points can be tens of metres off, so
+ * they are moved onto the OpenStreetMap runway centrelines in the OpenFreeMap
+ * vector tiles: the same geometry the map draws the pavement from.
  *
  * Run `npm run data:airports` whenever you want to refresh. The output is
  * committed so builds are reproducible and need no network access.
@@ -182,6 +187,8 @@ function classify(use, sector) {
 }
 
 let faaCycle = null
+/** Airports whose runway ends come from the FAA's survey rather than OurAirports. */
+const surveyed = new Set()
 try {
   const eff = currentCycle()
   const stamp = `${String(eff.getUTCDate()).padStart(2, '0')}_${eff.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })}_${eff.getUTCFullYear()}`
@@ -200,9 +207,24 @@ try {
     const key = `${e.ARPT_ID}|${e.RWY_ID}`
     endsByRunway.set(key, [...(endsByRunway.get(key) ?? []), e])
   }
+  // NASR keeps listing a runway for a while after the FAA announces it is
+  // being decommissioned ("RWY 14/32 WILL BE DECOMMISSIONED ON JUNE 15TH 2026"),
+  // and by then the map data already shows grass or taxiway there.
+  const retired = new Set()
+  for (const m of parseCsv(unzipEntry(aptZip, 'APT_RMK.csv').toString('latin1'))) {
+    if (!usIatas.has(m.ARPT_ID)) continue
+    const x = /\bRWY (\d{1,2}[LCR]?\/\d{1,2}[LCR]?) (?:WILL BE |IS |WAS )?(?:DECOMMISSIONED|PERMANENTLY CLOSED|CLSD PERMANENTLY|PERMLY CLSD)(?: ON ([A-Z]+) (\d{1,2})\w* (\d{4}))?/i.exec(m.REMARK ?? '')
+    if (!x) continue
+    const when = x[2] ? Date.parse(`${x[2]} ${x[3]}, ${x[4]}`) : 0
+    if (!(when > Date.now())) retired.add(`${m.ARPT_ID}|${x[1]}`)
+  }
   const rebuilt = {}
   for (const r of faaRunways) {
     if (!usIatas.has(r.ARPT_ID) || !/^\d/.test(r.RWY_ID) || !r.RWY_ID.includes('/')) continue // helipads, placeholders
+    if (retired.has(`${r.ARPT_ID}|${r.RWY_ID}`)) {
+      console.log(`${r.ARPT_ID} ${r.RWY_ID}: decommissioned, left out`)
+      continue
+    }
     const [leId, heId] = r.RWY_ID.split('/')
     const ends = endsByRunway.get(`${r.ARPT_ID}|${r.RWY_ID}`) ?? []
     const end = (id) => {
@@ -215,7 +237,11 @@ try {
     if (!le || !he || !(Number(r.RWY_LEN) > 0)) continue
     ;(rebuilt[r.ARPT_ID] ??= []).push({ lengthFt: num(r.RWY_LEN), widthFt: num(r.RWY_WIDTH), surface: r.SURFACE_TYPE_CODE || null, le, he })
   }
-  for (const [iata, list] of Object.entries(rebuilt)) if (list.length) out[iata].runways = list
+  for (const [iata, list] of Object.entries(rebuilt)) {
+    if (!list.length) continue
+    out[iata].runways = list
+    surveyed.add(iata)
+  }
   console.log(`FAA NASR runways for ${Object.keys(rebuilt).length} US airports`)
 
   const res = await fetch(`https://nfdc.faa.gov/webContent/28DaySub/extra/${stamp}_FRQ_CSV.zip`)
@@ -252,6 +278,275 @@ try {
   console.log(`FAA NASR ${faaCycle}: positions for ${Object.keys(byAirport).length} US airports`)
 } catch (err) {
   console.warn(`FAA NASR data unavailable (${err.message}); keeping OurAirports runways and frequencies`)
+}
+
+// ---------------------------------------------------------------------------
+// Runway alignment with OpenStreetMap (airports without an FAA survey)
+// ---------------------------------------------------------------------------
+//
+// OurAirports' end coordinates for Canadian airports are often tens of metres
+// off (Halifax 05 sits 370 m short, Calgary's runways 25 m to one side), so the
+// painted markings would float off the pavement the map draws. The map's
+// pavement is OpenStreetMap's, served by OpenFreeMap, so the runway lines are
+// read from those same vector tiles and the ends are moved onto them.
+
+/** Minimal Mapbox Vector Tile reader: just the string tags and line geometry needed here. */
+function decodeTile(buf) {
+  let pos = 0
+  const varint = () => {
+    let v = 0
+    let shift = 0
+    let b
+    do {
+      b = buf[pos++]
+      v += (b & 0x7f) * 2 ** shift
+      shift += 7
+    } while (b & 0x80)
+    return v
+  }
+  const skip = (wire) => {
+    if (wire === 0) varint()
+    else if (wire === 1) pos += 8
+    else if (wire === 2) pos += varint()
+    else if (wire === 5) pos += 4
+    else throw new Error(`bad wire type ${wire}`)
+  }
+  /** Run `fn(field, wire)` over each field of the message ending at `end`. */
+  const fields = (end, fn) => {
+    for (;;) {
+      if (pos >= end) return
+      const key = varint()
+      if (!fn(key >> 3, key & 7)) skip(key & 7)
+    }
+  }
+  const packed = () => {
+    const end = varint() + pos
+    const out = []
+    for (;;) {
+      if (pos >= end) return out
+      out.push(varint())
+    }
+  }
+  const string = () => {
+    const len = varint()
+    const s = buf.toString('utf8', pos, pos + len)
+    pos += len
+    return s
+  }
+  const layers = {}
+  fields(buf.length, (f, w) => {
+    if (f !== 3 || w !== 2) return false
+    const end = varint() + pos
+    const layer = { name: '', extent: 4096, keys: [], values: [], features: [] }
+    fields(end, (lf) => {
+      if (lf === 1) layer.name = string()
+      else if (lf === 3) layer.keys.push(string())
+      else if (lf === 5) layer.extent = varint()
+      else if (lf === 4) {
+        const vend = varint() + pos
+        let value = null
+        fields(vend, (vf) => {
+          if (vf !== 1) return false
+          value = string()
+          return true
+        })
+        layer.values.push(value)
+      } else if (lf === 2) {
+        const fend = varint() + pos
+        const feature = { type: 0, tags: [], geometry: [] }
+        fields(fend, (ff) => {
+          if (ff === 2) feature.tags = packed()
+          else if (ff === 3) feature.type = varint()
+          else if (ff === 4) feature.geometry = packed()
+          else return false
+          return true
+        })
+        layer.features.push(feature)
+      } else return false
+      return true
+    })
+    layers[layer.name] = layer
+    return true
+  })
+  return layers
+}
+
+/** A feature's geometry as lines of tile-pixel `[x, y]` points (MoveTo starts a new line). */
+function featureLines(geometry) {
+  const lines = []
+  let x = 0
+  let y = 0
+  for (let i = 0; i < geometry.length; ) {
+    const cmd = geometry[i] & 7
+    const count = geometry[i++] >> 3
+    if (cmd === 7) continue
+    for (let k = 0; k < count; k++) {
+      x += (geometry[i] >> 1) ^ -(geometry[i] & 1)
+      y += (geometry[i + 1] >> 1) ^ -(geometry[i + 1] & 1)
+      i += 2
+      if (cmd === 1) lines.push([])
+      lines[lines.length - 1].push([x, y])
+    }
+  }
+  return lines
+}
+
+const TILE_ZOOM = 14
+const tileX = (lon) => Math.floor(((lon + 180) / 360) * 2 ** TILE_ZOOM)
+const tileY = (lat) => Math.floor(((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * 2 ** TILE_ZOOM)
+
+/** Every OSM runway centreline around an airport, as `{ ref, coords: [lon, lat][] }`. */
+async function osmRunwayLines(template, runways) {
+  let w = Infinity
+  let s = Infinity
+  let e = -Infinity
+  let n = -Infinity
+  for (const r of runways) {
+    for (const end of [r.le, r.he]) {
+      w = Math.min(w, end.lon)
+      e = Math.max(e, end.lon)
+      s = Math.min(s, end.lat)
+      n = Math.max(n, end.lat)
+    }
+  }
+  const tiles = []
+  for (let x = tileX(w - 0.012); x <= tileX(e + 0.012); x++) for (let y = tileY(n + 0.008); y <= tileY(s - 0.008); y++) tiles.push([x, y])
+  const decoded = await Promise.all(
+    tiles.map(async ([x, y]) => {
+      const res = await fetch(template.replace('{z}', TILE_ZOOM).replace('{x}', x).replace('{y}', y))
+      if (!res.ok) throw new Error(`tile ${TILE_ZOOM}/${x}/${y}: HTTP ${res.status}`)
+      return { x, y, layer: decodeTile(Buffer.from(await res.arrayBuffer())).aeroway }
+    }),
+  )
+  const lines = []
+  for (const { x, y, layer } of decoded) {
+    if (!layer) continue
+    for (const f of layer.features) {
+      if (f.type !== 2) continue
+      const tags = {}
+      for (let i = 0; i < f.tags.length; i += 2) tags[layer.keys[f.tags[i]]] = layer.values[f.tags[i + 1]]
+      if (tags.class !== 'runway') continue
+      const toLngLat = ([px, py]) => {
+        const gx = (x + px / layer.extent) / 2 ** TILE_ZOOM
+        const gy = (y + py / layer.extent) / 2 ** TILE_ZOOM
+        return [gx * 360 - 180, (Math.atan(Math.sinh(Math.PI * (1 - 2 * gy))) * 180) / Math.PI]
+      }
+      for (const line of featureLines(f.geometry)) if (line.length > 1) lines.push({ ref: tags.ref ?? null, coords: line.map(toLngLat) })
+    }
+  }
+  return lines
+}
+
+/** "08L/26R", "8L-26R" → "8L/26R", so the OSM ref and the data idents compare equal. */
+const runwayKey = (a, b) => [a, b].map((s) => s.trim().toUpperCase().replace(/^0(?=\d)/, '')).join('/')
+
+/**
+ * Move a runway's ends onto the OSM centreline. Where the OSM line's length
+ * agrees with the published length its end points are used outright;
+ * otherwise (the line stops at a displaced threshold, or is drawn in pieces)
+ * only the line's position and direction are trusted, and the published ends
+ * are slid onto it.
+ */
+function alignRunway(r, lines) {
+  const key = runwayKey(r.le.ident, r.he.ident)
+  const mine = lines.filter((l) => l.ref && runwayKey(...l.ref.split(/[/-]/).concat('').slice(0, 2)) === key)
+  if (!mine.length) return null
+  const lat0 = (r.le.lat + r.he.lat) / 2
+  const lon0 = (r.le.lon + r.he.lon) / 2
+  const kx = 111412.84 * Math.cos((lat0 * Math.PI) / 180)
+  const ky = 111132.92 - 559.82 * Math.cos((2 * lat0 * Math.PI) / 180)
+  const local = ([lon, lat]) => [(lon - lon0) * kx, (lat - lat0) * ky]
+  const fit = (pts) => {
+    // Principal axis of the points: the runway's direction.
+    const cx = pts.reduce((t, p) => t + p[0], 0) / pts.length
+    const cy = pts.reduce((t, p) => t + p[1], 0) / pts.length
+    let sxx = 0
+    let syy = 0
+    let sxy = 0
+    for (const [x, y] of pts) {
+      sxx += (x - cx) ** 2
+      syy += (y - cy) ** 2
+      sxy += (x - cx) * (y - cy)
+    }
+    const th = Math.atan2(2 * sxy, sxx - syy) / 2
+    return { cx, cy, ux: Math.cos(th), uy: Math.sin(th) }
+  }
+  const published = (r.lengthFt ?? 0) * 0.3048
+  const tolerance = Math.max(0.03 * published, 60)
+  const dLe = (r.le.displacedFt ?? 0) * 0.3048
+  const dHe = (r.he.displacedFt ?? 0) * 0.3048
+  const measure = (pts) => {
+    const axis = fit(pts)
+    const along = pts.map(([x, y]) => (x - axis.cx) * axis.ux + (y - axis.cy) * axis.uy)
+    const lo = Math.min(...along)
+    const hi = Math.max(...along)
+    const project = (end) => {
+      const [x, y] = local([end.lon, end.lat])
+      return (x - axis.cx) * axis.ux + (y - axis.cy) * axis.uy
+    }
+    // Which way round the published ends lie on this line.
+    const sign = project(r.he) > project(r.le) ? 1 : -1
+    const [a, b] = sign > 0 ? [lo, hi] : [hi, lo]
+    // OSM sometimes starts the runway line at a displaced threshold rather than the pavement end.
+    let best = null
+    for (const le of dLe ? [a, a - sign * dLe] : [a]) {
+      for (const he of dHe ? [b, b + sign * dHe] : [b]) {
+        const err = Math.abs(Math.abs(he - le) - published)
+        if (published > 0 && err <= tolerance && (!best || err < best.err)) best = { le, he, err }
+      }
+    }
+    return { axis, project, osmLen: hi - lo, best }
+  }
+  const named = mine.flatMap((l) => l.coords.map(local))
+  let m = measure(named)
+  if (!m.best) {
+    // The rest of the runway may be drawn as separate pieces without a ref, on the same line.
+    const pieces = lines.filter((l) => !l.ref).map((l) => l.coords.map(local))
+    const onLine = pieces.filter((q) => q.every(([x, y]) => Math.abs((x - m.axis.cx) * m.axis.uy - (y - m.axis.cy) * m.axis.ux) < 12))
+    const joined = onLine.length ? measure(named.concat(...onLine)) : m
+    if (joined.best) m = joined
+  }
+  const { axis, project, osmLen, best } = m
+  const whole = best != null
+  const at = (t) => [lon0 + (axis.cx + axis.ux * t) / kx, lat0 + (axis.cy + axis.uy * t) / ky]
+  const tLe = best ? best.le : project(r.le)
+  const tHe = best ? best.he : project(r.he)
+  const le = at(tLe)
+  const he = at(tHe)
+  const moved = (end, p) => Math.hypot(...local([end.lon, end.lat]).map((v, i) => v - local(p)[i]))
+  return { le, he, whole, osmLen, shiftLe: moved(r.le, le), shiftHe: moved(r.he, he) }
+}
+
+try {
+  const tilejson = await (await fetch('https://tiles.openfreemap.org/planet')).json()
+  const template = tilejson.tiles?.[0]
+  if (!template) throw new Error('no tile URL in the OpenFreeMap TileJSON')
+  const todo = Object.entries(out).filter(([iata, a]) => !surveyed.has(iata) && a.runways.length)
+  const osm = await Promise.all(todo.map(([, a]) => osmRunwayLines(template, a.runways)))
+  for (const [k, [iata, a]] of todo.entries()) {
+    const lines = osm[k]
+    for (const r of a.runways) {
+      const fix = alignRunway(r, lines)
+      const name = `${iata} ${r.le.ident}/${r.he.ident}`
+      if (!fix) {
+        console.warn(`${name}: no OSM runway with that ref; keeping OurAirports ends`)
+        continue
+      }
+      if (Math.max(fix.shiftLe, fix.shiftHe) > 800) {
+        console.warn(`${name}: OSM line is ${Math.round(Math.max(fix.shiftLe, fix.shiftHe))} m away; keeping OurAirports ends`)
+        continue
+      }
+      const round = (v) => Math.round(v * 1e6) / 1e6
+      ;[r.le.lon, r.le.lat] = fix.le.map(round)
+      ;[r.he.lon, r.he.lat] = fix.he.map(round)
+      const brg = (p, q) => ((Math.atan2((q[0] - p[0]) * Math.cos((p[1] * Math.PI) / 180), q[1] - p[1]) * 180) / Math.PI + 360) % 360
+      r.le.hdg = Math.round(brg(fix.le, fix.he) * 10) / 10
+      r.he.hdg = Math.round(brg(fix.he, fix.le) * 10) / 10
+      console.log(`${name}: moved ${Math.round(fix.shiftLe)} m / ${Math.round(fix.shiftHe)} m onto OSM (${fix.whole ? 'ends' : 'axis only'}, OSM ${Math.round(fix.osmLen)} m)`)
+    }
+  }
+} catch (err) {
+  console.warn(`OpenStreetMap runway alignment skipped (${err.message})`)
 }
 
 for (const a of Object.values(out)) {
