@@ -31,7 +31,10 @@ describe.each(AIRPORTS.map((a) => a.icao))('%s runways', (code) => {
         const r = near(f)
         return r.along >= 0 && r.along < 8 + e.lengthM * 0.01 && Math.abs(r.cross) < e.widthM / 2
       })
-      expect(stripes.length, `${e.ident} threshold stripes`).toBeGreaterThanOrEqual(6)
+      // FAA: 4 stripes on the narrowest runways, up to 16 on a 200 ft runway.
+      const wFt = e.widthM / M_PER_FT
+      const expected = wFt >= 200 ? 16 : wFt >= 150 ? 12 : wFt >= 100 ? 8 : wFt >= 75 ? 6 : 4
+      expect(stripes.length, `${e.ident} threshold stripes`).toBe(expected)
     }
     const chars = ends.reduce((n, e) => n + e.ident.length, 0)
     // Every character of every designator is drawn (the 'R' is two strokes, '2' one, ...).

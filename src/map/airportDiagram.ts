@@ -95,6 +95,15 @@ function quad(end: End, s0: number, s1: number, t0: number, t1: number, properti
   return { type: 'Feature', properties, geometry: { type: 'Polygon', coordinates: [ring] } }
 }
 
+/** Threshold stripes by runway width, per AC 150/5340-1 table 2-1. */
+function thresholdStripeCount(widthFt: number): number {
+  if (widthFt >= 200) return 16
+  if (widthFt >= 150) return 12
+  if (widthFt >= 100) return 8
+  if (widthFt >= 75) return 6
+  return 4
+}
+
 /**
  * Stencil numerals and side letters, as strokes on a unit square (x across,
  * y up). Runway numbers are painted in a plain block style: straight strokes
@@ -173,17 +182,18 @@ function endMarkings(
     }
   }
 
-  // Threshold: a solid bar across the end of the pavement, then a block of
-  // fine stripes the full width of the runway, 150 ft long.
+  // Threshold: a solid bar across the end of the pavement, then the FAA
+  // pattern of stripes, 150 ft long, 5.75 ft wide with 5.75 ft spaces, in two
+  // groups either side of an 11.5 ft gap on the centreline.
   if (d <= 30) paint.push(quad(end, 0.6, 2.4, -half + 0.6, half - 0.6, { kind: 'threshold-bar' }))
   const s0 = d + 4
   const s1 = s0 + ft(150)
-  const inset = 1.6
-  const stripes = Math.max(6, Math.round((widthM - 2 * inset) / 3.3))
-  const pitch = (widthM - 2 * inset) / stripes
-  for (let i = 0; i < stripes; i++) {
-    const c = -half + inset + pitch * (i + 0.5)
-    paint.push(quad(end, s0, s1, c - pitch * 0.28, c + pitch * 0.28, { kind: 'threshold' }))
+  const stripes = thresholdStripeCount(widthM / M_PER_FT)
+  for (let i = 0; i < stripes / 2; i++) {
+    const c = ft(8.625 + 11.5 * i)
+    const w = ft(5.75) / 2
+    paint.push(quad(end, s0, s1, c - w, c + w, { kind: 'threshold' }))
+    paint.push(quad(end, s0, s1, -c - w, -c + w, { kind: 'threshold' }))
   }
 
   // Designator: the side letter nearest the threshold, then the number beyond
