@@ -33,8 +33,8 @@ describe('search', () => {
     expect(search(calls, { ...NO_FILTERS, query: '"runway heading"' }).map((h) => h.item.id)).toEqual(['3'])
   })
 
-  it('applies the phrase chips, including matching tower-log events', () => {
-    expect(search(calls, { ...NO_FILTERS, phrase: 'goaround' }).map((h) => h.item.id)).toEqual(['3', '5'])
+  it('applies the phrase chips to what was said, not to detected events', () => {
+    expect(search(calls, { ...NO_FILTERS, phrase: 'goaround' }).map((h) => h.item.id)).toEqual(['3'])
     expect(search(calls, { ...NO_FILTERS, phrase: 'luaw' }).map((h) => h.item.id)).toEqual(['2'])
     expect(search(calls, { ...NO_FILTERS, phrase: 'land' }).map((h) => h.item.id)).toEqual(['1'])
     expect(search(calls, { ...NO_FILTERS, phrase: 'holdshort' }).map((h) => h.item.id)).toEqual(['4'])

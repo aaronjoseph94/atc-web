@@ -1,26 +1,28 @@
 /**
- * The full conversation, big and readable, and searchable.
+ * The full conversation between the tower and the pilots, big and readable,
+ * and searchable. Only what was said on the radio: detected takeoffs,
+ * landings and go-arounds are listed under Recent activity in the traffic
+ * panel instead.
  *
  * Live: every radio call heard at this airport (today's, kept across
- * reloads) and the tower log of detected takeoffs, landings and go-arounds,
- * under "Now", "10 min ago"… headings. Type to filter as you go, with the
- * matches lit; narrow to this channel, one callsign or your flight; or tap a
- * chip for the phrases people look for ("go around", "hold short"…). Tapping
- * a call replays its audio (the last fifty calls are kept), lights up the
- * aircraft, and redraws its taxi route if it was a taxi clearance.
+ * reloads), under "Now", "10 min ago"… headings. Type to filter as you go,
+ * with the matches lit; narrow to this channel, one callsign or your flight;
+ * or tap a chip for the phrases people look for ("go around", "hold
+ * short"…). Tapping a call replays its audio (the last fifty calls are
+ * kept), lights up the aircraft, and redraws its taxi route if it was a
+ * taxi clearance.
  *
- * In a replay: every cue, searchable the same way; tap one to jump there.
+ * In a replay: every spoken cue, searchable the same way; tap one to jump there.
  *
  * Phones get a full-height sheet; wide screens a panel docked at the right,
  * so the map stays in view and in reach.
  */
-import { ArrowDown, ArrowUp, ArrowUpFromLine, AudioLines, Play, Plane, Radio, RotateCcw, Route, Search, Siren, X } from 'lucide-react'
+import { AudioLines, Play, Plane, Route, Search, X } from 'lucide-react'
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { getAirport, resolveStation } from '../api/airports'
 import { formatMhz } from '../api/airportData'
 import { useNow } from '../hooks/useNow'
-import type { LiveEventKind } from '../live/events'
 import { findClip, loadClipIndex, playClip, startClipCapture, stopClip, useClips } from '../live/history/clips'
 import { callsignSuggestions, groupByTime, highlight, NO_FILTERS, PHRASES, search, type Filters, type Hit, type Range, type SearchItem } from '../live/history/search'
 import { startHistory, useHistory, type HistoryEntry } from '../live/history/store'
@@ -35,7 +37,8 @@ import { usePlayhead } from '../playback/playheadStore'
 import { PanelFrame } from '../ui/Panel'
 import { ATC_COLORS, PILOT_COLORS } from '../ui/speaker'
 
-const EVENT_ICON: Record<LiveEventKind, typeof ArrowUp> = { departed: ArrowUp, landed: ArrowDown, goaround: RotateCcw, lineup: ArrowUpFromLine, emergency: Siren }
+/** How rewind clips label their tower-log lines (src/live/recorder.ts); not radio, so not shown here. */
+const TOWER_LOG_SPEAKER = 'Tower log'
 
 /** Rows rendered at first; older ones come in pages, so a long day stays quick to draw. */
 const PAGE = 120
@@ -180,8 +183,9 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   // ---- what there is to search ----------------------------------------------
   const cues = playback ? clip.cues : null
   const items: Item[] = useMemo(() => {
-    if (!cues || !clip) return entries
-    return cues.map((c): CueItem => {
+    // Radio only: the tower-log events in the history (and in rewind clips) belong to Recent activity.
+    if (!cues || !clip) return entries.filter((e) => e.source === 'radio')
+    return cues.filter((c) => c.speaker !== TOWER_LOG_SPEAKER).map((c): CueItem => {
       const label = c.callsign ? (clip.aircraft?.[c.callsign]?.callsign ?? c.callsign).toUpperCase() : (c.speaker ?? '')
       return { id: c.id, source: 'cue', at: c.startMs, startMs: c.startMs, endMs: c.endMs, text: c.text, stationId: '', callsigns: label ? [label] : [], ids: c.callsign ? [trackId(c.callsign)] : [], label, key: c.callsign ?? null }
     })
@@ -192,7 +196,7 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   const shown = hits.slice(-limit)
   const groups = useMemo(() => (playback ? [{ label: clip?.title ?? 'Replay', key: 'replay', hits: shown }] : groupByTime(shown, now)), [playback, clip, shown, now])
   const suggestions = useMemo(() => (filters.callsign ? [] : callsignSuggestions(items, query)), [items, query, filters.callsign])
-  const filtering = !!(query || filters.phrase || filters.source !== 'all' || filters.stationId || filters.callsign || filters.icao24)
+  const filtering = !!(query || filters.phrase || filters.stationId || filters.callsign || filters.icao24)
   const activeCue = playback ? clip?.cues.find((c) => tMs >= c.startMs && tMs < c.endMs)?.id : undefined
   const withAudio = useMemo(() => new Set(hits.filter((h) => h.item.source === 'radio' && findClip(clipIndex, h.item.stationId, h.item.at, (h.item as HistoryEntry).durationMs)).map((h) => h.item.id)), [hits, clipIndex])
 
@@ -251,11 +255,6 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
     // On a phone the sheet covers the map: get out of the way so the aircraft can be seen.
     if (!docked && (lit || !meta)) onClose()
   }
-  const openEvent = (e: HistoryEntry) => {
-    if (!e.ids[0] || !liveBuffer.get(e.ids[0])) return
-    select(e.ids[0])
-    if (!docked) onClose()
-  }
   const openCue = (c: CueItem) => {
     setTMs(c.startMs)
     setPlaying(true)
@@ -267,7 +266,7 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   // The sheet's body is inset 16 px (20 on wider screens); the side panel's 16 px throughout.
   const gutter = docked ? '-mx-4 px-4' : '-mx-4 px-4 md:-mx-5 md:px-5'
   const stationLabel = (id: string) => resolveStation(airport, id)?.label ?? ''
-  const radioCount = entries.filter((e) => e.source === 'radio').length
+  const radioCount = items.length
   const empty = !filtering && hits.length === 0
 
   return (
@@ -300,19 +299,9 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
         </div>
         <div className={`no-scrollbar mt-2.5 flex gap-1.5 overflow-x-auto ${gutter}`} role="toolbar" aria-label="Filters">
           {!playback && (
-            <>
-              <Chip active={filters.source === 'radio'} onClick={() => patch({ source: filters.source === 'radio' ? 'all' : 'radio' })}>
-                <Radio className="size-3.5" strokeWidth={2.5} />
-                Radio
-              </Chip>
-              <Chip active={filters.source === 'event'} onClick={() => patch({ source: filters.source === 'event' ? 'all' : 'event' })}>
-                <ArrowUp className="size-3.5" strokeWidth={2.5} />
-                Tower log
-              </Chip>
-              <Chip active={!!filters.stationId} onClick={() => patch({ stationId: filters.stationId ? null : stationId })} label="Only calls on this channel">
-                This channel
-              </Chip>
-            </>
+            <Chip active={!!filters.stationId} onClick={() => patch({ stationId: filters.stationId ? null : stationId })} label="Only calls on this channel">
+              This channel
+            </Chip>
           )}
           <Chip active={!!filters.icao24} disabled={!myFlight} onClick={() => patch({ icao24: filters.icao24 ? null : myFlight })} label={myFlight ? 'Only calls about your flight' : 'Select a flight on the map first'}>
             <Plane className="size-3.5" strokeWidth={2.5} />
@@ -401,27 +390,6 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
                       </li>
                     )
                   }
-                  if (it.source === 'event') {
-                    const Icon = EVENT_ICON[it.eventKind as LiveEventKind] ?? ArrowUp
-                    return (
-                      <li key={it.id} className={rowClass} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 72px' }}>
-                        <button type="button" className="pressable-soft flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-white/[0.07]" onClick={() => openEvent(it)}>
-                          <span className={`mt-1 grid size-7 shrink-0 place-items-center rounded-full ${it.eventKind === 'emergency' ? 'bg-atc-live text-white' : 'bg-atc-yellow text-black'}`}>
-                            <Icon className="size-4" strokeWidth={2.5} />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-1.5 text-caption font-medium tabular-nums text-white/45">
-                              <AirlineLogo callsign={it.callsigns[0] ?? ''} icao24={it.ids[0] ?? null} height={14} maxWidth={24} />
-                              Tower log · {clock(it.at)}
-                            </span>
-                            <span className="block text-title3 font-semibold text-white/90">
-                              <Marked text={it.text} ranges={h.ranges} />
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    )
-                  }
                   const who = it.callsigns[0]
                   const role = it.speaker === 'pilot' ? 'Pilot' : it.speaker === 'controller' ? 'Controller' : null
                   const audio = withAudio.has(it.id)
@@ -492,16 +460,16 @@ function rangesIn(label: string, query: string): Range[] {
 }
 
 function EmptyState({ playback, radioOn, transcripts }: { playback: boolean; radioOn: boolean; transcripts: string }) {
-  if (playback) return <p className="py-10 text-center text-subhead text-atc-muted">Nothing was logged during this stretch. Scrub the timeline to see the traffic move.</p>
+  if (playback) return <p className="py-10 text-center text-subhead text-atc-muted">Nobody spoke during this stretch. Scrub the timeline to hear the next call.</p>
   return (
     <div className="py-10 text-center">
-      <p className="text-body font-semibold">{radioOn ? 'Listening' : 'Watching the runways'}</p>
+      <p className="text-body font-semibold">{radioOn ? 'Listening' : 'No calls yet'}</p>
       <p className="mx-auto mt-2 max-w-sm text-footnote leading-relaxed text-atc-muted">
         {radioOn
           ? transcripts === 'unavailable'
-            ? 'Live transcripts need the deployed site. The audio still plays here.'
+            ? 'Written transcripts only work on the published site. The audio still plays here.'
             : 'Each call on this channel is written out here a moment after it is spoken, and kept for a day so you can search it.'
-          : 'Takeoffs, landings and go-arounds are logged here as they happen. Press play on the station bar to hear the channel live and read along.'}
+          : 'Press play on the station bar to hear this channel; calls appear here as they’re spoken.'}
       </p>
     </div>
   )

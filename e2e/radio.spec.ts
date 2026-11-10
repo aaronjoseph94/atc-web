@@ -72,12 +72,12 @@ test.describe('live radio', () => {
     await expect(transcript.getByRole('listitem')).toHaveCount(1)
     await expect(transcript.locator('mark').first()).toHaveText(/^heading$/i)
     await search.fill('')
+    // Only radio here: takeoffs and landings are listed under Recent activity in the traffic panel.
     const filters = transcript.getByRole('toolbar', { name: 'Filters' })
-    await filters.getByRole('button', { name: 'Tower log' }).click()
-    await expect(transcript.getByRole('listitem').filter({ hasText: CALLS[0].text })).toHaveCount(0)
-    await filters.getByRole('button', { name: 'Tower log' }).click()
-    await filters.getByRole('button', { name: 'Radio' }).click()
+    await expect(filters.getByRole('button', { name: 'Tower log' })).toHaveCount(0)
+    await filters.getByRole('button', { name: 'Only calls on this channel' }).click()
     await expect(transcript.getByRole('listitem').filter({ hasText: CALLS[0].text })).toBeVisible()
+    await filters.getByRole('button', { name: 'Only calls on this channel' }).click()
 
     // Tapping a call points at its aircraft: it replays the call's recorded audio and lights the
     // aircraft up, or (with no audio kept) selects it.
