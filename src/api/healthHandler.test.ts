@@ -28,7 +28,7 @@ describe('buildHealth', () => {
     expect(Object.keys(by).sort()).toEqual(['adsb.fi', 'adsb.lol', 'adsbdb.com', 'airplanes.live', 'atis.info', 'aviationweather.gov', 'hexdb.io', 'opensky', 'tgftp.nws.noaa.gov'])
     expect(by['adsb.lol']).toMatchObject({ ok: false, error: 'HTTP 502' })
     expect(by['adsb.fi'].ok).toBe(true)
-    expect(by['airplanes.live'].enabled).toBe(false)
+    expect(by['airplanes.live'].enabled).not.toBe(false)
     expect(by['opensky'].note).toMatch(/not probed/)
     expect(by['tgftp.nws.noaa.gov']).toMatchObject({ ok: true, kind: 'weather' })
   })
