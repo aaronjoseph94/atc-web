@@ -154,7 +154,8 @@ function sectorName(sector) {
   const s = (sector ?? '').trim()
   if (!s) return ''
   const rwy = /^RWYS? (.+)$/i.exec(s)
-  if (rwy) return `Rwy ${rwy[1].replace(/\//g, '-').replace(/\b0(\d[LCR]?)\b/g, '$1')}`
+  // "RWY 1L/19R, RWY 12/30" lists several runways; only the first keeps the word.
+  if (rwy) return `Rwy ${rwy[1].replace(/\bRWYS?\s+/gi, '').replace(/\//g, '-').replace(/\b0(\d[LCR]?)\b/g, '$1')}`
   const arc = /^(\d{3})-(\d{3})(?: (.+))?$/.exec(s)
   if (arc) return arc[3] ? `${title(arc[3])} (${arc[1]}°–${arc[2]}°)` : `${arc[1]}°–${arc[2]}°`
   return title(s.replace(/^TWR /i, ''))
