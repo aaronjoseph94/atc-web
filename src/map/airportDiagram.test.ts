@@ -24,6 +24,8 @@ describe('runway data', () => {
   })
 })
 
+const centroid = (ring: [number, number][]): [number, number] => [(ring[0][0] + ring[2][0]) / 2, (ring[0][1] + ring[2][1]) / 2]
+
 describe('buildAirportDiagram', () => {
   const ord = buildAirportDiagram('ORD')
 
@@ -75,15 +77,18 @@ describe('buildAirportDiagram', () => {
     }
   })
 
-  it('fills the threshold with fine stripes 150 ft long, behind a solid bar', () => {
+  it('paints the FAA threshold stripes behind a solid bar, split by a centre gap', () => {
     const end = runwayEnds('ORD').find((e) => e.ident === '28R')!
     const stripes = ord.paint.features.filter((f) => f.properties?.kind === 'threshold' && Math.abs(relativeToRunway(end, f.geometry.coordinates[0][0] as [number, number]).cross) < end.widthM / 2 && relativeToRunway(end, f.geometry.coordinates[0][0] as [number, number]).along < 10 && relativeToRunway(end, f.geometry.coordinates[0][0] as [number, number]).along > 0)
-    // A 150 ft runway carries 13 stripes, evenly spread across its width.
-    expect(stripes).toHaveLength(13)
+    // A 150 ft runway carries 12 stripes, 5.75 ft wide, six either side of the centreline.
+    expect(stripes).toHaveLength(12)
     const ring = stripes[0].geometry.coordinates[0] as [number, number][]
     expect(distanceM(ring[0], ring[1]) / M_PER_FT).toBeCloseTo(150, 0)
-    expect(distanceM(ring[1], ring[2])).toBeGreaterThan(1.5)
-    expect(distanceM(ring[1], ring[2])).toBeLessThan(2.2)
+    expect(distanceM(ring[1], ring[2]) / M_PER_FT).toBeCloseTo(5.75, 1)
+    const cross = stripes.map((f) => relativeToRunway(end, centroid(f.geometry.coordinates[0] as [number, number][])).cross)
+    expect(cross.filter((c) => c > 0)).toHaveLength(6)
+    // Nothing painted within 5.75 ft of the centreline: the gap between the two groups.
+    expect(Math.min(...cross.map(Math.abs)) / M_PER_FT).toBeCloseTo(8.625, 1)
     expect(ord.paint.features.some((f) => f.properties?.kind === 'threshold-bar')).toBe(true)
   })
 

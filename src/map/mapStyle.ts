@@ -306,7 +306,7 @@ function layers(p: Palette): LayerSpecification[] {
     // then the touchdown bars, centreline and side stripes receding into the pavement.
     { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'kind'], 'threshold', p.paint, 'threshold-bar', p.paint, 'aim', p.paintMid, 'edge', p.paintMid, p.paintDim], 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, 1] } },
     // Runway numbers and letters, as thin stencil strokes with a real-world width.
-    { id: 'apt-designator', type: 'line', source: SRC.designators, minzoom: 13.6, layout: { ...vis(paint), 'line-cap': 'square', 'line-join': 'miter' }, paint: { 'line-color': p.paintMid, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, 1], 'line-width': metres(1.15) } },
+    { id: 'apt-designator', type: 'line', source: SRC.designators, minzoom: 13.6, layout: { ...vis(paint), 'line-cap': 'square', 'line-join': 'miter' }, paint: { 'line-color': p.paintMid, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, 1], 'line-width': metres(1.8) } },
 
     // ---- 3D buildings (only when the map is tilted) ------------------------------
     { id: LAYER.buildings3d, type: 'fill-extrusion', source: 'omt', 'source-layer': 'building', minzoom: 13, layout: vis(false), paint: { 'fill-extrusion-color': p.buildingTop, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.92, 'fill-extrusion-vertical-gradient': true } },
