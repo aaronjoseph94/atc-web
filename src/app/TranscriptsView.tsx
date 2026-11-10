@@ -18,7 +18,8 @@ const EVENT_ICON: Record<LiveEvent['kind'], typeof ArrowUp> = { departed: ArrowU
 export function TranscriptsView() {
   const open = usePlayhead((s) => s.panel === 'transcripts')
   const clip = usePlayhead((s) => s.clip)
-  const tMs = usePlayhead((s) => s.tMs)
+  // The clock only matters while the transcript is showing; closed, it shouldn't re-render on every tick.
+  const tMs = usePlayhead((s) => (s.panel === 'transcripts' ? s.tMs : 0))
   const mode = usePlayhead((s) => s.mode)
   const events = usePlayhead((s) => s.events)
   const airportIcao = usePlayhead((s) => s.airportIcao)
@@ -44,14 +45,14 @@ export function TranscriptsView() {
 
   return (
     <FullPanel open={open} title={playback ? 'Transcript' : 'Tower log'} onClose={close} tone="black">
-      <p className="-mt-2 mb-4 text-sm text-white/55">
+      <p className="-mt-1.5 mb-4 px-1 text-footnote text-white/55">
         {airport.icao} {station?.label}
         {station?.frequencyMhz != null ? `, ${formatMhz(station.frequencyMhz)}` : ''}
       </p>
 
       {playback ? (
         cues.length === 0 ? (
-          <p className="py-10 text-center text-sm text-atc-muted">Nothing was logged during this stretch. Scrub the timeline to see the traffic move.</p>
+          <p className="py-10 text-center text-subhead text-atc-muted">Nothing was logged during this stretch. Scrub the timeline to see the traffic move.</p>
         ) : (
           <ol className="flex flex-col gap-1">
             {cues.map((c) => {
@@ -63,7 +64,7 @@ export function TranscriptsView() {
                   <button
                     type="button"
                     aria-current={active || undefined}
-                    className={`w-full rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.07] ${active ? 'bg-white/10' : ''}`}
+                    className={`pressable-soft w-full rounded-2xl px-3 py-2.5 text-left hover:bg-white/[0.07] ${active ? 'bg-white/10' : ''}`}
                     onClick={() => {
                       setTMs(c.startMs)
                       setPlaying(true)
@@ -71,12 +72,12 @@ export function TranscriptsView() {
                       close()
                     }}
                   >
-                    <span className="flex items-center gap-2 text-xs font-medium text-white/45">
+                    <span className="flex items-center gap-2 text-caption font-medium text-white/45">
                       <span className="font-semibold text-white/65">{label}</span>
                       {c.speaker && c.speaker !== 'Tower log' && <span>{c.speaker}</span>}
                       <span className="tabular-nums">{clip.startedAt != null ? new Date(clip.startedAt + c.startMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : formatClock(c.startMs)}</span>
                     </span>
-                    <span className={`mt-0.5 block text-[21px] font-semibold leading-snug ${active ? 'text-white' : past ? 'text-white/80' : 'text-white/40'}`}>{c.text}</span>
+                    <span className={`mt-0.5 block text-title3 font-semibold transition-colors duration-[var(--duration-base)] ${active ? 'text-white' : past ? 'text-white/80' : 'text-white/40'}`}>{c.text}</span>
                   </button>
                 </li>
               )
@@ -85,8 +86,8 @@ export function TranscriptsView() {
         )
       ) : events.length === 0 ? (
         <div className="py-10 text-center">
-          <p className="text-[15px] font-semibold">Watching the runways</p>
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-atc-muted">
+          <p className="text-body font-semibold">Watching the runways</p>
+          <p className="mx-auto mt-2 max-w-sm text-footnote text-atc-muted">
             Takeoffs, landings and go-arounds are logged here as they happen. Free live feeds carry positions, not radio, so this log is worked out from where aircraft are. For radio with a transcript, open Replay from the menu.
           </p>
         </div>
@@ -98,7 +99,7 @@ export function TranscriptsView() {
               <li key={e.id}>
                 <button
                   type="button"
-                  className="flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.07]"
+                  className="pressable-soft flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-white/[0.07]"
                   onClick={() => {
                     select(e.icao24)
                     close()
@@ -108,8 +109,8 @@ export function TranscriptsView() {
                     <Icon className="size-4" strokeWidth={2.5} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-medium tabular-nums text-white/45">{new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
-                    <span className="block text-[19px] font-semibold leading-snug">{e.text}</span>
+                    <span className="block text-caption font-medium tabular-nums text-white/45">{new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>
+                    <span className="block text-title3 font-semibold">{e.text}</span>
                   </span>
                 </button>
               </li>
@@ -117,7 +118,7 @@ export function TranscriptsView() {
           })}
         </ol>
       )}
-      {playback && cues.length > 0 && <p className="py-6 text-center text-xs text-white/35">Tap a line to jump the replay there.</p>}
+      {playback && cues.length > 0 && <p className="py-6 text-center text-caption text-white/35">Tap a line to jump the replay there.</p>}
     </FullPanel>
   )
 }

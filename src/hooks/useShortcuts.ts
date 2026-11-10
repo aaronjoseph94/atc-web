@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { mapHandle } from '../live/session'
+import { cameraNudge } from '../app/camera'
 import { usePlayhead, type Panel } from '../playback/playheadStore'
 
 /** Shown in the help panel; the handler below is the source of truth for behaviour. */
@@ -11,9 +12,11 @@ export const SHORTCUTS: [string, string][] = [
   ['W', 'Weather and ATIS'],
   ['R', 'Replay'],
   ['L', 'Map layers'],
-  ['3', '3D view'],
+  ['M', 'Menu'],
   ['F', 'Follow the selected flight'],
   ['H', 'Show the whole airfield'],
+  ['N', 'Turn the map north up'],
+  ['+ −', 'Zoom in or out'],
   ['Space', 'Play or pause a replay'],
   ['← →', 'Skip 5 seconds in a replay'],
   ['Esc', 'Close, or clear the selection'],
@@ -50,8 +53,16 @@ export function useShortcuts() {
         return
       }
       switch (key) {
-        case '3':
-          s.setTilt(!s.tilt)
+        case 'n':
+          cameraNudge.northUp()
+          break
+        case '+':
+        case '=':
+          cameraNudge.zoom(1)
+          break
+        case '-':
+        case '_':
+          cameraNudge.zoom(-1)
           break
         case 'f':
           if (s.selectedIcao) s.setFollowing(!s.following)

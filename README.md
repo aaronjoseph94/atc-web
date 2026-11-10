@@ -8,7 +8,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 
 **Map**
 - **Painted airfield.** Runway pavement and FAA-standard markings (threshold stripes, designators, centreline, aiming points, touchdown-zone bars, displaced-threshold arrows) are generated from surveyed runway ends, so they stay sharp at any zoom. Taxiway centrelines, holding-position bars, taxiway signs and gate numbers come from OpenStreetMap.
-- **Four looks:** night (navy with green infield), graphite, USGS aerial photos, and the FAA's VFR charts. Plus a 3D view with raised buildings and an optional NEXRAD weather-radar overlay. The US-government layers cover US airports.
+- **Four looks:** night (navy with green infield), graphite, USGS aerial photos, and the FAA's VFR charts. Plus an optional NEXRAD weather-radar overlay. The US-government layers cover US airports.
 - **Aircraft** drawn by airframe class (narrow-body, wide-body, four-engine, regional jet, turboprop, light, helicopter, ground vehicle), with shadows that grow with height, a wake behind everything airborne, and a controller-style data block (`045↑ B738` = 4,500 ft, climbing, 737-800).
 
 **Live traffic**
@@ -26,7 +26,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 - **Radio explanations.** A built-in phrasebook translates calls ("hold short 27C" → "stop before runway 27C"). Set `AI_API_KEY` and a model writes the summary instead.
 
 **Everywhere**
-- Keyboard shortcuts (`?` lists them), draggable sheets, deep links per airport (`/#/JFK`), pinned and recent airports, "near me", units, reduced motion.
+- Keyboard shortcuts (`?` lists them), sheets you can drag or pull down to close, tap a runway for its details, press and hold (or right-click) to centre the map, deep links per airport (`/#/JFK`), pinned and recent airports, "near me", units, reduced motion.
 
 ## Stack
 
@@ -121,7 +121,7 @@ Functions under `functions/` are picked up automatically; no environment variabl
 - Charts, US runways and frequencies: [FAA Aeronautical Information Services](https://www.faa.gov/air_traffic/flight_info/aeronav/) (US government work). Canadian airports and field elevations: [OurAirports](https://ourairports.com/data/) (public domain). Snapshot in `src/api/airportData.json`.
 - Weather: [aviationweather.gov](https://aviationweather.gov) (US National Weather Service). ATIS text: [atis.info](https://atis.info). Radar: NOAA NEXRAD via the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/).
 - Routes and airframes: [adsbdb.com](https://www.adsbdb.com). Photos: [airport-data.com](https://www.airport-data.com), shown with the photographer's name and a link back.
-- Fonts: Outfit and Anton (Google Fonts, OFL). Icons: Lucide (ISC). Aircraft silhouettes and sign plates: self-authored, drawn at runtime.
+- Fonts: SF Pro where the system has it, otherwise Inter; Archivo for airport codes and callsigns (Google Fonts, OFL). Icons: Lucide (ISC). Aircraft silhouettes and sign plates: self-authored, drawn at runtime.
 - Replay audio is synthetic: voiced with [Piper](https://github.com/OHF-Voice/piper1-gpl) using the LibriTTS and Cori Samuel voices (CC BY 4.0) and the Joe voice (CC0), then run through a radio effect. No real ATC recordings are redistributed. LiveATC streams can't be embedded, so the channel switcher links out to them instead.
 
 Everything here is shown for interest. It is not for navigation or flight planning.

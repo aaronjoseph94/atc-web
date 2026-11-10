@@ -56,7 +56,7 @@ export function ReplayPanel() {
     <Sheet open={open} title="Replay" onClose={() => setPanel(null)}>
       <SectionLabel>Rewind {airportIcao}</SectionLabel>
       <div className="rounded-2xl bg-white/[0.05] p-3.5">
-        <p className="flex items-start gap-2.5 text-sm leading-relaxed text-white/75">
+        <p className="flex items-start gap-2.5 text-footnote text-white/75">
           <History className="mt-0.5 size-4 shrink-0 text-atc-yellow" />
           {mode === 'playback'
             ? 'Go back to live to rewind what has been recorded.'
@@ -72,7 +72,7 @@ export function ReplayPanel() {
                 key={min}
                 type="button"
                 disabled={!enabled}
-                className="rounded-xl bg-atc-yellow px-3 py-2.5 text-sm font-bold text-black transition hover:brightness-105 active:scale-[0.97] disabled:bg-white/10 disabled:text-white/35"
+                className="pressable min-h-11 rounded-xl bg-atc-yellow px-3 py-2.5 text-subhead font-semibold text-black hover:brightness-105 disabled:bg-white/[0.08] disabled:text-white/30"
                 onClick={() => rewind(min)}
               >
                 {min === 45 ? label : `Back ${label}`}
@@ -89,29 +89,29 @@ export function ReplayPanel() {
           <div className="skeleton h-[4.5rem] w-full rounded-2xl" />
         </div>
       ) : !scenes.data?.length ? (
-        <p className="rounded-2xl bg-white/[0.05] p-3.5 text-sm text-atc-muted">No recorded scenes are available right now.</p>
+        <p className="rounded-2xl bg-white/[0.05] p-3.5 text-footnote text-atc-muted">No recorded scenes are available right now.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {scenes.data.map((c) => (
             <li key={c.id}>
-              <button type="button" className="flex w-full items-center gap-3 rounded-2xl bg-white/[0.05] p-3 text-left transition hover:bg-white/10 active:scale-[0.99]" onClick={() => void play(c.id)}>
-                <span className="grid size-11 shrink-0 place-items-center rounded-full bg-atc-magenta text-white">
+              <button type="button" className="group pressable-soft flex w-full items-center gap-3 rounded-2xl bg-white/[0.05] p-3 text-left hover:bg-white/[0.09]" onClick={() => void play(c.id)}>
+                <span className="grid size-11 shrink-0 place-items-center rounded-full bg-atc-magenta text-white shadow-float transition-[scale] duration-[var(--duration-base)] ease-[var(--ease-spring)] group-hover:scale-105">
                   <Play className="size-5 translate-x-0.5 fill-current" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold">{c.title}</span>
-                  {c.description && <span className="line-clamp-2 block text-xs leading-snug text-atc-muted">{c.description}</span>}
+                  <span className="block truncate text-subhead font-semibold">{c.title}</span>
+                  {c.description && <span className="mt-0.5 line-clamp-2 block text-footnote text-atc-muted">{c.description}</span>}
                 </span>
                 <span className="shrink-0 text-right">
-                  <span className="block font-display text-lg leading-none text-atc-yellow">{getAirport(c.airport).icao}</span>
-                  <span className="block text-xs tabular-nums text-atc-muted">{formatClock(c.durationMs)}</span>
+                  <span className="block font-display text-[20px] leading-none text-atc-yellow">{getAirport(c.airport).icao}</span>
+                  <span className="mt-1 block text-caption tabular-nums text-atc-muted">{formatClock(c.durationMs)}</span>
                 </span>
               </button>
             </li>
           ))}
         </ul>
       )}
-      <p className="mt-4 text-[11px] leading-relaxed text-atc-muted">
+      <p className="mt-4 px-1 text-caption text-atc-muted">
         Scenes are scripted and voiced by a speech synthesizer, with aircraft moving on the real runways. Recordings of real tower radio can’t be redistributed, so none are bundled.
       </p>
     </Sheet>

@@ -6,7 +6,7 @@
  *                  or the yellow station bar (mobile: edge-to-edge, desktop: floating)
  *   overlays     — channel switcher, flight detail, panels, menu, toast
  */
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { FlightCard, FlightDetail } from '../flight/FlightSheet'
 import { useLiveCaptions } from '../hooks/useLiveCaptions'
 import { useShortcuts } from '../hooks/useShortcuts'
@@ -20,14 +20,17 @@ import { useSettings } from '../settings/settingsStore'
 import { StationBar } from '../station/StationBar'
 import { StationSheet } from '../station/StationSheet'
 import { Subtitles } from '../transcript/Subtitles'
+import { DURATION } from '../ui/motion'
 import { usePresence } from '../ui/usePresence'
 import { WeatherPanel } from '../weather/WeatherPanel'
 import { AirportPicker } from './AirportPicker'
 import { HelpPanel } from './HelpPanel'
 import { LayersPanel } from './LayersPanel'
 import { AutoMapPill, MapControls } from './MapControls'
+import { MapGestures } from './MapGestures'
 import { Menu } from './Menu'
 import { ReplayPanel } from './ReplayPanel'
+import { RunwayInfo } from './RunwayInfo'
 import { TopBar } from './TopBar'
 import { TrafficPanel } from './TrafficPanel'
 import { TranscriptsView } from './TranscriptsView'
@@ -38,6 +41,7 @@ export function AppShell() {
   const tracking = usePlayhead((s) => s.following && !!s.selectedIcao)
   const reduceMotion = useSettings((s) => s.reduceMotion)
   const stack = useRef<HTMLDivElement>(null)
+  const cardStack = usePresence(sheet !== 'closed', DURATION.exit + 80)
 
   useShortcuts()
   useUrlSync()
@@ -63,30 +67,69 @@ export function AppShell() {
 
   return (
     <div className={`relative h-full w-full overflow-hidden bg-atc-bg ${reduceMotion ? 'reduce-motion' : ''}`}>
-      <AudioEngine />
-      <MapView />
+      <MapLayer />
 
-      {/* Tint over the top of the map: neutral, purple while tracking a flight, magenta in a replay. */}
-      <div
-        className={`pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b to-transparent transition-colors duration-500 ${
-          mode === 'playback' ? 'from-atc-magenta/55' : tracking ? 'from-atc-card/60' : 'from-black/55'
-        }`}
-      />
+      {/* Tint over the top of the map: neutral, purple while tracking a flight, magenta in a replay.
+          Gradients can't be transitioned, so the three tints cross-fade. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/55 to-transparent" />
+      <div className={`pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-atc-card/60 to-transparent transition-opacity duration-500 ease-[var(--ease-in-out)] ${tracking && mode !== 'playback' ? 'opacity-100' : 'opacity-0'}`} />
+      <div className={`pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-atc-magenta/55 to-transparent transition-opacity duration-500 ease-[var(--ease-in-out)] ${mode === 'playback' ? 'opacity-100' : 'opacity-0'}`} />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-[#070b14]/90 via-[#070b14]/45 to-transparent" />
 
-      <TopBar />
-      <MapControls />
+      <Chrome />
 
       <div ref={stack} id="bottom-stack" className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center md:bottom-6 md:px-6">
         <Hint />
         <AutoMapPill />
         <Subtitles />
         <WaitingStrip />
-        {sheet === 'closed' ? <StationBar /> : <FlightCard />}
+        {/* The flight card slides up over the station bar and back down to reveal it, as one stack. */}
+        <div className="grid w-full justify-items-center md:w-auto">
+          <div className={`pointer-events-none flex w-full justify-center self-end [grid-area:1/1] md:w-auto ${sheet === 'closed' ? '' : 'invisible delay-[var(--duration-sheet)]'} transition-[visibility]`} inert={sheet !== 'closed'}>
+            <StationBar />
+          </div>
+          <div className="pointer-events-none flex w-full justify-center self-end [grid-area:1/1] md:w-auto">
+            {/* Mounted only while a flight is selected (and while its card slides away). */}
+            {cardStack.mounted && <FlightCard />}
+          </div>
+        </div>
       </div>
+      <Overlays />
+    </div>
+  )
+}
 
+/*
+ * The parts below take no props and keep their own subscriptions, so they are
+ * memoised: a change that only the shell cares about (a selection tinting the
+ * top of the map, the card replacing the bar) doesn't re-render the map, the
+ * chrome and every panel along with it.
+ */
+const MapLayer = memo(function MapLayer() {
+  return (
+    <>
+      <AudioEngine />
+      <MapView />
+    </>
+  )
+})
+
+const Chrome = memo(function Chrome() {
+  return (
+    <>
+      <TopBar />
+      <MapControls />
+    </>
+  )
+})
+
+const Overlays = memo(function Overlays() {
+  return (
+    <>
+      <RunwayInfo />
+      <MapGestures />
       <StationSheet />
-      <FlightDetail />
+      <SelectedFlightDetail />
       <AirportPicker />
       <TranscriptsView />
       <ReplayPanel />
@@ -97,8 +140,14 @@ export function AppShell() {
       <HelpPanel />
       <Menu />
       <Toast />
-    </div>
+    </>
   )
+})
+
+/** The full flight view, mounted only while it is open or closing (hidden, it would still tick with the flight). */
+function SelectedFlightDetail() {
+  const { mounted } = usePresence(usePlayhead((s) => s.sheet === 'full'), DURATION.exit + 80)
+  return mounted ? <FlightDetail /> : null
 }
 
 /** The thin purple strip between transmissions in a replay with audio. */
@@ -107,7 +156,10 @@ function WaitingStrip() {
   const { mounted, closing } = usePresence(show, 200)
   if (!mounted) return null
   return (
-    <div className={`flex w-full items-center justify-center gap-2 bg-atc-magenta px-4 py-1.5 text-xs font-semibold text-white md:mb-2 md:w-auto md:rounded-full ${closing ? 'animate-fade-out' : 'animate-fade'}`}>
+    <div
+      data-closing={closing ? '' : undefined}
+      className="motion-fade flex w-full items-center justify-center gap-2 bg-atc-magenta px-4 py-1.5 text-caption font-semibold text-white md:mb-2 md:w-auto md:rounded-full md:shadow-float"
+    >
       <span className="size-1.5 animate-pulse-dot rounded-full bg-white" />
       Waiting for the next transmission…
     </div>
@@ -124,12 +176,14 @@ function Hint() {
   useEffect(() => {
     if (selected && !seen) update('hintSeen', true)
   }, [selected, seen, update])
-  if (seen || !ready || selected) return null
+  const { mounted, closing } = usePresence(!seen && ready && !selected, 200)
+  if (!mounted) return null
   return (
     <div className="mb-2 flex w-full justify-center px-4">
       <button
         type="button"
-        className="pointer-events-auto animate-rise rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-black shadow-xl transition active:scale-95"
+        data-closing={closing ? '' : undefined}
+        className="motion-rise pressable pointer-events-auto rounded-full bg-white px-4 py-2 text-footnote font-semibold text-black shadow-float"
         onClick={() => update('hintSeen', true)}
       >
         Tap any aircraft to follow it
@@ -158,15 +212,16 @@ function Toast() {
   return (
     <div
       role={shown.tone === 'error' ? 'alert' : 'status'}
-      className={`absolute left-1/2 top-[calc(max(0.75rem,var(--safe-top))+3.5rem)] z-[60] flex w-max max-w-[min(92vw,26rem)] -translate-x-1/2 items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-medium shadow-2xl ring-1 backdrop-blur-xl ${
-        shown.tone === 'error' ? 'bg-[#3a1418]/95 text-white ring-atc-live/50' : 'bg-[#1b2333]/95 text-white ring-white/15'
-      } ${closing ? 'animate-fade-out' : 'animate-pop'}`}
+      data-closing={closing ? '' : undefined}
+      className={`motion-pop absolute left-1/2 top-[calc(max(0.75rem,var(--safe-top))+3.6rem)] z-[60] flex w-max max-w-[min(92vw,26rem)] -translate-x-1/2 origin-top items-center gap-3 rounded-2xl py-2.5 pl-4 text-subhead font-medium shadow-pop ring-1 backdrop-blur-xl ${
+        shown.tone === 'error' ? 'bg-[#3a1418]/95 text-white ring-atc-live/50' : 'bg-[#1d2535]/95 text-white ring-white/[0.12]'
+      } ${shown.action ? 'pr-2.5' : 'pr-4'}`}
     >
       <span className="min-w-0">{shown.message}</span>
       {shown.action && (
         <button
           type="button"
-          className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-bold text-black active:scale-95"
+          className="pressable shrink-0 rounded-full bg-white px-3 py-1.5 text-footnote font-semibold text-black"
           onClick={() => {
             shown.action?.run()
             setToast(null)

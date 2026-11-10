@@ -81,7 +81,7 @@ export function TrafficPanel() {
 
   return (
     <FullPanel open={open} title={`Traffic at ${airport.icao}`} onClose={close}>
-      <label className="sticky top-0 z-10 flex items-center gap-2 rounded-2xl bg-[#232c3b] px-3 ring-1 ring-white/10 focus-within:ring-atc-yellow/70">
+      <label className="sticky top-0 z-10 flex items-center gap-2 rounded-xl bg-[#232c3b] px-3 shadow-[0_6px_12px_-6px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-transparent transition-shadow duration-[var(--duration-fast)] focus-within:ring-atc-yellow/70">
         <Search className="size-4 shrink-0 text-atc-muted" />
         <input
           type="search"
@@ -89,13 +89,13 @@ export function TrafficPanel() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Flight, airline, type or tail number"
           aria-label="Search traffic"
-          className="h-11 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-atc-muted"
+          className="h-10 min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-atc-muted"
         />
-        <span className="shrink-0 text-xs tabular-nums text-atc-muted">{total}</span>
+        <span className="shrink-0 text-caption tabular-nums text-atc-muted">{total}</span>
       </label>
 
       {total === 0 ? (
-        <p className="py-10 text-center text-sm text-atc-muted">
+        <p className="py-10 text-center text-subhead text-atc-muted">
           {q ? `Nothing in view matches “${query}”.` : liveStatus === 'error' ? 'The traffic feed isn’t answering. It retries on its own.' : 'No aircraft in view yet.'}
         </p>
       ) : (
@@ -105,7 +105,7 @@ export function TrafficPanel() {
           return (
             <section key={g}>
               <SectionLabel>
-                {g} <span className="font-normal tabular-nums text-white/35">{rows.length}</span>
+                {g} <span className="font-normal tabular-nums text-white/30">{rows.length}</span>
               </SectionLabel>
               <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {rows.map(({ a, phase, note }) => (
@@ -113,7 +113,7 @@ export function TrafficPanel() {
                     <button
                       type="button"
                       aria-current={a.icao24 === selectedIcao || undefined}
-                      className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${a.icao24 === selectedIcao ? 'bg-atc-card' : 'bg-white/[0.05] hover:bg-white/10'}`}
+                      className={`pressable-soft flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2 text-left ${a.icao24 === selectedIcao ? 'bg-atc-card' : 'bg-white/[0.05] hover:bg-white/[0.09]'}`}
                       onPointerEnter={() => setHover(a.icao24)}
                       onPointerLeave={() => setHover(null)}
                       onFocus={() => setHover(a.icao24)}
@@ -123,11 +123,11 @@ export function TrafficPanel() {
                       }}
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-display text-xl leading-tight tracking-wide">{a.callsign}</span>
-                        <span className="block truncate text-xs text-white/60">{note ?? aircraftTypeName(a.type) ?? PHASE_LABEL[phase]}</span>
+                        <span className="block truncate font-display text-[22px] leading-tight">{a.callsign}</span>
+                        <span className="block truncate text-caption text-white/60">{note ?? aircraftTypeName(a.type) ?? PHASE_LABEL[phase]}</span>
                       </span>
-                      <span className="shrink-0 text-right text-xs tabular-nums text-white/70">
-                        <span className="block font-semibold text-white">{a.onGround ? 'Ground' : formatAltitude(a.altitudeFt, altitudeUnit)}</span>
+                      <span className="shrink-0 text-right text-caption tabular-nums text-white/65">
+                        <span className="block text-footnote font-semibold text-white">{a.onGround ? 'Ground' : formatAltitude(a.altitudeFt, altitudeUnit)}</span>
                         <span className="block">{formatSpeed(a.speedKt, speedUnit)}</span>
                       </span>
                     </button>
