@@ -164,7 +164,7 @@ export function pickByConfidence<T>(candidates: Candidate<T>[], key: (v: T) => s
 
 /**
  * Lay hexdb and feed facts over adsbdb's answer. Pure; unit-tested.
- * `base` keeps everything this module doesn't know about (the photo, the
+ * `base` keeps everything this module doesn't know about (the
  * callsign) untouched.
  */
 export function mergeFlightInfo(base: FlightInfo, extra: { hexdb?: Airframe | null; feed?: Airframe | null; hexdbRoute?: Route | null }): FlightInfo & { sources: string[] } {
@@ -251,7 +251,7 @@ export function feedAirframe(hex: string, cache: JsonCache = noCache, health: So
 }
 
 /**
- * Route, airframe (and photo, untouched) for one flight from every free
+ * Route and airframe for one flight from every free
  * source, merged. Never throws; unknown parts come back null. The feed lookup
  * only runs when the databases don't know the airframe.
  */

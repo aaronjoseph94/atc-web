@@ -6,8 +6,8 @@
  * it is doing. Drag it up (or tap the sentence) for the full view; drag it
  * down to let the aircraft go.
  *
- * `FlightDetail`: the full-height view with the airframe photo, route
- * progress, every number, and the conversation so far (radio calls in a
+ * `FlightDetail`: the full-height view with a drawing of the aircraft type
+ * and its facts, route progress, every number, and the conversation so far (radio calls in a
  * replayed scene, logged events for live traffic).
  */
 import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
@@ -21,6 +21,7 @@ import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '..
 import { Grabber, useDialog } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
+import { AircraftPanel } from '../aircraft/AircraftPanel'
 import { aircraftTypeName, altitudeComparison, compassDirection, describeCallsign, PHASE_LABEL } from './describe'
 import { Sparkline } from './Sparkline'
 import { useFlight, useFlightInfo, type FlightView } from './useFlight'
@@ -236,8 +237,7 @@ export function FlightDetail() {
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
   const flight = useFlight()
-  const infoQuery = useFlightInfo(flight)
-  const info = infoQuery.data
+  const info = useFlightInfo(flight).data
   const open = sheet === 'full' && !!flight
   const collapse = () => setSheet('card')
   const { mounted, closing } = usePresence(open, 240)
@@ -248,7 +248,6 @@ export function FlightDetail() {
   const d = flight.detail
   const { airline, flightNumber } = describeCallsign(flight.callsign)
   const who = info?.airline ?? airline
-  const typeName = info?.typeName ? `${info.manufacturer ?? ''} ${info.typeName}`.trim() : aircraftTypeName(d?.type)
   const progress = routeProgress(info, flight)
   const vr = d?.verticalRateFpm ?? null
   const comparison = d?.onGround ? null : altitudeComparison(d?.altitudeFt)
@@ -292,20 +291,8 @@ export function FlightDetail() {
         </div>
 
         <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,var(--safe-bottom))] pt-4">
-          {/* Airframe photo, credited as the source asks */}
-          {info?.photo ? (
-            <figure className="mb-4 overflow-hidden rounded-2xl bg-white/5">
-              <img src={info.photo.thumbnail} alt={`${typeName ?? 'Aircraft'}${info.registration ? ` ${info.registration}` : ''}`} loading="lazy" referrerPolicy="no-referrer" className="aspect-[16/8] w-full animate-fade object-cover" />
-              <figcaption className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11px] text-white/55">
-                <span className="truncate">{[info.registration, typeName].filter(Boolean).join(', ')}</span>
-                <a href={info.photo.link ?? 'https://www.airport-data.com/'} target="_blank" rel="noreferrer" className="shrink-0 underline decoration-white/30 underline-offset-2 hover:text-white">
-                  Photo{info.photo.photographer ? `: ${info.photo.photographer}` : ''}, airport-data.com
-                </a>
-              </figcaption>
-            </figure>
-          ) : (
-            infoQuery.isFetching && <div className="skeleton mb-4 aspect-[16/8] w-full rounded-2xl" />
-          )}
+          {/* The aircraft: its type drawn from above, with what it is */}
+          <AircraftPanel type={d?.type} category={d?.category} registration={info?.registration ?? d?.registration ?? null} dbName={info?.typeName} dbManufacturer={info?.manufacturer} />
 
           {/* Route */}
           {(info?.origin || info?.destination) && (
@@ -352,7 +339,6 @@ export function FlightDetail() {
               />
               <Stat label="Heading" value={d.headingKnown === false ? '—' : `${Math.round(d.heading).toString().padStart(3, '0')}°`} hint={d.headingKnown === false ? null : `toward the ${compassDirection(d.heading)}`} />
               {d.squawk && <Stat label="Transponder" value={d.squawk} hint={d.emergency ? `emergency: ${d.emergency}` : d.squawk === '1200' ? 'flying visually (VFR)' : 'assigned by ATC'} />}
-              {(info?.registration ?? d.registration) && <Stat label="Registration" value={info?.registration ?? d.registration ?? ''} hint={typeName} />}
             </div>
           )}
 

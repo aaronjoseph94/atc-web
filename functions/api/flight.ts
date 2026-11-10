@@ -1,9 +1,9 @@
 /**
  * GET /api/flight?hex=a09cad&callsign=AAL834
  *
- * Scheduled route, airframe details and a credited photo for one flight.
+ * Scheduled route and airframe details for one flight.
  * These barely change, so answers are cached at the edge for hours, which
- * also keeps us a polite client of the free community databases behind it.
+ * also keeps us a polite client of the free community database behind it.
  */
 import { jsonResponse } from '../../src/api/aircraftHandler'
 import { cacheApiJson } from '../../src/api/edgeCache'
@@ -24,7 +24,7 @@ export const onRequestGet: PagesFunction = async ({ request, waitUntil }) => {
 
   // Sub-lookups (hexdb airframe/route, feed airframe) have their own edge cache entries and TTLs.
   const info = await fetchFlightDetails(q.hex, q.callsign, cacheApiJson(cache, url.origin, waitUntil))
-  const known = info.origin || info.destination || info.typeName || info.photo
+  const known = info.origin || info.destination || info.typeName
   // Routes change (flight numbers get re-used), airframes don't; unknown flights are retried sooner.
   const ttl = info.origin || info.destination ? FLIGHT_TTL_S.route : known ? EDGE_TTL_S : FLIGHT_TTL_S.unknown
   const res = jsonResponse(info, 200, `public, max-age=${ttl}`)

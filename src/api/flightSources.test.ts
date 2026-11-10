@@ -24,7 +24,6 @@ const emptyInfo: FlightInfo = {
   manufacturer: null,
   registration: null,
   owner: null,
-  photo: null,
 }
 
 describe('normalizers (real captures)', () => {
@@ -75,12 +74,10 @@ describe('mergeFlightInfo', () => {
     expect(m.sources).toEqual(['hexdb', 'feed'])
   })
 
-  it('keeps adsbdb’s route over an older hexdb one, and leaves the photo alone', () => {
-    const photo = { thumbnail: 'https://airport-data.com/x.jpg', link: null, photographer: null }
-    const base = { ...emptyInfo, origin: { iata: 'MSP', icao: 'KMSP', name: null, city: null, lat: null, lon: null }, destination: null, photo }
+  it('keeps adsbdb’s route over an older hexdb one', () => {
+    const base = { ...emptyInfo, origin: { iata: 'MSP', icao: 'KMSP', name: null, city: null, lat: null, lon: null }, destination: null }
     const m = mergeFlightInfo(base, { hexdbRoute: normalizeHexdbRoute(hexdbRoute, Date.parse('2019-07-01')) })
     expect(m.origin?.iata).toBe('MSP')
-    expect(m.photo).toBe(photo)
   })
 
   it('uses a recent hexdb route when adsbdb has none', () => {
