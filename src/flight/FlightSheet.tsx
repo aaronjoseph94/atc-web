@@ -2,33 +2,37 @@
  * The selected aircraft, in two sizes.
  *
  * `FlightCard`: the purple card that replaces the station bar when a plane is
- * tapped. Identity, route, speed and altitude, and one plain sentence on what
- * it is doing. Drag it up (or tap the sentence) for the full view; drag it
- * down to let the aircraft go.
+ * tapped. Identity, route, speed and altitude, a quiet line with the airline,
+ * aircraft type and registration (and how far it has to go), and one plain
+ * sentence on what it is doing. Drag it up (or tap the sentence) for the full
+ * view; drag it down to let the aircraft go.
  *
- * `FlightDetail`: the full-height view with a drawing of the aircraft type
- * and its facts, route progress, every number, and the conversation so far (radio calls in a
+ * `FlightDetail`: the full-height view: the flight (number, route progress,
+ * arrival time, live numbers), the aircraft (a side view and its facts), the
+ * timeline, and the conversation so far (radio calls in a
  * replayed scene, logged events for live traffic).
  */
 import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
 import { AirlineLogo } from '../airline/AirlineLogo'
-import { useMemo, type CSSProperties, type ReactNode } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
+import { airlineInfo, parseCallsign } from '../airline/airlines'
+import { aircraftProfile } from '../aircraft/types'
 import { callsFor, useRadio, type Transmission } from '../live/radio/radioStore'
-import { distanceM } from '../map/geo'
 import { FrequencyTuner } from '../station/FrequencyTuner'
 import { Waveform } from '../station/Waveform'
 import { usePlayhead } from '../playback/playheadStore'
-import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '../settings/settingsStore'
+import { formatAltitude, formatSpeed, useSettings } from '../settings/settingsStore'
 import { CARD_BOTTOM, CARD_TOP, registerCardColors, useAirlineTint } from '../ui/airlineTint'
 import { Grabber, useDialog } from '../ui/Panel'
-import { RouteSkeleton } from '../ui/States'
 import { Ticker } from '../ui/Ticker'
 import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
 import { AircraftPanel } from '../aircraft/AircraftPanel'
-import { aircraftTypeName, altitudeComparison, compassDirection, describeCallsign, PHASE_LABEL } from './describe'
+import { aircraftTypeName, PHASE_LABEL } from './describe'
+import { FlightSummary } from './FlightSummary'
 import { FlightTimeline } from './FlightTimeline'
+import { formatDistance, routeProgress } from './route'
 import { Sparkline } from './Sparkline'
 import { useFlight, useFlightInfo, type FlightView } from './useFlight'
 
@@ -110,6 +114,12 @@ export function FlightCard() {
   const d = flight.detail
   const from = code(info?.origin)
   const to = code(info?.destination)
+  // One quiet line: who flies it, on what, which airframe; and how far it has to go.
+  const airline = info?.airline ?? airlineInfo(parseCallsign(flight.callsign)?.prefix)?.name ?? null
+  const typeName = d?.type || info?.typeName ? aircraftProfile({ type: d?.type, category: d?.category, dbName: info?.typeName, dbManufacturer: info?.manufacturer }).title : null
+  const registration = info?.registration ?? d?.registration ?? null
+  const about = [airline, typeName, registration && registration !== flight.callsign ? registration : null].filter(Boolean).join(' · ')
+  const left = d && !d.onGround && to ? routeProgress(info?.origin, info?.destination, d) : null
 
   return (
     <section
@@ -150,14 +160,24 @@ export function FlightCard() {
         </span>
         <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
           <Sparkline values={flight.series.altitudeFt} className="h-4 w-10 text-white/70" />
-          {d?.onGround ? 'GND' : <Ticker value={d?.altitudeFt} format={(v) => formatAltitude(v, altitudeUnit)} />}
+          {d?.onGround ? 'GND' :           <Ticker value={d?.altitudeFt} format={(v) => formatAltitude(v, altitudeUnit)} />}
         </span>
       </div>
+      {(about || left) && (
+        <div className="mt-0.5 flex items-baseline gap-3 px-4 text-caption text-white/60">
+          <span className="min-w-0 flex-1 truncate">{about}</span>
+          {left && (
+            <span className="shrink-0 tabular-nums text-white/70">
+              {formatDistance(left.remainingNm, speedUnit)} to {to}
+            </span>
+          )}
+        </div>
+      )}
 
       <button
         type="button"
         data-no-drag
-        className="mx-4 mt-3 flex w-[calc(100%-2rem)] items-center gap-3 rounded-2xl bg-white/12 px-3.5 py-3 text-left ring-1 ring-white/10 transition hover:bg-white/18 active:scale-[0.99]"
+        className="mx-4 mt-2.5 flex w-[calc(100%-2rem)] items-center gap-3 rounded-2xl bg-white/12 px-3.5 py-2.5 text-left ring-1 ring-white/10 transition hover:bg-white/18 active:scale-[0.99]"
         onClick={() => setSheet('full')}
         aria-label="Open full flight details"
       >
@@ -260,35 +280,12 @@ function LiveCallBubble({ call }: { call: Transmission }) {
 // Full view
 // ---------------------------------------------------------------------------
 
-/** Fraction of the route already flown, from great-circle-ish distances. Null when it can't be known. */
-function routeProgress(info: FlightInfo | undefined, flight: FlightView): number | null {
-  const o = info?.origin
-  const dst = info?.destination
-  const d = flight.detail
-  if (!d || o?.lat == null || o.lon == null || dst?.lat == null || dst.lon == null) return null
-  const flown = distanceM([o.lon, o.lat], [d.lon, d.lat])
-  const left = distanceM([d.lon, d.lat], [dst.lon, dst.lat])
-  return flown + left > 0 ? Math.min(1, Math.max(0, flown / (flown + left))) : null
-}
-
-function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string | null }) {
-  return (
-    <div className="min-w-0 rounded-2xl bg-white/[0.06] px-3 py-2.5">
-      <div className="text-[11px] font-medium text-white/55">{label}</div>
-      <div className="truncate text-lg font-bold tabular-nums leading-tight">{value}</div>
-      {hint && <div className="truncate text-[11px] text-white/50">{hint}</div>}
-    </div>
-  )
-}
-
 /** `docked`: rendered in the desktop side panel (no backdrop, no drag, no focus trap) instead of as a sheet. */
 export function FlightDetail({ docked = false }: { docked?: boolean }) {
   const sheet = usePlayhead((s) => s.sheet)
   const setSheet = usePlayhead((s) => s.setSheet)
   const select = usePlayhead((s) => s.select)
   const mode = usePlayhead((s) => s.mode)
-  const altitudeUnit = useSettings((s) => s.altitudeUnit)
-  const speedUnit = useSettings((s) => s.speedUnit)
   const flight = useFlight()
   const infoQuery = useFlightInfo(flight)
   const info = infoQuery.data
@@ -304,11 +301,6 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
 
   if (!mounted || !flight) return null
   const d = flight.detail
-  const { airline, flightNumber } = describeCallsign(flight.callsign)
-  const who = info?.airline ?? airline
-  const progress = routeProgress(info, flight)
-  const vr = d?.verticalRateFpm ?? null
-  const comparison = d?.onGround ? null : altitudeComparison(d?.altitudeFt)
 
   return (
     <div className={docked ? 'flex h-full flex-col' : 'absolute inset-0 z-40 flex items-end justify-center md:items-center md:p-6'}>
@@ -335,13 +327,6 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
           <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-3">
             <div className="min-w-0">
               <Identity flight={flight} info={info} big={!docked} />
-              <p className="mt-1 truncate text-sm text-white/60">
-                {who && flightNumber
-                  ? `${who} flight ${flightNumber}`
-                  : !flight.real
-                    ? 'Scripted demo flight'
-                    : (info?.owner ?? (d?.registration && d.registration !== flight.callsign ? d.registration : 'Private or unlisted flight'))}
-              </p>
             </div>
             <div className="flex shrink-0 items-center gap-2 pt-1" data-no-drag>
               <FollowButton tone="dark" />
@@ -353,57 +338,20 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
         </div>
 
         <div className="scroll-quiet scroll-fade @container min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,var(--safe-bottom))] pt-4">
-          {/* The aircraft: its type drawn from above, with what it is */}
-          <AircraftPanel type={d?.type} category={d?.category} registration={info?.registration ?? d?.registration ?? null} dbName={info?.typeName} dbManufacturer={info?.manufacturer} />
+          {/* The flight: number, route and progress, its live numbers */}
+          <FlightSummary flight={flight} info={info} infoLoading={infoQuery.isLoading} />
 
-          {/* Route */}
-          {infoQuery.isLoading && <RouteSkeleton />}
-          {(info?.origin || info?.destination) && (
-            <div className="mb-4 rounded-2xl bg-white/[0.06] px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className="shrink-0">
-                  <div className="font-display text-2xl leading-none">{code(info.origin) ?? '—'}</div>
-                  <div className="mt-1 max-w-[7rem] truncate text-xs text-white/55">{info.origin?.city ?? ''}</div>
-                </div>
-                <div className="relative h-5 min-w-0 flex-1" role="img" aria-label={progress != null ? `${Math.round(progress * 100)} percent of the route flown` : 'Route'}>
-                  <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-white/15" />
-                  {progress != null && (
-                    <>
-                      <div className="absolute left-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-atc-yellow transition-[width] duration-700" style={{ width: `${progress * 100}%` }} />
-                      <Plane className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rotate-45 fill-atc-yellow text-atc-yellow transition-[left] duration-700" style={{ left: `${progress * 100}%` }} />
-                    </>
-                  )}
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="font-display text-2xl leading-none">{code(info.destination) ?? '—'}</div>
-                  <div className="mt-1 max-w-[7rem] truncate text-xs text-white/55">{info.destination?.city ?? ''}</div>
-                </div>
-              </div>
-              <p className="mt-2 text-[11px] text-white/45">Scheduled route for this flight number. Diversions and re-used numbers can make it wrong.</p>
-            </div>
-          )}
-
-          {/* What it is doing */}
-          {flight.phase && (
-            <div className="mb-4 flex items-start gap-3">
-              <span className="mt-0.5 shrink-0 rounded-full bg-atc-yellow px-2.5 py-1 text-[11px] font-bold text-black">{PHASE_LABEL[flight.phase]}</span>
-              <p className="text-[15px] leading-snug text-white/85">{flight.now}</p>
-            </div>
-          )}
-
-          {d && (
-            <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
-              <Stat label="Speed" value={<Ticker value={d.speedKt} format={(v) => formatSpeed(v, speedUnit)} />} hint={d.speedKt != null && speedUnit === 'kt' ? `${Math.round(d.speedKt * 1.15078)} mph` : null} />
-              <Stat label="Altitude" value={d.onGround ? 'On the ground' : <Ticker value={d.altitudeFt} format={(v) => formatAltitude(v, altitudeUnit)} />} hint={comparison} />
-              <Stat
-                label="Climb"
-                value={d.onGround || vr == null ? '—' : <Ticker value={vr} format={(v) => formatVerticalRate(v, altitudeUnit)} />}
-                hint={vr != null && !d.onGround && Math.abs(vr) > 200 ? (vr > 0 ? 'climbing' : 'descending') : d.selectedAltitudeFt != null && !d.onGround ? `autopilot set to ${formatAltitude(Math.round(d.selectedAltitudeFt / 100) * 100, altitudeUnit)}` : null}
-              />
-              <Stat label="Heading" value={d.headingKnown === false ? '—' : `${Math.round(d.heading).toString().padStart(3, '0')}°`} hint={d.headingKnown === false ? null : `toward the ${compassDirection(d.heading)}`} />
-              {d.squawk && <Stat label="Transponder" value={d.squawk} hint={d.emergency ? `emergency: ${d.emergency}` : d.squawk === '1200' ? 'flying visually (VFR)' : 'assigned by ATC'} />}
-            </div>
-          )}
+          {/* The aircraft: its type from the side, with what it is */}
+          <AircraftPanel
+            type={d?.type}
+            category={d?.category}
+            registration={info?.registration ?? d?.registration ?? null}
+            dbName={info?.typeName}
+            dbManufacturer={info?.manufacturer}
+            callsign={flight.real ? flight.callsign : null}
+            icao24={flight.icao24}
+            onGround={!!d?.onGround}
+          />
 
           {/* Its life so far: phases, times, and a speed and altitude chart */}
           <FlightTimeline flight={flight} info={info} />
