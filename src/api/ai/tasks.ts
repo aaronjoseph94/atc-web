@@ -10,6 +10,7 @@
 import type { RunAiArgs } from './run'
 import { explainSighting } from './tasks/explainSighting'
 import { ping } from './tasks/ping'
+import { radioCleanup } from './tasks/radioCleanup'
 import { triageFeedback } from './tasks/triageFeedback'
 
 export type AiTask<In = unknown> = {
@@ -32,5 +33,6 @@ export type AiTask<In = unknown> = {
 export const TASKS: Record<string, AiTask<never>> = {
   [explainSighting.name]: explainSighting as AiTask<never>,
   [ping.name]: ping as AiTask<never>,
+  [radioCleanup.name]: radioCleanup as AiTask<never>,
   [triageFeedback.name]: triageFeedback as AiTask<never>,
 }

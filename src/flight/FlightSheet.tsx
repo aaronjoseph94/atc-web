@@ -19,6 +19,7 @@ import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
 import { airlineInfo, parseCallsign } from '../airline/airlines'
 import { aircraftProfile } from '../aircraft/types'
 import { callsFor, useRadio, type Transmission } from '../live/radio/radioStore'
+import { CallExtras, CallText, ThreadStory } from '../live/radio/understand/CallExtras'
 import { FrequencyTuner } from '../station/FrequencyTuner'
 import { EventBadge } from '../ui/EventBadge'
 import { Waveform } from '../station/Waveform'
@@ -268,8 +269,9 @@ function LiveCallBubble({ call }: { call: Transmission }) {
       <p
         className={`rounded-[1.35rem] px-4 py-3 text-[15px] leading-snug ${pilot ? 'bg-atc-blue text-white' : 'bg-white/[0.11] text-white/90'}`}
       >
-        {call.text}
+        <CallText call={call} />
       </p>
+      <CallExtras id={call.id} align={pilot ? 'end' : 'start'} />
       <p className={`mt-1 px-2 text-[11px] tabular-nums text-white/40 ${pilot ? 'text-right' : ''}`}>
         {pilot ? 'Pilot' : call.speaker === 'controller' ? 'Controller' : 'Radio'} · {time}
       </p>
@@ -364,6 +366,7 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
                 <span className="rounded bg-atc-yellow px-1.5 py-0.5 font-display text-xs tracking-wide text-black">{flight.airportCode}</span>
                 Live radio
               </h3>
+              <ThreadStory calls={liveCalls} icao24={flight.icao24} />
               <ol className="flex flex-col gap-2.5">
                 {liveCalls.map((c) => (
                   <LiveCallBubble key={c.id} call={c} />

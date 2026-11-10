@@ -1287,3 +1287,32 @@ function withAtmosphere(list: LayerSpecification[], p: Palette): LayerSpecificat
   }
   return out
 }
+
+// ---------------------------------------------------------------------------
+// Instruction badges: the latest assignment a controller gave an aircraft
+// ("↑5,000", "HDG 270", "→124.75"), as a small chip under it. The chips are
+// bitmaps drawn in the UI font by `InstructionBadgeLayer`; `img` is the
+// image id, `o` the fade.
+// ---------------------------------------------------------------------------
+
+export const INSTR_SRC = 'instruction-badges'
+export const INSTR_LAYER = 'instruction-badge'
+
+export function instructionBadgeLayers(): LayerSpecification[] {
+  return [
+    {
+      id: INSTR_LAYER,
+      type: 'symbol',
+      source: INSTR_SRC,
+      layout: {
+        'icon-image': ['get', 'img'],
+        // Under the aircraft, mirroring the callsign tag above it.
+        'icon-anchor': 'top',
+        'icon-offset': ['interpolate', ['linear'], ['zoom'], 9, ['literal', [0, 9]], 14, ['literal', [0, 13]], 16, ['literal', [0, 20]], 18, ['literal', [0, 40]]],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+      paint: { 'icon-opacity': ['coalesce', ['get', 'o'], 1] },
+    },
+  ] as LayerSpecification[]
+}
