@@ -296,11 +296,11 @@ function layers(p: Palette): LayerSpecification[] {
     { id: 'apt-pad', type: 'fill', source: SRC.pads, minzoom: 12.5, filter: ['==', ['get', 'kind'], 'pad'], layout: vis(paint), paint: { 'fill-color': p.pad } },
     { id: 'apt-pad-chevron', type: 'line', source: SRC.pads, minzoom: 14, filter: ['==', ['get', 'kind'], 'chevron'], layout: { ...vis(paint), 'line-join': 'miter' }, paint: { 'line-color': p.taxiLine, 'line-opacity': 0.85, 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 0.7, 17, 2.4, 20, 14] } },
     { id: 'apt-surface', type: 'fill', source: SRC.surface, minzoom: 10, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'surface'], 'concrete', p.runwayConcrete, p.runway] } },
-    { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.9], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.5, 16, 1.1, 19, 5] } },
-    { id: 'apt-hold', type: 'line', source: SRC.hold, minzoom: 14, layout: vis(paint), paint: { 'line-color': p.taxiLine, 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 0.8, 17, 2, 20, 8], 'line-dasharray': ['case', ['==', ['get', 'dashed'], 1], ['literal', [1.6, 1.2]], ['literal', [1, 0]]] } },
+    { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.9], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.6, 16, 1.7, 19, 7] } },
+    { id: 'apt-hold', type: 'line', source: SRC.hold, minzoom: 14, layout: vis(paint), paint: { 'line-color': p.taxiLine, 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 1, 17, 2.8, 20, 11], 'line-dasharray': ['case', ['==', ['get', 'dashed'], 1], ['literal', [1.6, 1.2]], ['literal', [1, 0]]] } },
     // Each marking has its own grey: the threshold block brightest, the aiming blocks next,
     // then the touchdown bars, centreline and side stripes receding into the pavement.
-    { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'kind'], 'threshold', p.paint, 'threshold-bar', p.paint, 'aim', p.paintMid, 'edge', p.paintFaint, p.paintDim], 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, 1] } },
+    { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'kind'], 'threshold', p.paint, 'threshold-bar', p.paint, 'aim', p.paintMid, 'edge', p.paintMid, p.paintDim], 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, 1] } },
     // Runway numbers and letters, as thin stencil strokes with a real-world width.
     { id: 'apt-designator', type: 'line', source: SRC.designators, minzoom: 13.6, layout: { ...vis(paint), 'line-cap': 'square', 'line-join': 'miter' }, paint: { 'line-color': p.paintMid, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, 1], 'line-width': metres(1.15) } },
 
@@ -328,7 +328,7 @@ function layers(p: Palette): LayerSpecification[] {
         'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 14, 280, 17, 560],
         'text-field': ['get', 'ref'],
         'text-font': FONT_BOLD,
-        'text-size': ['interpolate', ['linear'], ['zoom'], 14.2, 9, 16, 11.5, 18, 15],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 14.2, 9.5, 16, 12.5, 18, 16],
         'text-rotation-alignment': 'map',
         'text-pitch-alignment': 'map',
         'text-keep-upright': true,
@@ -337,7 +337,7 @@ function layers(p: Palette): LayerSpecification[] {
         'text-padding': 10,
         'text-max-angle': 35,
       },
-      paint: { 'text-color': chart ? '#1B2540' : 'rgba(228,233,244,0.86)', 'text-halo-color': chart ? 'rgba(255,255,255,0.8)' : sat ? 'rgba(0,0,0,0.7)' : p.taxiway, 'text-halo-width': 1.1 },
+      paint: { 'text-color': chart ? '#1B2540' : '#F1F3F8', 'text-halo-color': chart ? 'rgba(255,255,255,0.8)' : sat ? 'rgba(0,0,0,0.7)' : p.taxiway, 'text-halo-width': 1.1 },
     },
     { id: 'aero-other', type: 'symbol', source: 'omt', 'source-layer': 'aerodrome_label', minzoom: 8, maxzoom: 11, layout: { ...vis(sat), 'text-field': ['coalesce', ['get', 'iata'], ['get', 'name_en'], ['get', 'name']], 'text-font': FONT_BOLD, 'text-size': 11, 'text-letter-spacing': 0.06, 'text-padding': 8 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
     // Runway designators at the ends, for the zooms where the painted numbers are too small to read.
