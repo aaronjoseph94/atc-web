@@ -11,6 +11,7 @@ import { getAircraft } from '../api/client'
 import { TRAFFIC_ATTRIBUTION } from '../api/credits'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
+import { TaxiRouteLayer } from '../live/taxi/TaxiRouteLayer'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
 import { CAMERA_EASE } from '../ui/motion'
@@ -323,6 +324,7 @@ export function MapView() {
           }}
         >
           <AirportDiagramLayer map={map} airportIcao={airportIcao} />
+          <TaxiRouteLayer map={map} />
           <AircraftLayer
             map={map}
             liveBuffer={liveBuffer}

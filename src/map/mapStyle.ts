@@ -586,3 +586,63 @@ export function applyGroundCover(map: MapLibreMap, theme: MapTheme, arid: boolea
   const p = PALETTES[theme]
   map.setPaintProperty('landcover-grass', 'fill-color', ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield] as never)
 }
+
+// ---------------------------------------------------------------------------
+// Taxi route preview (drawn by `src/live/taxi/TaxiRouteLayer.tsx`)
+// ---------------------------------------------------------------------------
+// Added at runtime under the aircraft, so `applyTheme` never touches them and
+// they read the same on every theme: a purple glow and line in the card's
+// colour, marching yellow dashes like the painted taxi lines, and yellow
+// hold-short bars with chips.
+
+export const TAXI_SRC = { line: 'taxi-route', marks: 'taxi-route-marks' } as const
+export const TAXI_LAYER = {
+  glow: 'taxi-route-glow',
+  casing: 'taxi-route-casing',
+  line: 'taxi-route-line',
+  dash: 'taxi-route-dash',
+  hit: 'taxi-route-hit',
+  holdBand: 'taxi-route-hold-band',
+  holdBar: 'taxi-route-hold-bar',
+  chip: 'taxi-route-chip',
+} as const
+/** Chip images the layer component draws: purple for the runway, yellow for hold-short points. */
+export const TAXI_CHIP = { runway: 'taxi-chip-runway', hold: 'taxi-chip-hold' } as const
+
+/** Each feature carries `o` (0–1, its route's fade) and, on the line, `beyond` (1 past the first hold). */
+export function taxiRouteLayers(): LayerSpecification[] {
+  const o = ['coalesce', ['get', 'o'], 1]
+  const dim = ['case', ['==', ['get', 'beyond'], 1], 0.45, 1]
+  const w = (a: number, b: number, c: number) => ['interpolate', ['exponential', 1.6], ['zoom'], 12, a, 15, b, 18, c]
+  return [
+    { id: TAXI_LAYER.glow, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7C5CFC', 'line-opacity': ['*', 0.7, o, dim], 'line-width': w(10, 20, 48), 'line-blur': ['interpolate', ['linear'], ['zoom'], 12, 5, 16, 10] } },
+    { id: TAXI_LAYER.casing, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#170C4F', 'line-opacity': ['*', 0.9, o], 'line-width': w(3.6, 7, 16) } },
+    { id: TAXI_LAYER.line, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#8B6CFF', 'line-opacity': ['*', o, dim], 'line-width': w(2.4, 4.6, 11) } },
+    { id: TAXI_LAYER.dash, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': '#FFD23F', 'line-opacity': ['*', 0.95, o, dim], 'line-width': w(1, 1.8, 4.2), 'line-dasharray': [0, 4, 3] } },
+    { id: TAXI_LAYER.holdBand, type: 'line', source: TAXI_SRC.marks, filter: ['==', ['get', 'kind'], 'hold'], layout: { 'line-cap': 'butt' }, paint: { 'line-color': '#15140F', 'line-opacity': ['*', 0.9, o], 'line-width': w(4, 7, 16) } },
+    { id: TAXI_LAYER.holdBar, type: 'line', source: TAXI_SRC.marks, filter: ['==', ['get', 'kind'], 'hold'], layout: { 'line-cap': 'butt' }, paint: { 'line-color': '#FFD23F', 'line-opacity': o, 'line-width': w(1.6, 2.6, 6) } },
+    // Fat and invisible: the route is easy to tap with a finger.
+    { id: TAXI_LAYER.hit, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#000000', 'line-opacity': 0.001, 'line-width': 28 } },
+    {
+      id: TAXI_LAYER.chip,
+      type: 'symbol',
+      source: TAXI_SRC.marks,
+      filter: ['==', ['get', 'kind'], 'chip'],
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-font': FONT_BOLD,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 16, 12.5],
+        'text-letter-spacing': 0.02,
+        'icon-image': ['case', ['==', ['get', 'tone'], 'runway'], TAXI_CHIP.runway, TAXI_CHIP.hold],
+        'icon-text-fit': 'both',
+        'icon-text-fit-padding': [3, 7, 3, 7],
+        // Above the stop, clear of the bar and the line.
+        'text-anchor': 'bottom',
+        'text-offset': ['literal', [0, -0.9]],
+        'icon-allow-overlap': true,
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': ['case', ['==', ['get', 'tone'], 'runway'], '#FFFFFF', '#1C1503'], 'text-opacity': o, 'icon-opacity': o },
+    },
+  ] as LayerSpecification[]
+}
