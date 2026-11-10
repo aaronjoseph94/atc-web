@@ -1,13 +1,15 @@
 /**
- * Builds the painted surface of an airport from the OurAirports snapshot:
- * runway pavement plus the standard FAA/ICAO precision-runway markings
- * (threshold bars, designators, centreline, aiming points, touchdown-zone
- * bars, side stripes, displaced-threshold arrows) and the extended
- * centrelines aircraft fly down on approach.
+ * Builds the painted surface of an airport from the runway data: runway
+ * pavement plus the standard precision-runway markings (threshold stripes,
+ * designators, centreline, aiming points, touchdown-zone bars, side stripes,
+ * displaced-threshold arrows) and the extended centrelines aircraft fly down
+ * on approach.
  *
- * Dimensions follow FAA AC 150/5340-1 (Standards for Airport Markings).
- * Everything is generated as GeoJSON in real-world metres, so the paint stays
- * crisp and correctly sized at any zoom.
+ * US runways follow FAA AC 150/5340-1 (Standards for Airport Markings);
+ * everywhere else follows ICAO Annex 14, which Canada uses: shorter
+ * threshold stripes, smaller numbers, single touchdown bars and a long
+ * aiming-point block. Everything is generated as GeoJSON in real-world
+ * metres, so the paint stays crisp and correctly sized at any zoom.
  */
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson'
 import { getRunways, icaoCode, paintedDesignator, type Runway } from '../api/airportData'
@@ -18,7 +20,12 @@ export type AirportDiagram = {
   surface: FeatureCollection<Polygon>
   /** Every white paint mark, as polygons (`kind` says which marking). */
   paint: FeatureCollection<Polygon>
-  /** Painted numbers and letters, as the centre-lines of their stencil strokes. */
+  /**
+   * Painted strokes with a real-world width: the numbers and letters
+   * (`kind: 'numeral'`, `w` = stroke width in metres) and the dashed
+   * centreline (`kind: 'centre'`), drawn as a hairline. Also each runway's
+   * unpainted axis (`kind: 'axis'`, `w` = runway width), used for label placement.
+   */
   designators: FeatureCollection<LineString>
   /** One point just outside each runway end, for the sign-style labels. */
   ends: FeatureCollection<Point>
@@ -26,13 +33,23 @@ export type AirportDiagram = {
   approach: FeatureCollection<LineString>
   /**
    * Candidate blast pads, one per runway end: the paved overrun and its
-   * chevrons, plus a point at its outer edge. The data doesn't say which ends
-   * really have one, so the map only draws those that fall on airfield ground.
+   * chevrons, plus points along its outer edge. The data doesn't say which
+   * ends really have one, so the map only draws those that fall on airfield
+   * ground clear of taxiways and water.
    */
   pads: BlastPad[]
 }
 
-export type BlastPad = { ident: string; probe: LngLat; features: Feature<Polygon | LineString>[] }
+export type BlastPad = {
+  ident: string
+  /** Centre of the outer edge. */
+  probe: LngLat
+  /** Outer corners and centre of the pad: all must be on airfield ground for it to be drawn. */
+  probes: LngLat[]
+  /** The pad's outline, to test taxiways against. */
+  ring: LngLat[]
+  features: Feature<Polygon | LineString>[]
+}
 
 /** Length of a standard blast pad. */
 const PAD_LENGTH_M = 250 * M_PER_FT
@@ -41,6 +58,112 @@ const ft = (n: number) => n * M_PER_FT
 
 /** How far the extended centrelines reach. */
 export const APPROACH_NM = 8
+
+/** Width of the grey bar painted across each end of the pavement. */
+export const END_BAR_M = 3
+
+/** Aiming-point block either side of the centreline: where it starts, its size, and its inner edge. */
+type Aim = { start: number; length: number; width: number; inner: number }
+
+/**
+ * Dimensions of every marking under one standard, in metres. Lateral sizes
+ * are for a full-width runway; narrower runways scale them down.
+ */
+export type MarkingSpec = {
+  name: 'faa' | 'icao'
+  /** Threshold stripes: start past the threshold, length, width, pitch, and the gap either side of the centreline. */
+  stripeStart: number
+  stripeLength: number
+  stripeWidth: number
+  stripePitch: number
+  stripeInner: number
+  /** Designator: gap after the stripes, character height, width and spacing, gap between letter and number, stroke. */
+  designatorGap: number
+  charHeight: number
+  charWidth: number
+  charGap: number
+  letterGap: number
+  stroke: number
+  /** Centreline dash and gap. */
+  dash: number
+  dashGap: number
+  /** Aiming point for a landing distance available, or nothing. */
+  aim: (lda: number, k: number) => Aim | null
+  /** Touchdown-zone bars: where each pair starts, how many bars, and their size and inner edge. */
+  tdz: (lda: number, aim: Aim | null, k: number) => { at: number; bars: number; length: number; width: number; pitch: number; inner: number }[]
+}
+
+/** FAA AC 150/5340-1: the US standard. */
+export const FAA: MarkingSpec = {
+  name: 'faa',
+  stripeStart: ft(20),
+  stripeLength: ft(150),
+  stripeWidth: ft(5.75),
+  stripePitch: ft(11.5),
+  stripeInner: ft(5.75),
+  designatorGap: ft(30),
+  charHeight: ft(60),
+  charWidth: ft(20),
+  charGap: ft(10),
+  letterGap: ft(20),
+  stroke: 1.5,
+  dash: ft(120),
+  dashGap: ft(80),
+  aim: (lda, k) => (lda >= ft(4200) ? { start: ft(1020), length: ft(150), width: ft(30) * k, inner: ft(36) * k } : null),
+  tdz: (lda, _aim, k) => {
+    if (lda < ft(6000)) return []
+    const groups: [number, number][] = [
+      [500, 3],
+      [1500, 2],
+      [2000, 2],
+      [2500, 1],
+      [3000, 1],
+    ]
+    return groups.map(([at, bars]) => ({ at: ft(at), bars, length: ft(75), width: ft(6), pitch: ft(11) * k, inner: ft(36) * k }))
+  },
+}
+
+/** ICAO Annex 14 (and Transport Canada TP 312): single touchdown bars, aiming point by landing distance. */
+export const ICAO: MarkingSpec = {
+  name: 'icao',
+  stripeStart: 6,
+  stripeLength: 30,
+  stripeWidth: 1.8,
+  stripePitch: 3.6,
+  stripeInner: 1.8,
+  designatorGap: 12,
+  charHeight: 9,
+  charWidth: 3.4,
+  charGap: 1.4,
+  letterGap: 5,
+  stroke: 1.1,
+  dash: 30,
+  dashGap: 30,
+  aim: (lda, k) => {
+    // Annex 14 table 5-1, at the generous end of each range.
+    if (lda >= 2400) return { start: 400, length: 60, width: 10 * k, inner: 11.25 * k }
+    if (lda >= 1200) return { start: 300, length: 45, width: 6 * k, inner: 9 * k }
+    if (lda >= 800) return { start: 250, length: 30, width: 6 * k, inner: 4.5 * k }
+    return { start: 150, length: 30, width: 4 * k, inner: 3 * k }
+  },
+  tdz: (lda, aim, k) => {
+    // Pairs every 150 m; how many depends on the landing distance.
+    const pairs = lda >= 2400 ? 6 : lda >= 1500 ? 4 : lda >= 1200 ? 3 : lda >= 900 ? 2 : 1
+    const out = []
+    for (let i = 1; i <= pairs; i++) {
+      const at = i * 150
+      // A pair that would run into the aiming-point block is left out.
+      if (aim && at < aim.start + aim.length && at + 22.5 > aim.start) continue
+      out.push({ at, bars: 1, length: 22.5, width: 1.8, pitch: 0, inner: aim?.inner ?? 11.25 * k })
+    }
+    return out
+  },
+}
+
+/** The marking standard a catalog airport paints to. */
+export function markingSpec(icao: string | undefined): MarkingSpec {
+  return icao?.startsWith('K') || icao?.startsWith('P') ? FAA : ICAO
+}
 
 /** A runway end as a local frame: `s` metres down the runway, `t` metres to the right. */
 type End = {
@@ -87,16 +210,16 @@ function onPavement(r: Rect, p: LngLat, margin: number): boolean {
   return along > -margin && along < r.lengthM + margin && Math.abs(cross) < r.half + margin
 }
 
-/** Marks that stay painted through a crossing only on the runway that has right of way. */
-const THROUGH_ONLY = new Set(['centre', 'edge', 'aim', 'tdz'])
+/** Marks that stay painted through a crossing only on the runway that has right of way (an end bar inside another runway is dropped too). */
+const THROUGH_ONLY = new Set(['centre', 'edge', 'aim', 'tdz', 'arrow', 'end'])
 
 function quad(end: End, s0: number, s1: number, t0: number, t1: number, properties: Record<string, unknown>): Feature<Polygon> {
   const ring = [end.at(s0, t0), end.at(s1, t0), end.at(s1, t1), end.at(s0, t1), end.at(s0, t0)]
   return { type: 'Feature', properties, geometry: { type: 'Polygon', coordinates: [ring] } }
 }
 
-/** Threshold stripes by runway width, per AC 150/5340-1 table 2-1. */
-function thresholdStripeCount(widthFt: number): number {
+/** Threshold stripes by runway width: FAA AC 150/5340-1 table 2-1, which matches ICAO's 18/23/30/45/60 m steps. */
+export function thresholdStripeCount(widthFt: number): number {
   if (widthFt >= 200) return 16
   if (widthFt >= 150) return 12
   if (widthFt >= 100) return 8
@@ -130,15 +253,18 @@ const GLYPHS: Record<string, [number, number][][]> = {
  * its baseline `s` metres past the threshold and its top further down the
  * runway (so it reads the right way up to a landing pilot).
  */
-function stencil(end: End, text: string, s: number, height: number, glyphWidth: number, gap: number, out: Feature<LineString>[]) {
+function stencil(end: End, text: string, s: number, height: number, glyphWidth: number, gap: number, stroke: number, out: Feature<LineString>[]) {
+  // The strokes have width, so the outline of each glyph sits half a stroke inside its box.
+  const h = height - stroke
+  const w = glyphWidth - stroke
   const total = text.length * glyphWidth + (text.length - 1) * gap
-  let x = -total / 2
+  let x = -total / 2 + stroke / 2
   for (const ch of text) {
-    for (const stroke of GLYPHS[ch] ?? []) {
+    for (const g of GLYPHS[ch] ?? []) {
       out.push({
         type: 'Feature',
-        properties: { kind: 'numeral' },
-        geometry: { type: 'LineString', coordinates: stroke.map(([gx, gy]) => end.at(s + gy * height, x + gx * glyphWidth)) },
+        properties: { kind: 'numeral', w: stroke },
+        geometry: { type: 'LineString', coordinates: g.map(([gx, gy]) => end.at(s + stroke / 2 + gy * h, x + gx * w)) },
       })
     }
     x += glyphWidth + gap
@@ -153,16 +279,20 @@ function endMarkings(
   lengthM: number,
   widthM: number,
   painted: string,
+  spec: MarkingSpec,
   paint: Feature<Polygon>[],
-  designators: Feature<LineString>[],
+  strokes: Feature<LineString>[],
 ): number {
   const d = end.displacedM
   const half = widthM / 2
-  // Lateral dimensions are specified for a 150 ft runway; narrower ones scale down.
+  // Lateral dimensions are specified for a 150 ft (45 m) runway; narrower ones scale down.
   const k = Math.min(1, widthM / ft(150))
 
+  // A grey bar across the very end of the pavement, edge to edge.
+  paint.push(quad(end, 0, END_BAR_M, -half + 0.2, half - 0.2, { kind: 'end' }))
+
   if (d > 30) {
-    // Displaced threshold: a bar across the runway, with arrows leading up to it.
+    // Displaced threshold: a white bar across the runway, with arrows leading up to it.
     paint.push(quad(end, d - ft(10), d, -half + 1, half - 1, { kind: 'threshold-bar' }))
     const count = Math.max(1, Math.floor(d / ft(200)))
     const step = d / (count + 0.5)
@@ -190,7 +320,7 @@ function endMarkings(
     for (let i = 0; i < count; i++) {
       const tip = d - ft(70) - i * step
       const base = tip - ft(45)
-      if (base - ft(80) < 0) break
+      if (base - ft(80) < END_BAR_M + 2) break
       paint.push({
         type: 'Feature',
         properties: { kind: 'arrow' },
@@ -203,61 +333,48 @@ function endMarkings(
     }
   }
 
-  // Threshold: a solid bar across the end of the pavement, then the FAA
-  // pattern of stripes, 150 ft long, 5.75 ft wide with 5.75 ft spaces, in two
-  // groups either side of an 11.5 ft gap on the centreline.
-  if (d <= 30) paint.push(quad(end, 0.6, 2.4, -half + 0.6, half - 0.6, { kind: 'threshold-bar' }))
-  const s0 = d + 4
-  const s1 = s0 + ft(150)
+  // Threshold stripes in two groups either side of a gap on the centreline.
+  const s0 = d + spec.stripeStart
+  const s1 = s0 + spec.stripeLength
   const stripes = thresholdStripeCount(widthM / M_PER_FT)
   for (let i = 0; i < stripes / 2; i++) {
-    const c = ft(8.625 + 11.5 * i)
-    const w = ft(5.75) / 2
+    const c = spec.stripeInner + spec.stripeWidth / 2 + spec.stripePitch * i
+    const w = spec.stripeWidth / 2
     paint.push(quad(end, s0, s1, c - w, c + w, { kind: 'threshold' }))
     paint.push(quad(end, s0, s1, -c - w, -c + w, { kind: 'threshold' }))
   }
 
-  // Designator: the side letter nearest the threshold, then the number beyond
-  // it, in thin stencil strokes about a third of the runway width tall.
+  // Designator: the side letter nearest the threshold, then the number beyond it.
   const m = /^(\d+)([LCR])?$/.exec(painted)
   const number = m?.[1] ?? painted
   const letter = m?.[2]
-  let s = s1 + widthM * 0.2
+  const charWidth = spec.charWidth * Math.max(0.6, k)
+  let s = s1 + spec.designatorGap
   if (letter) {
-    stencil(end, letter, s, widthM * 0.26, widthM * 0.15, 0, designators)
-    s += widthM * 0.26 + widthM * 0.12
+    stencil(end, letter, s, spec.charHeight, charWidth, 0, spec.stroke, strokes)
+    s += spec.charHeight + spec.letterGap
   }
-  stencil(end, number, s, widthM * 0.3, widthM * 0.13, widthM * 0.07, designators)
-  const designatorEnd = s + widthM * 0.3 + widthM * 0.22
+  stencil(end, number, s, spec.charHeight, charWidth, spec.charGap * Math.max(0.6, k), spec.stroke, strokes)
+  const designatorEnd = s + spec.charHeight + spec.designatorGap
 
-  // Aiming point: two broad blocks about 1,000 ft in.
-  if (lengthM >= ft(4200)) {
-    const a0 = d + ft(1020)
-    const c = ft(51) * k
-    const w = (ft(30) * k) / 2
-    paint.push(quad(end, a0, a0 + ft(150), c - w, c + w, { kind: 'aim' }))
-    paint.push(quad(end, a0, a0 + ft(150), -c - w, -c + w, { kind: 'aim' }))
+  // Aiming point, then the touchdown-zone bars. Bars that would fall within
+  // 900 ft of the midpoint are left out, so the two ends never meet.
+  const lda = lengthM - d
+  const aim = spec.aim(lda, k)
+  if (aim && d + aim.start + aim.length < lengthM / 2) {
+    const a0 = d + aim.start
+    paint.push(quad(end, a0, a0 + aim.length, aim.inner, aim.inner + aim.width, { kind: 'aim' }))
+    paint.push(quad(end, a0, a0 + aim.length, -aim.inner - aim.width, -aim.inner, { kind: 'aim' }))
   }
-
-  // Touchdown-zone bars in groups of 3, 2, 2, 1, 1 at 500 ft spacing. Groups
-  // that would fall within 900 ft of the midpoint are left out, as on real runways.
-  if (lengthM >= ft(6000)) {
-    const groups: [number, number][] = [
-      [500, 3],
-      [1500, 2],
-      [2000, 2],
-      [2500, 1],
-      [3000, 1],
-    ]
-    for (const [distFt, bars] of groups) {
-      const g0 = d + ft(distFt)
-      if (g0 + ft(75) > lengthM / 2 - ft(900)) break
-      for (let b = 0; b < bars; b++) {
-        const inner = (ft(36) + b * ft(11)) * k
-        const outer = inner + ft(6)
-        paint.push(quad(end, g0, g0 + ft(75), inner, outer, { kind: 'tdz' }))
-        paint.push(quad(end, g0, g0 + ft(75), -outer, -inner, { kind: 'tdz' }))
-      }
+  for (const g of spec.tdz(lda, aim, k)) {
+    const g0 = d + g.at
+    if (g0 + g.length > lengthM / 2 - ft(900)) break
+    for (let b = 0; b < g.bars; b++) {
+      const inner = g.inner + b * g.pitch
+      const outer = inner + g.width
+      if (outer > half - 1) break
+      paint.push(quad(end, g0, g0 + g.length, inner, outer, { kind: 'tdz' }))
+      paint.push(quad(end, g0, g0 + g.length, -outer, -inner, { kind: 'tdz' }))
     }
   }
 
@@ -283,20 +400,27 @@ function approachPath(end: End, features: Feature<LineString>[]) {
   }
 }
 
-/** The paved pad before a runway end, with chevrons pointing at the runway. */
+/** The paved pad before a runway end, with yellow chevrons pointing at the runway. */
 function blastPad(end: End, widthM: number): BlastPad {
-  const half = widthM * 0.72
-  const features: Feature<Polygon | LineString>[] = [quad(end, -PAD_LENGTH_M, 0, -half, half, { kind: 'pad' })]
-  const depth = half * 0.5
-  for (let i = 0; i < 4; i++) {
-    const tip = -5 - i * (PAD_LENGTH_M / 4.6)
+  // As wide as the runway, as in the reference.
+  const half = widthM / 2
+  const pad = quad(end, -PAD_LENGTH_M, 0, -half, half, { kind: 'pad' })
+  const features: Feature<Polygon | LineString>[] = [pad]
+  // Three chevrons at 45°, reaching nearly edge to edge, the first right behind the end bar (as in the reference).
+  const span = half * 0.95
+  const depth = span
+  const count = 3
+  const step = Math.max(10, (PAD_LENGTH_M - depth - 5) / (count - 1))
+  for (let i = 0; i < count; i++) {
+    const tip = -5 - i * step
     features.push({
       type: 'Feature',
       properties: { kind: 'chevron' },
-      geometry: { type: 'LineString', coordinates: [end.at(tip - depth, -half * 0.86), end.at(tip, 0), end.at(tip - depth, half * 0.86)] },
+      geometry: { type: 'LineString', coordinates: [end.at(tip - depth, -span), end.at(tip, 0), end.at(tip - depth, span)] },
     })
   }
-  return { ident: end.ident, probe: end.at(-PAD_LENGTH_M, 0), features }
+  const probes = [end.at(-PAD_LENGTH_M, 0), end.at(-PAD_LENGTH_M, -half), end.at(-PAD_LENGTH_M, half)]
+  return { ident: end.ident, probe: probes[0], probes, ring: pad.geometry.coordinates[0] as LngLat[], features }
 }
 
 const empty = <G extends Polygon | Point | LineString>(): FeatureCollection<G> => ({ type: 'FeatureCollection', features: [] })
@@ -310,6 +434,7 @@ export function emptyDiagram(): AirportDiagram {
 export function buildAirportDiagram(airport: string): AirportDiagram {
   const out = emptyDiagram()
   const icao = icaoCode(airport)
+  const spec = markingSpec(icao)
 
   // Where two runways cross, the longer one keeps its centreline, side stripes
   // and touchdown marks straight through; the shorter one is interrupted.
@@ -327,44 +452,52 @@ export function buildAirportDiagram(airport: string): AirportDiagram {
     const winners = rects.filter((_, j) => rank[j] > rank[idx])
     const blocked = (p: LngLat, margin = 2) => winners.some((w) => onPavement(w, p, margin))
 
-    out.surface.features.push(quad(f.le, 0, f.lengthM, -half, half, { surface, name }))
+    out.surface.features.push(quad(f.le, 0, f.lengthM, -half, half, { surface, name, rank: rank[idx] }))
 
     const mine: Feature<Polygon>[] = []
 
-    // Side stripes run the length of the runway along each edge, in
-    // pieces that stop short of any runway crossing it.
-    const edge = Math.max(1, widthM * 0.022)
+    // Side stripes run the length of the runway along each edge, between the
+    // end bars, in pieces that stop short of any runway crossing it.
+    const edge = 0.9
     for (const side of [1, -1]) {
       // A crisp line right on the pavement edge, as in the reference.
-      const t0 = side * (half - 0.25)
-      const t1 = side * (half - 0.25 - edge)
+      const t0 = side * (half - 0.1)
+      const t1 = side * (half - 0.1 - edge)
       let runStart: number | null = null
-      for (let s = 0; s <= f.lengthM + 1e-6; s += 1) {
-        const free = s < f.lengthM && !blocked(f.le.at(s + 0.5, t0), 1.5)
+      const stop = f.lengthM - END_BAR_M
+      for (let s = END_BAR_M; s <= stop + 1e-6; s += 1) {
+        const free = s < stop && !blocked(f.le.at(s + 0.5, t0), 1.5)
         if (free && runStart == null) runStart = s
         if (!free && runStart != null) {
           if (s - runStart > 4) mine.push(quad(f.le, runStart, s, Math.min(t0, t1), Math.max(t0, t1), { kind: 'edge' }))
           runStart = null
         }
       }
-      // The last piece runs to the end of the pavement.
-      if (runStart != null && f.lengthM - runStart > 4) mine.push(quad(f.le, runStart, f.lengthM, Math.min(t0, t1), Math.max(t0, t1), { kind: 'edge' }))
+      // The last piece runs to the far end bar.
+      if (runStart != null && stop - runStart > 4) mine.push(quad(f.le, runStart, stop, Math.min(t0, t1), Math.max(t0, t1), { kind: 'edge' }))
     }
 
-    const leEnd = endMarkings(f.le, f.lengthM, widthM, paintedDesignator(r.le.ident, icao), mine, out.designators.features)
-    const heEnd = endMarkings(f.he, f.lengthM, widthM, paintedDesignator(r.he.ident, icao), mine, out.designators.features)
+    const leEnd = endMarkings(f.le, f.lengthM, widthM, paintedDesignator(r.le.ident, icao), spec, mine, out.designators.features)
+    const heEnd = endMarkings(f.he, f.lengthM, widthM, paintedDesignator(r.he.ident, icao), spec, mine, out.designators.features)
 
-    // Centreline: 120 ft stripes with 80 ft gaps between the two designators.
+    // Centreline dashes between the two designators, centred in the gap. They
+    // are drawn as a hairline, so they live with the other strokes; a crossing
+    // runway with right of way interrupts them.
     const from = leEnd
     const to = f.lengthM - heEnd
-    const pitch = ft(200)
-    const n = Math.floor((to - from + ft(80)) / pitch)
-    const start = from + (to - from - (n * pitch - ft(80))) / 2
-    const cw = Math.max(0.6, ft(3) / 2)
+    const pitch = spec.dash + spec.dashGap
+    const n = Math.floor((to - from + spec.dashGap) / pitch)
+    const start = from + (to - from - (n * pitch - spec.dashGap)) / 2
     for (let i = 0; i < n; i++) {
       const s = start + i * pitch
-      mine.push(quad(f.le, s, s + ft(120), -cw, cw, { kind: 'centre' }))
+      const a = f.le.at(s, 0)
+      const b = f.le.at(s + spec.dash, 0)
+      if (blocked(a) || blocked(b)) continue
+      out.designators.features.push({ type: 'Feature', properties: { kind: 'centre' }, geometry: { type: 'LineString', coordinates: [a, b] } })
     }
+
+    // The runway's axis, end to end: not painted, but it keeps taxiway letters off the runway.
+    out.designators.features.push({ type: 'Feature', properties: { kind: 'axis', w: widthM }, geometry: { type: 'LineString', coordinates: [f.le.at(0, 0), f.le.at(f.lengthM, 0)] } })
 
     // Drop the through-marks that would run across a runway with right of way.
     for (const m of mine) {
@@ -383,7 +516,22 @@ export function buildAirportDiagram(airport: string): AirportDiagram {
       out.pads.push(blastPad(end, widthM))
     }
   })
+  // The runway with right of way is drawn last, so its pavement edge stays unbroken at a crossing.
+  out.surface.features.sort((a, b) => Number(a.properties?.rank) - Number(b.properties?.rank))
+  // Strokes with a real-world width need to know how many pixels a metre is at this latitude.
+  const k = all.length ? widthScale(all[0].f.origin[1]) : 1
+  for (const f of out.designators.features) f.properties = { ...f.properties, k }
+  for (const p of out.pads) for (const f of p.features) f.properties = { ...f.properties, k }
   return out
+}
+
+/**
+ * The map style converts metres to pixels as if at 40°N (`metres()` in
+ * mapStyle). Further north a metre covers more pixels: features carry this
+ * factor (`k`) so their widths come out true.
+ */
+export function widthScale(lat: number): number {
+  return Math.cos((40 * Math.PI) / 180) / Math.cos((lat * Math.PI) / 180)
 }
 
 // ---------------------------------------------------------------------------
@@ -438,4 +586,213 @@ export function relativeToRunway(end: RunwayEndGeometry, p: LngLat): { along: nu
 /** Runway length implied by the two published end coordinates, in feet. */
 export function measuredLengthFt(r: Runway): number {
   return distanceM([r.le.lon, r.le.lat], [r.he.lon, r.he.lat]) / M_PER_FT
+}
+
+// ---------------------------------------------------------------------------
+// Markings that depend on the taxiways (worked out from the map tiles)
+// ---------------------------------------------------------------------------
+
+/**
+ * Distance from runway centreline to the holding position: 280 ft is the FAA
+ * figure for the large aircraft these airports see, 90 m the ICAO one for a
+ * code 4 instrument runway.
+ */
+export const HOLD_OFFSET_M = { faa: 280 * M_PER_FT, icao: 90 } as const
+/** Half-length of the marking: it spans the taxiway pavement as the map draws it. */
+const BAR_HALF_M = 20
+/**
+ * Centre-to-centre spacing of the four lines of the marking. The real lines
+ * are 6 in wide with 6 in gaps; this is a little wider so the dashed pair can
+ * still be told from the solid pair on a phone.
+ */
+export const HOLD_LINE_PITCH_M = 0.7
+
+/** Half the width of taxiway pavement: a centreline this close to a pad means the pavement overlaps it. */
+const TAXIWAY_HALF_M = 15
+
+/** Does a taxiway (its centreline, plus half its pavement) run into the blast pad? */
+export function crossesPad(path: LngLat[], pad: BlastPad): boolean {
+  const [a, b, , d] = pad.ring
+  const [ex, ey] = toLocal(a, b)
+  const [nx, ny] = toLocal(a, d)
+  const len = Math.hypot(ex, ey)
+  const wid = Math.hypot(nx, ny)
+  if (!len || !wid) return false
+  const inside = (p: LngLat, slack: number) => {
+    const [x, y] = toLocal(a, p)
+    const u = (x * ex + y * ey) / len
+    const v = (x * nx + y * ny) / wid
+    // On the runway side, a taxiway crossing the first stretch of runway still puts its pavement over the pad.
+    return u > -slack && u < len + 2 * slack && v > -slack && v < wid + slack
+  }
+  for (let i = 0; i < path.length; i++) {
+    if (inside(path[i], TAXIWAY_HALF_M)) return true
+    if (i === 0) continue
+    // Sample the segment so a taxiway that cuts straight across is caught too.
+    const [sx, sy] = toLocal(path[i - 1], path[i])
+    const steps = Math.ceil(Math.hypot(sx, sy) / 8)
+    for (let k = 1; k < steps; k++) if (inside(offset(path[i - 1], (sx * k) / steps, (sy * k) / steps), TAXIWAY_HALF_M)) return true
+  }
+  return false
+}
+
+/** A holding-position marking found so far: which runway and side, how far along, and how squarely its taxiway meets the runway. */
+export type HoldBar = { runway: string; side: number; along: number; squareness: number; marks: Feature<LineString>[] }
+
+/**
+ * Crossings closer together than this along the same side of a runway are
+ * one holding position: the fillets of a junction are separate taxiway lines
+ * in the data, and each would otherwise get its own bar.
+ */
+const HOLD_MERGE_M = 45
+
+/**
+ * Find where a taxiway crosses a runway's holding line and add the marking
+ * there: two solid lines on the taxiway side, two dashed on the runway side,
+ * over a dark band. Where several taxiway lines cross at one junction, only
+ * the one that meets the runway most squarely keeps its bar. Returns true if
+ * the set changed.
+ */
+export function holdBars(path: LngLat[], runways: RunwayEndGeometry[], holdOffset: number, bars: HoldBar[]): boolean {
+  let changed = false
+  for (const rw of runways) {
+    const rb = (rw.bearing * Math.PI) / 180
+    let prev = relativeToRunway(rw, path[0])
+    for (let i = 1; i < path.length; i++) {
+      const cur = relativeToRunway(rw, path[i])
+      for (const side of [holdOffset, -holdOffset]) {
+        const a = prev.cross - side
+        const b = cur.cross - side
+        if (a * b >= 0) continue
+        const u = a / (a - b)
+        const along = prev.along + (cur.along - prev.along) * u
+        if (along < -40 || along > rw.lengthM + 40) continue
+
+        // Unit vector along the taxiway, pointing toward the runway.
+        const [e, n] = toLocal(path[i - 1], path[i])
+        const len = Math.hypot(e, n) || 1
+        const toward = Math.abs(cur.cross) < Math.abs(prev.cross) ? 1 : -1
+        const dx = (e / len) * toward
+        const dy = (n / len) * toward
+        // 1 when the taxiway meets the runway at a right angle, 0 when it runs alongside.
+        const squareness = 1 - Math.abs(dx * Math.sin(rb) + dy * Math.cos(rb))
+
+        // The same crossing turns up again where tiles overlap, and junction fillets nearby.
+        const near = bars.findIndex((h) => h.runway === rw.ident && h.side === side && Math.abs(h.along - along) < HOLD_MERGE_M)
+        if (near >= 0 && bars[near].squareness >= squareness - 0.02) continue
+
+        const p: LngLat = [path[i - 1][0] + (path[i][0] - path[i - 1][0]) * u, path[i - 1][1] + (path[i][1] - path[i - 1][1]) * u]
+        const across = (c: LngLat): [number, number][] => [offset(c, -dy * BAR_HALF_M, dx * BAR_HALF_M), offset(c, dy * BAR_HALF_M, -dx * BAR_HALF_M)]
+        const k = widthScale(p[1])
+        // The dark band the yellow lines sit on.
+        const marks: Feature<LineString>[] = [{ type: 'Feature', properties: { kind: 'band', k }, geometry: { type: 'LineString', coordinates: across(p) } }]
+        ;[-1.5, -0.5, 0.5, 1.5].forEach((step, line) => {
+          const c = offset(p, dx * step * HOLD_LINE_PITCH_M, dy * step * HOLD_LINE_PITCH_M)
+          // The two lines nearer the runway are dashed.
+          marks.push({ type: 'Feature', properties: { kind: line >= 2 ? 'dashed' : 'solid', k }, geometry: { type: 'LineString', coordinates: across(c) } })
+        })
+        const bar = { runway: rw.ident, side, along, squareness, marks }
+        if (near >= 0) bars[near] = bar
+        else bars.push(bar)
+        changed = true
+      }
+      prev = cur
+    }
+  }
+  return changed
+}
+
+// ---------------------------------------------------------------------------
+// Wear and stand markings (drawn by the atmosphere layers)
+// ---------------------------------------------------------------------------
+
+/** Small seeded random numbers, so each runway's tyre marks look the same on every load. */
+function seeded(text: string): () => number {
+  let h = 2166136261
+  for (const c of text) h = Math.imul(h ^ c.charCodeAt(0), 16777619)
+  return () => {
+    h = (h + 0x6d2b79f5) | 0
+    let t = Math.imul(h ^ (h >>> 15), 1 | h)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** Point `along` metres past an end's threshold and `cross` metres to the right of its centreline. */
+function onRunway(end: RunwayEndGeometry, along: number, cross: number): LngLat {
+  const b = (end.bearing * Math.PI) / 180
+  return offset(end.threshold, along * Math.sin(b) + cross * Math.cos(b), along * Math.cos(b) - cross * Math.sin(b))
+}
+
+/**
+ * Rubber deposits in each touchdown zone: one broad, faint smudge down the
+ * middle and a scatter of darker streaks along the main-gear tracks, densest
+ * near the aiming point. Longer runways (the busier ones at most airports)
+ * get more and darker marks. Each line carries its width `w` (m), opacity `o`
+ * and latitude factor `k`.
+ */
+export function tyreMarks(airport: string): FeatureCollection<LineString> {
+  const ends = runwayEnds(airport)
+  const features: Feature<LineString>[] = []
+  if (!ends.length) return { type: 'FeatureCollection', features }
+  const longest = Math.max(...ends.map((e) => e.lengthM))
+  const k = widthScale(ends[0].threshold[1])
+  const line = (end: RunwayEndGeometry, a0: number, c0: number, a1: number, c1: number, w: number, o: number) =>
+    features.push({ type: 'Feature', properties: { w, o: Math.round(o * 1000) / 1000, k }, geometry: { type: 'LineString', coordinates: [onRunway(end, a0, c0), onRunway(end, a1, c1)] } })
+  for (const end of ends) {
+    if (end.lengthM < 900) continue
+    const rand = seeded(`${airport}:${end.ident}`)
+    const busy = 0.55 + 0.45 * (end.lengthM / longest)
+    const zoneEnd = Math.min(950, end.lengthM * 0.3)
+    line(end, 140, 0, zoneEnd, 0, Math.min(20, end.widthM * 0.42), 0.2 * busy)
+    const n = Math.round(30 * busy)
+    for (let i = 0; i < n; i++) {
+      const a0 = 120 + rand() ** 1.7 * (zoneEnd - 220)
+      const len = 25 + rand() * 120
+      const side = rand() < 0.5 ? -1 : 1
+      // Main gear tracks: narrow-bodies about 3 m either side of the centreline, wide-bodies about 5.5 m.
+      const c = side * (2.4 + rand() * 3.6)
+      const drift = (rand() - 0.5) * 0.8
+      line(end, a0, c, Math.min(a0 + len, zoneEnd + 60), c + drift, 0.9 + rand() * 1.5, (0.22 + rand() * 0.34) * busy)
+    }
+  }
+  return { type: 'FeatureCollection', features }
+}
+
+/** The straight run of a stand's lead-in line out from the nose position, and the radius it turns on. */
+export const STAND_STRAIGHT_M = 42
+export const STAND_TURN_RADIUS_M = 30
+
+/**
+ * Painted stand markings for one gate: a yellow lead-in line running straight
+ * out from the nose position along `outBearing` (away from the terminal) and
+ * then curving 90° toward `turn` (1 right, -1 left, looking outward) onto the
+ * taxilane, a stop bar across the nose position, and a point where the gate
+ * number is painted, with `rot` the text rotation that reads along the stand.
+ */
+export function standMarkings(nose: LngLat, outBearing: number, turn: 1 | -1, ref: string | null): Feature[] {
+  const b = (outBearing * Math.PI) / 180
+  const ux = Math.sin(b)
+  const uy = Math.cos(b)
+  // Right of the outward direction.
+  const rx = uy
+  const ry = -ux
+  const at = (along: number, right: number): LngLat => offset(nose, ux * along + rx * right, uy * along + ry * right)
+  const pts: LngLat[] = [at(0, 0), at(STAND_STRAIGHT_M, 0)]
+  const R = STAND_TURN_RADIUS_M
+  for (let i = 1; i <= 8; i++) {
+    const t = (i / 8) * (Math.PI / 2)
+    pts.push(at(STAND_STRAIGHT_M + R * Math.sin(t), turn * R * (1 - Math.cos(t))))
+  }
+  const out: Feature[] = [
+    { type: 'Feature', properties: { kind: 'lead' }, geometry: { type: 'LineString', coordinates: pts } },
+    { type: 'Feature', properties: { kind: 'stop' }, geometry: { type: 'LineString', coordinates: [at(0, -3), at(0, 3)] } },
+  ]
+  if (ref) {
+    // Text runs along the stand; keep it the right way up for a north-up map.
+    let rot = (((outBearing - 90) % 360) + 360) % 360
+    if (rot > 90 && rot < 270) rot -= 180
+    out.push({ type: 'Feature', properties: { kind: 'num', ref, rot: Math.round(rot) }, geometry: { type: 'Point', coordinates: at(22, turn * -5) } })
+  }
+  return out
 }

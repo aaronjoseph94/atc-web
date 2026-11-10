@@ -1,0 +1,555 @@
+{
+ "DAL1210": {
+  "callsign": "DAL1210",
+  "airline": "Delta Air Lines",
+  "origin": {
+   "iata": "ATL",
+   "icao": "KATL",
+   "name": "Hartsfield-Jackson Atlanta International Airport",
+   "city": "Atlanta",
+   "lat": 33.6367,
+   "lon": -84.4281
+  },
+  "destination": {
+   "iata": "JFK",
+   "icao": "KJFK",
+   "name": "John F Kennedy International Airport",
+   "city": "New York",
+   "lat": 40.6398,
+   "lon": -73.7789
+  },
+  "typeName": "AIRBUS A-321",
+  "manufacturer": "Airbus",
+  "registration": "N391DN",
+  "owner": "DELTA AIR LINES INC",
+  "sources": [
+   "adsbdb",
+   "feed"
+  ]
+ },
+ "AAL100": {
+  "callsign": "AAL100",
+  "airline": "American Airlines",
+  "origin": {
+   "iata": "JFK",
+   "icao": "KJFK",
+   "name": "John F Kennedy International Airport",
+   "city": "New York",
+   "lat": 40.6398,
+   "lon": -73.7789
+  },
+  "destination": {
+   "iata": "LHR",
+   "icao": "EGLL",
+   "name": "London Heathrow Airport",
+   "city": "London",
+   "lat": 51.4706,
+   "lon": -0.4619
+  },
+  "typeName": "BOEING 777-300ER",
+  "manufacturer": "Boeing",
+  "registration": "N717AN",
+  "owner": "AMERICAN AIRLINES INC",
+  "sources": [
+   "adsbdb",
+   "feed"
+  ]
+ },
+ "N738SP": {
+  "callsign": "N738SP",
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "CESSNA 172S",
+  "manufacturer": "Cessna",
+  "registration": "N738SP",
+  "owner": null,
+  "sources": [
+   "feed"
+  ]
+ },
+ "N24HL": {
+  "callsign": "N24HL",
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "AS 350 B3",
+  "manufacturer": "Airbus Helicopters",
+  "registration": "N24HL",
+  "owner": null,
+  "sources": [
+   "feed"
+  ]
+ },
+ "AAL521": {
+  "callsign": "AAL521",
+  "airline": "American Airlines",
+  "origin": {
+   "iata": "PHL",
+   "icao": "KPHL",
+   "name": "Philadelphia International Airport",
+   "city": "Philadelphia",
+   "lat": 39.8719,
+   "lon": -75.2411
+  },
+  "destination": {
+   "iata": "CLE",
+   "icao": "KCLE",
+   "name": "Cleveland Hopkins International Airport",
+   "city": "Cleveland",
+   "lat": 41.4117,
+   "lon": -81.8498
+  },
+  "typeName": "A321 231SL",
+  "manufacturer": "Airbus",
+  "registration": "N158AN",
+  "owner": "American Airlines",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "N567UW": {
+  "callsign": "N567UW",
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A321 231",
+  "manufacturer": "Airbus",
+  "registration": "N567UW",
+  "owner": "American Airlines",
+  "sources": [
+   "hexdb"
+  ]
+ },
+ "A12625": {
+  "callsign": null,
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A321 211",
+  "manufacturer": "Airbus",
+  "registration": "N173US",
+  "owner": "American Airlines",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "DAL2226": {
+  "callsign": "DAL2226",
+  "airline": "Delta Air Lines",
+  "origin": {
+   "iata": "ATL",
+   "icao": "KATL",
+   "name": "Hartsfield Jackson Atlanta International Airport",
+   "city": "Atlanta",
+   "lat": 33.6367,
+   "lon": -84.4281
+  },
+  "destination": {
+   "iata": "EWR",
+   "icao": "KEWR",
+   "name": "Newark Liberty International Airport",
+   "city": "New York",
+   "lat": 40.6925,
+   "lon": -74.1687
+  },
+  "typeName": "AIRBUS A220-300",
+  "manufacturer": null,
+  "registration": "N340DU",
+  "owner": "DELTA AIR LINES INC, DEPT 595 AIRCRAFT REGISTRATIONS",
+  "sources": [
+   "adsbdb",
+   "feed"
+  ]
+ },
+ "DAL2503": {
+  "callsign": "DAL2503",
+  "airline": "Delta Air Lines",
+  "origin": {
+   "iata": "SAN",
+   "icao": "KSAN",
+   "name": "San Diego International Airport",
+   "city": "San Diego",
+   "lat": 32.7336,
+   "lon": -117.19
+  },
+  "destination": {
+   "iata": "SEA",
+   "icao": "KSEA",
+   "name": "Seattle Tacoma International Airport",
+   "city": "Seattle",
+   "lat": 47.449,
+   "lon": -122.309
+  },
+  "typeName": "AIRBUS A220-300",
+  "manufacturer": null,
+  "registration": "N345DU",
+  "owner": "DELTA AIR LINES INC, DEPT 595 AIRCRAFT REGISTRATIONS",
+  "sources": [
+   "adsbdb",
+   "feed"
+  ]
+ },
+ "N9010R": {
+  "callsign": "N9010R",
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A319 115SL",
+  "manufacturer": "Airbus",
+  "registration": "N9010R",
+  "owner": "American Airlines",
+  "sources": [
+   "hexdb"
+  ]
+ },
+ "AAL148": {
+  "callsign": "AAL148",
+  "airline": "American Airlines",
+  "origin": {
+   "iata": "SFO",
+   "icao": "KSFO",
+   "name": "San Francisco International Airport",
+   "city": "San Francisco",
+   "lat": 37.619,
+   "lon": -122.375
+  },
+  "destination": {
+   "iata": "LAX",
+   "icao": "KLAX",
+   "name": "Los Angeles International Airport",
+   "city": "Los Angeles",
+   "lat": 33.9425,
+   "lon": -118.408
+  },
+  "typeName": "AIRBUS A-321neo",
+  "manufacturer": null,
+  "registration": "N315XR",
+  "owner": "AMERICAN AIRLINES INC",
+  "sources": [
+   "adsbdb",
+   "feed"
+  ]
+ },
+ "MX1234": {
+  "callsign": "MX1234",
+  "airline": "Mexicana",
+  "origin": {
+   "iata": "NLU",
+   "icao": "MMSM",
+   "name": "Santa Lucía Air Force Base / General Felipe Ángeles International Airport",
+   "city": "Mexico City (Santa Lucía)",
+   "lat": 19.7458,
+   "lon": -99.0145
+  },
+  "destination": {
+   "iata": "SJD",
+   "icao": "MMSD",
+   "name": "Los Cabos International Airport",
+   "city": "San José del Cabo",
+   "lat": 23.1518,
+   "lon": -109.721
+  },
+  "typeName": "A321-271NX",
+  "manufacturer": "Airbus",
+  "registration": "N3165J",
+  "owner": "JetBlue Airways",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "AD846F": {
+  "callsign": null,
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A321 231SL",
+  "manufacturer": "Airbus",
+  "registration": "N970JB",
+  "owner": "JetBlue Airways",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "A19910": {
+  "callsign": null,
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A321 271NXSL",
+  "manufacturer": "Airbus",
+  "registration": "N2017J",
+  "owner": "JetBlue Airways",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "MX929JB": {
+  "callsign": "MX929JB",
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A321 231SL",
+  "manufacturer": "Airbus",
+  "registration": "N929JB",
+  "owner": "JetBlue Airways",
+  "sources": [
+   "hexdb"
+  ]
+ },
+ "MX961JT1": {
+  "callsign": "MX961JT1",
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A321 231SL",
+  "manufacturer": "Airbus",
+  "registration": "N961JT",
+  "owner": "JetBlue Airways",
+  "sources": [
+   "hexdb"
+  ]
+ },
+ "JBU924": {
+  "callsign": "JBU924",
+  "airline": "JetBlue Airways",
+  "origin": {
+   "iata": "STI",
+   "icao": "MDST",
+   "name": "Cibao International Airport",
+   "city": "Santiago",
+   "lat": 19.4061,
+   "lon": -70.6047
+  },
+  "destination": {
+   "iata": "BOS",
+   "icao": "KBOS",
+   "name": "Logan International Airport",
+   "city": "Boston",
+   "lat": 42.3643,
+   "lon": -71.0052
+  },
+  "typeName": "AIRBUS A-321neo",
+  "manufacturer": null,
+  "registration": "N2199J",
+  "owner": "JETBLUE AIRWAYS CORP",
+  "sources": [
+   "adsbdb",
+   "feed"
+  ]
+ },
+ "N950JT": {
+  "callsign": "N950JT",
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A321 231SL",
+  "manufacturer": "Airbus",
+  "registration": "N950JT",
+  "owner": "JetBlue Airways",
+  "sources": [
+   "hexdb"
+  ]
+ },
+ "JBU1117": {
+  "callsign": "JBU1117",
+  "airline": "JetBlue Airways",
+  "origin": {
+   "iata": "BOS",
+   "icao": "KBOS",
+   "name": "Logan International Airport",
+   "city": "Boston",
+   "lat": 42.3643,
+   "lon": -71.0052
+  },
+  "destination": {
+   "iata": "JFK",
+   "icao": "KJFK",
+   "name": "John F Kennedy International Airport",
+   "city": "New York",
+   "lat": 40.6398,
+   "lon": -73.7789
+  },
+  "typeName": "AIRBUS A220-300",
+  "manufacturer": null,
+  "registration": "N3304J",
+  "owner": "JETBLUE AIRWAYS CORP",
+  "sources": [
+   "adsbdb",
+   "feed"
+  ]
+ },
+ "JBU528": {
+  "callsign": "JBU528",
+  "airline": "JetBlue Airways",
+  "origin": {
+   "iata": "MCO",
+   "icao": "KMCO",
+   "name": "Orlando International Airport",
+   "city": "Orlando",
+   "lat": 28.4294,
+   "lon": -81.309
+  },
+  "destination": {
+   "iata": "EWR",
+   "icao": "KEWR",
+   "name": "Newark Liberty International Airport",
+   "city": "New York",
+   "lat": 40.6925,
+   "lon": -74.1687
+  },
+  "typeName": "A321 271NXSL",
+  "manufacturer": "Airbus",
+  "registration": "N2043J",
+  "owner": "JetBlue Airways",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "JBU476": {
+  "callsign": "JBU476",
+  "airline": "JetBlue Airways",
+  "origin": {
+   "iata": "RDU",
+   "icao": "KRDU",
+   "name": "Raleigh Durham International Airport",
+   "city": "Raleigh/Durham",
+   "lat": 35.8776,
+   "lon": -78.7875
+  },
+  "destination": {
+   "iata": "JFK",
+   "icao": "KJFK",
+   "name": "John F Kennedy International Airport",
+   "city": "New York",
+   "lat": 40.6398,
+   "lon": -73.7789
+  },
+  "typeName": "BCS3",
+  "manufacturer": null,
+  "registration": "N3242J",
+  "owner": "JETBLUE AIRWAYS CORP",
+  "sources": [
+   "adsbdb",
+   "feed"
+  ]
+ },
+ "A8B8BA": {
+  "callsign": null,
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A320 232",
+  "manufacturer": "Airbus",
+  "registration": "N661JB",
+  "owner": "JetBlue Airways",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "GLG7395": {
+  "callsign": "GLG7395",
+  "airline": "Aerolineas Galapagos (Aerogal)",
+  "origin": {
+   "iata": "JFK",
+   "icao": "KJFK",
+   "name": "John F Kennedy International Airport",
+   "city": "New York",
+   "lat": 40.6398,
+   "lon": -73.7789
+  },
+  "destination": {
+   "iata": "GYE",
+   "icao": "SEGU",
+   "name": "José Joaquín de Olmedo International Airport",
+   "city": "Guayaquil",
+   "lat": -2.15742,
+   "lon": -79.8836
+  },
+  "typeName": "A320 251NSL",
+  "manufacturer": "Airbus",
+  "registration": "N776AV",
+  "owner": "Avianca",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "A009A4": {
+  "callsign": null,
+  "airline": null,
+  "origin": null,
+  "destination": null,
+  "typeName": "A321 231SL",
+  "manufacturer": "Airbus",
+  "registration": "N101NN",
+  "owner": "American Airlines",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "AAL2315": {
+  "callsign": "AAL2315",
+  "airline": "American Airlines",
+  "origin": {
+   "iata": "BOS",
+   "icao": "KBOS",
+   "name": "Logan International Airport",
+   "city": "Boston",
+   "lat": 42.3643,
+   "lon": -71.0052
+  },
+  "destination": {
+   "iata": "PHX",
+   "icao": "KPHX",
+   "name": "Phoenix Sky Harbor International Airport",
+   "city": "Phoenix",
+   "lat": 33.4353,
+   "lon": -112.00591
+  },
+  "typeName": "A321 231SL",
+  "manufacturer": "Airbus",
+  "registration": "N139AN",
+  "owner": "American Airlines",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ },
+ "DAL2692": {
+  "callsign": "DAL2692",
+  "airline": "Delta Air Lines",
+  "origin": {
+   "iata": "BUF",
+   "icao": "KBUF",
+   "name": "Buffalo Niagara International Airport",
+   "city": "Buffalo",
+   "lat": 42.9405,
+   "lon": -78.7322
+  },
+  "destination": {
+   "iata": "DTW",
+   "icao": "KDTW",
+   "name": "Detroit Metropolitan Wayne County Airport",
+   "city": "Detroit",
+   "lat": 42.2124,
+   "lon": -83.3534
+  },
+  "typeName": "A220 100",
+  "manufacturer": "Airbus",
+  "registration": "N122DU",
+  "owner": "Delta Air Lines",
+  "sources": [
+   "adsbdb",
+   "hexdb"
+  ]
+ }
+}

@@ -6,38 +6,68 @@
  * it is doing. Drag it up (or tap the sentence) for the full view; drag it
  * down to let the aircraft go.
  *
- * `FlightDetail`: the full-height view with the airframe photo, route
- * progress, every number, and the conversation so far (radio calls in a
+ * `FlightDetail`: the full-height view with a drawing of the aircraft type
+ * and its facts, route progress, every number, and the conversation so far (radio calls in a
  * replayed scene, logged events for live traffic).
  */
 import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
+import { AirlineLogo } from '../airline/AirlineLogo'
+import { useMemo, type CSSProperties, type ReactNode } from 'react'
 import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
+import { callsFor, useRadio, type Transmission } from '../live/radio/radioStore'
 import { distanceM } from '../map/geo'
 import { FrequencyTuner } from '../station/FrequencyTuner'
 import { Waveform } from '../station/Waveform'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '../settings/settingsStore'
+import { CARD_BOTTOM, CARD_TOP, registerCardColors, useAirlineTint } from '../ui/airlineTint'
 import { Grabber, useDialog } from '../ui/Panel'
+import { RouteSkeleton } from '../ui/States'
+import { Ticker } from '../ui/Ticker'
 import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
+import { AircraftPanel } from '../aircraft/AircraftPanel'
 import { aircraftTypeName, altitudeComparison, compassDirection, describeCallsign, PHASE_LABEL } from './describe'
+import { FlightTimeline } from './FlightTimeline'
 import { Sparkline } from './Sparkline'
 import { useFlight, useFlightInfo, type FlightView } from './useFlight'
 
 const code = (a: RouteAirport | null | undefined) => a?.iata ?? a?.icao ?? null
+
+registerCardColors()
+
+/**
+ * The card's gradient, leaning toward the airline's colour. The two stops are
+ * registered colour properties, so switching flights cross-fades the tint.
+ * Merged with the drag style, whose transform transition must survive.
+ */
+function cardStyle(tint: { top: string; bottom: string } | null, base: CSSProperties): CSSProperties {
+  const fade = '--card-top 700ms var(--ease-in-out), --card-bottom 700ms var(--ease-in-out)'
+  const drag = base.transition && base.transition !== 'none' ? `${base.transition}, ` : ''
+  return {
+    ...base,
+    ['--card-top' as string]: tint?.top ?? CARD_TOP,
+    ['--card-bottom' as string]: tint?.bottom ?? CARD_BOTTOM,
+    backgroundImage: 'linear-gradient(to bottom, var(--card-top), var(--card-bottom))',
+    transition: drag + fade,
+  }
+}
 
 /** Lock / unlock the camera on the aircraft. Reads "Following" while locked, "Re-center" once the map has been moved. */
 function FollowButton({ tone }: { tone: 'card' | 'dark' }) {
   const following = usePlayhead((s) => s.following)
   const setFollowing = usePlayhead((s) => s.setFollowing)
   const base = 'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition active:scale-95'
+  // In the full view the callsign is set much bigger; on a phone the words would squeeze it to "AVA0…",
+  // so there the button keeps only its icon (the word stays as its accessible name).
+  const word = tone === 'dark' ? 'max-sm:sr-only' : ''
   return following ? (
-    <button type="button" data-no-drag aria-pressed className={`${base} ${tone === 'card' ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-white/10 text-white hover:bg-white/20'}`} onClick={() => setFollowing(false)}>
-      <Check className="size-3.5" strokeWidth={3} /> Following
+    <button type="button" data-no-drag aria-pressed title="Following" className={`${base} ${tone === 'card' ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-white/10 text-white hover:bg-white/20'}`} onClick={() => setFollowing(false)}>
+      <Check className="size-3.5" strokeWidth={3} /> <span className={word}>Following</span>
     </button>
   ) : (
-    <button type="button" data-no-drag className={`${base} bg-white text-atc-card hover:bg-white/90`} onClick={() => setFollowing(true)}>
-      <Crosshair className="size-3.5" strokeWidth={2.5} /> Re-center
+    <button type="button" data-no-drag title="Re-center" className={`${base} bg-white text-atc-card hover:bg-white/90`} onClick={() => setFollowing(true)}>
+      <Crosshair className="size-3.5" strokeWidth={2.5} /> <span className={word}>Re-center</span>
     </button>
   )
 }
@@ -45,13 +75,17 @@ function FollowButton({ tone }: { tone: 'card' | 'dark' }) {
 function Identity({ flight, info, big = false }: { flight: FlightView; info: FlightInfo | undefined; big?: boolean }) {
   const type = flight.detail?.type
   return (
-    <div className="flex min-w-0 items-baseline gap-2">
-      <h2 className={`truncate font-display leading-none tracking-wide ${big ? 'text-[2.6rem]' : 'text-[1.9rem]'}`}>{flight.callsign}</h2>
-      {type && (
-        <span className="shrink-0 text-sm font-medium text-white/70" title={info?.typeName ?? aircraftTypeName(type) ?? undefined}>
-          {type}
-        </span>
-      )}
+    <div className={`flex min-w-0 items-center ${big ? 'gap-3' : 'gap-2.5'}`}>
+      {/* The airline's mark, about as tall as the callsign's capitals, as in the reference. */}
+      <AirlineLogo callsign={flight.callsign} icao24={flight.icao24} height={big ? 24 : 21} maxWidth={big ? 40 : 36} className="shrink-0" />
+      <div className="flex min-w-0 items-baseline gap-2">
+        <h2 className={`display-tight truncate font-display leading-none ${big ? 'text-[2.6rem]' : 'text-[1.9rem]'}`}>{flight.callsign}</h2>
+        {type && (
+          <span className="shrink-0 text-sm font-medium text-white/70" title={info?.typeName ?? aircraftTypeName(type) ?? undefined}>
+            {type}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -63,12 +97,14 @@ export function FlightCard() {
   const live = usePlayhead((s) => s.mode === 'live')
   const playing = usePlayhead((s) => s.playing)
   const hasAudio = usePlayhead((s) => !!s.clip?.audioUrl)
+  const radioLive = useRadio((s) => s.on && (s.status === 'live' || s.status === 'buffering'))
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
   const flight = useFlight()
   const info = useFlightInfo(flight).data
   const { mounted, closing } = usePresence(sheet === 'card' && !!flight, 220)
   const drag = useSheetDrag({ onDown: () => select(null), onUp: () => setSheet('full') })
+  const tint = useAirlineTint(flight?.callsign, flight?.icao24)
 
   if (!mounted || !flight) return null
   const d = flight.detail
@@ -79,8 +115,9 @@ export function FlightCard() {
     <section
       aria-label={`Flight ${flight.callsign}`}
       {...drag.handlers}
-      style={drag.dragging || drag.style.transform ? drag.style : { touchAction: 'none' }}
-      className={`pointer-events-auto w-full cursor-grab overflow-hidden rounded-t-[1.75rem] bg-gradient-to-b from-atc-card to-atc-card-deep text-white shadow-[0_-12px_40px_rgba(0,0,0,0.5)] active:cursor-grabbing md:w-[min(92vw,40rem)] md:rounded-[1.75rem] ${
+      style={cardStyle(tint, drag.dragging || drag.style.transform ? drag.style : { touchAction: 'none' })}
+      data-tint={tint?.brand}
+      className={`pointer-events-auto w-full cursor-grab overflow-hidden rounded-t-[1.75rem] bg-atc-card text-white shadow-[0_-12px_40px_rgba(0,0,0,0.5)] active:cursor-grabbing md:w-[min(92vw,40rem)] md:rounded-[1.75rem] ${
         closing ? 'animate-sheet-out' : 'animate-sheet-in'
       }`}
     >
@@ -109,11 +146,11 @@ export function FlightCard() {
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums">
           <Sparkline values={flight.series.speedKt} className="h-4 w-10 text-white/70" />
-          {formatSpeed(d?.speedKt, speedUnit)}
+          <Ticker value={d?.speedKt} format={(v) => formatSpeed(v, speedUnit)} />
         </span>
         <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
           <Sparkline values={flight.series.altitudeFt} className="h-4 w-10 text-white/70" />
-          {d?.onGround ? 'GND' : formatAltitude(d?.altitudeFt, altitudeUnit)}
+          {d?.onGround ? 'GND' : <Ticker value={d?.altitudeFt} format={(v) => formatAltitude(v, altitudeUnit)} />}
         </span>
       </div>
 
@@ -149,7 +186,7 @@ export function FlightCard() {
       )}
       {/* The channel's audio, as on the station bar. */}
       <div className="pb-[var(--safe-bottom)] md:pb-1">
-        <Waveform active={!live && playing && hasAudio} color="rgba(255,255,255,0.5)" />
+        <Waveform active={live ? radioLive : playing && hasAudio} source={live ? 'live' : 'replay'} color="rgba(255,255,255,0.5)" />
       </div>
     </section>
   )
@@ -198,6 +235,27 @@ function CallBubble({ cue }: { cue: TranscriptCue }) {
   )
 }
 
+/**
+ * One live radio call in the conversation, styled like the replayed ones:
+ * grey on the left for the controller, blue on the right for the pilot.
+ */
+function LiveCallBubble({ call }: { call: Transmission }) {
+  const pilot = call.speaker === 'pilot'
+  const time = new Date(call.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+  return (
+    <li className={`max-w-[86%] animate-rise ${pilot ? 'self-end' : 'self-start'}`} aria-label={`${pilot ? 'Pilot' : call.speaker === 'controller' ? 'Controller' : 'Radio'} at ${time}: ${call.text}`}>
+      <p
+        className={`rounded-[1.35rem] px-4 py-3 text-[15px] leading-snug ${pilot ? 'bg-atc-blue text-white' : 'bg-white/[0.11] text-white/90'}`}
+      >
+        {call.text}
+      </p>
+      <p className={`mt-1 px-2 text-[11px] tabular-nums text-white/40 ${pilot ? 'text-right' : ''}`}>
+        {pilot ? 'Pilot' : call.speaker === 'controller' ? 'Controller' : 'Radio'} · {time}
+      </p>
+    </li>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Full view
 // ---------------------------------------------------------------------------
@@ -213,7 +271,7 @@ function routeProgress(info: FlightInfo | undefined, flight: FlightView): number
   return flown + left > 0 ? Math.min(1, Math.max(0, flown / (flown + left))) : null
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string | null }) {
+function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string | null }) {
   return (
     <div className="min-w-0 rounded-2xl bg-white/[0.06] px-3 py-2.5">
       <div className="text-[11px] font-medium text-white/55">{label}</div>
@@ -223,7 +281,8 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   )
 }
 
-export function FlightDetail() {
+/** `docked`: rendered in the desktop side panel (no backdrop, no drag, no focus trap) instead of as a sheet. */
+export function FlightDetail({ docked = false }: { docked?: boolean }) {
   const sheet = usePlayhead((s) => s.sheet)
   const setSheet = usePlayhead((s) => s.setSheet)
   const select = usePlayhead((s) => s.select)
@@ -233,34 +292,41 @@ export function FlightDetail() {
   const flight = useFlight()
   const infoQuery = useFlightInfo(flight)
   const info = infoQuery.data
-  const open = sheet === 'full' && !!flight
+  // Live radio calls that named this aircraft, on any channel at this airport.
+  const radioLog = useRadio((s) => s.log)
+  const selectedIcao = usePlayhead((s) => s.selectedIcao)
+  const liveCalls = useMemo(() => (mode === 'live' && selectedIcao ? callsFor(radioLog, selectedIcao) : []), [mode, selectedIcao, radioLog])
+  const open = (docked || sheet === 'full') && !!flight
   const collapse = () => setSheet('card')
   const { mounted, closing } = usePresence(open, 240)
-  const ref = useDialog(open, collapse)
-  const drag = useSheetDrag({ onDown: collapse, threshold: 90 })
+  const ref = useDialog(open && !docked, collapse)
+  const drag = useSheetDrag({ onDown: collapse, threshold: 90, enabled: () => !docked })
 
   if (!mounted || !flight) return null
   const d = flight.detail
   const { airline, flightNumber } = describeCallsign(flight.callsign)
   const who = info?.airline ?? airline
-  const typeName = info?.typeName ? `${info.manufacturer ?? ''} ${info.typeName}`.trim() : aircraftTypeName(d?.type)
   const progress = routeProgress(info, flight)
   const vr = d?.verticalRateFpm ?? null
   const comparison = d?.onGround ? null : altitudeComparison(d?.altitudeFt)
 
   return (
-    <div className="absolute inset-0 z-40 flex items-end justify-center md:items-center md:p-6">
-      <button type="button" tabIndex={-1} aria-label="Collapse" className={`absolute inset-0 bg-black/55 ${closing ? 'animate-fade-out' : 'animate-fade'}`} onClick={collapse} />
+    <div className={docked ? 'flex h-full flex-col' : 'absolute inset-0 z-40 flex items-end justify-center md:items-center md:p-6'}>
+      {!docked && <button type="button" tabIndex={-1} aria-label="Collapse" className={`absolute inset-0 bg-black/55 ${closing ? 'animate-fade-out' : 'animate-fade'}`} onClick={collapse} />}
       <div
         ref={ref}
-        role="dialog"
-        aria-modal="true"
+        role={docked ? 'region' : 'dialog'}
+        aria-modal={docked ? undefined : 'true'}
         aria-label={`Flight ${flight.callsign}`}
         tabIndex={-1}
         style={drag.dragging || drag.style.transform ? drag.style : undefined}
-        className={`relative flex h-[calc(100dvh-max(2.75rem,var(--safe-top)))] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-[#15181F] shadow-2xl ring-1 ring-white/10 outline-none md:h-auto md:max-h-[88dvh] md:w-[min(94vw,36rem)] md:rounded-[1.75rem] ${
-          closing ? 'animate-sheet-out md:animate-pop-out' : 'animate-sheet-in md:animate-pop'
-        }`}
+        className={
+          docked
+            ? 'flex min-h-0 flex-1 flex-col outline-none'
+            : `grain relative flex h-[calc(100dvh-max(2.75rem,var(--safe-top)))] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-[#15181F] shadow-2xl ring-1 ring-white/10 outline-none md:h-auto md:max-h-[88dvh] md:w-[min(94vw,36rem)] md:rounded-[1.75rem] ${
+                closing ? 'animate-sheet-out md:animate-pop-out' : 'animate-sheet-in md:animate-pop'
+              }`
+        }
       >
         <div {...drag.handlers} className="shrink-0 cursor-grab touch-none border-b border-white/10 active:cursor-grabbing md:cursor-default">
           <div className="md:hidden">
@@ -268,7 +334,7 @@ export function FlightDetail() {
           </div>
           <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-3">
             <div className="min-w-0">
-              <Identity flight={flight} info={info} big />
+              <Identity flight={flight} info={info} big={!docked} />
               <p className="mt-1 truncate text-sm text-white/60">
                 {who && flightNumber
                   ? `${who} flight ${flightNumber}`
@@ -286,23 +352,12 @@ export function FlightDetail() {
           </div>
         </div>
 
-        <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,var(--safe-bottom))] pt-4">
-          {/* Airframe photo, credited as the source asks */}
-          {info?.photo ? (
-            <figure className="mb-4 overflow-hidden rounded-2xl bg-white/5">
-              <img src={info.photo.thumbnail} alt={`${typeName ?? 'Aircraft'}${info.registration ? ` ${info.registration}` : ''}`} loading="lazy" referrerPolicy="no-referrer" className="aspect-[16/8] w-full animate-fade object-cover" />
-              <figcaption className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11px] text-white/55">
-                <span className="truncate">{[info.registration, typeName].filter(Boolean).join(', ')}</span>
-                <a href={info.photo.link ?? 'https://www.airport-data.com/'} target="_blank" rel="noreferrer" className="shrink-0 underline decoration-white/30 underline-offset-2 hover:text-white">
-                  Photo{info.photo.photographer ? `: ${info.photo.photographer}` : ''}, airport-data.com
-                </a>
-              </figcaption>
-            </figure>
-          ) : (
-            infoQuery.isFetching && <div className="skeleton mb-4 aspect-[16/8] w-full rounded-2xl" />
-          )}
+        <div className="scroll-quiet scroll-fade @container min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,var(--safe-bottom))] pt-4">
+          {/* The aircraft: its type drawn from above, with what it is */}
+          <AircraftPanel type={d?.type} category={d?.category} registration={info?.registration ?? d?.registration ?? null} dbName={info?.typeName} dbManufacturer={info?.manufacturer} />
 
           {/* Route */}
+          {infoQuery.isLoading && <RouteSkeleton />}
           {(info?.origin || info?.destination) && (
             <div className="mb-4 rounded-2xl bg-white/[0.06] px-4 py-3">
               <div className="flex items-center gap-3">
@@ -337,18 +392,36 @@ export function FlightDetail() {
           )}
 
           {d && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              <Stat label="Speed" value={formatSpeed(d.speedKt, speedUnit)} hint={d.speedKt != null && speedUnit === 'kt' ? `${Math.round(d.speedKt * 1.15078)} mph` : null} />
-              <Stat label="Altitude" value={d.onGround ? 'On the ground' : formatAltitude(d.altitudeFt, altitudeUnit)} hint={comparison} />
+            <div className="grid grid-cols-2 gap-2 @lg:grid-cols-3">
+              <Stat label="Speed" value={<Ticker value={d.speedKt} format={(v) => formatSpeed(v, speedUnit)} />} hint={d.speedKt != null && speedUnit === 'kt' ? `${Math.round(d.speedKt * 1.15078)} mph` : null} />
+              <Stat label="Altitude" value={d.onGround ? 'On the ground' : <Ticker value={d.altitudeFt} format={(v) => formatAltitude(v, altitudeUnit)} />} hint={comparison} />
               <Stat
                 label="Climb"
-                value={d.onGround || vr == null ? '—' : formatVerticalRate(vr, altitudeUnit)}
+                value={d.onGround || vr == null ? '—' : <Ticker value={vr} format={(v) => formatVerticalRate(v, altitudeUnit)} />}
                 hint={vr != null && !d.onGround && Math.abs(vr) > 200 ? (vr > 0 ? 'climbing' : 'descending') : d.selectedAltitudeFt != null && !d.onGround ? `autopilot set to ${formatAltitude(Math.round(d.selectedAltitudeFt / 100) * 100, altitudeUnit)}` : null}
               />
               <Stat label="Heading" value={d.headingKnown === false ? '—' : `${Math.round(d.heading).toString().padStart(3, '0')}°`} hint={d.headingKnown === false ? null : `toward the ${compassDirection(d.heading)}`} />
               {d.squawk && <Stat label="Transponder" value={d.squawk} hint={d.emergency ? `emergency: ${d.emergency}` : d.squawk === '1200' ? 'flying visually (VFR)' : 'assigned by ATC'} />}
-              {(info?.registration ?? d.registration) && <Stat label="Registration" value={info?.registration ?? d.registration ?? ''} hint={typeName} />}
             </div>
+          )}
+
+          {/* Its life so far: phases, times, and a speed and altitude chart */}
+          <FlightTimeline flight={flight} info={info} />
+
+          {/* The conversation so far: live radio calls naming this aircraft */}
+          {liveCalls.length > 0 && (
+            <section className="mt-6" aria-label="Live radio calls">
+              <h3 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-white/60">
+                <span className="rounded bg-atc-yellow px-1.5 py-0.5 font-display text-xs tracking-wide text-black">{flight.airportCode}</span>
+                Live radio
+              </h3>
+              <ol className="flex flex-col gap-2.5">
+                {liveCalls.map((c) => (
+                  <LiveCallBubble key={c.id} call={c} />
+                ))}
+              </ol>
+              <p className="mt-4 text-center text-xs text-white/40">New transmissions will appear here</p>
+            </section>
           )}
 
           {/* The conversation so far */}
@@ -365,7 +438,7 @@ export function FlightDetail() {
               </ol>
               <p className="mt-4 text-center text-xs text-white/40">New transmissions will appear here</p>
             </section>
-          ) : (
+          ) : liveCalls.length > 0 && flight.events.length === 0 ? null : (
             <section className="mt-6" aria-label="Tower log">
               <h3 className="mb-2 text-[13px] font-semibold text-white/60">Tower log</h3>
               {flight.events.length > 0 ? (
@@ -381,7 +454,7 @@ export function FlightDetail() {
               ) : (
                 <p className="rounded-2xl bg-white/[0.06] px-3.5 py-3 text-sm leading-relaxed text-white/65">
                   {mode === 'live'
-                    ? 'Nothing logged for this aircraft yet. Takeoffs, landings and go-arounds show up here as they happen. Free live feeds carry positions, not radio, so there are no transcripts for live traffic; try a replay from the menu to hear a scene.'
+                    ? 'Nothing logged for this aircraft yet. Takeoffs, landings and go-arounds show up here as they happen, and with the radio playing, every call that names this flight.'
                     : 'No radio calls for this flight yet. Keep listening.'}
                 </p>
               )}

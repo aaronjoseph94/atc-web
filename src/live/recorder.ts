@@ -78,6 +78,11 @@ export class LiveRecorder {
     return (this.tracks.get(icao24)?.samples ?? []).map((s) => ({ t: s.t, altitudeFt: s.altitudeFt ?? null, speedKt: s.speedKt ?? null }))
   }
 
+  /** Every recorded report of one aircraft, oldest first, `t` in epoch ms (for the flight timeline). */
+  track(icao24: string): readonly (TrackSample & { t: number })[] {
+    return this.tracks.get(icao24)?.samples ?? []
+  }
+
   /** Milliseconds of history available right now. */
   spanMs(now = Date.now()): number {
     return this.firstAt == null ? 0 : Math.min(MAX_HISTORY_MS, now - this.firstAt)

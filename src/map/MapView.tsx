@@ -1,22 +1,56 @@
 /**
  * Full-bleed MapLibre map. Owns the live traffic query, the camera and the
- * map-level toggles (theme, 3D, radar); delegates per-frame drawing to
+ * map-level toggles (theme, radar); delegates per-frame drawing to
  * `AircraftLayer` and the painted airfield to `AirportDiagramLayer`.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Map as MapLibreMap, RasterTileSource } from 'maplibre-gl'
+import type { MapRef } from 'react-map-gl/maplibre'
 import { getAirport } from '../api/airports'
 import { getAircraft } from '../api/client'
+import { TRAFFIC_ATTRIBUTION } from '../api/credits'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
+import { atOtherField } from '../live/radio/match'
+import { TaxiRouteLayer } from '../live/taxi/TaxiRouteLayer'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
+import { DOCK_EVENT, readDockReserve } from '../ui/layout'
+import { CAMERA_EASE, useReducedMotion } from '../ui/motion'
 import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
+import { AtmosphereLayer } from './atmosphere/AtmosphereLayer'
+import { surfaceImage } from './atmosphere/textures'
+import { installImageResolver, type ImageHandler } from './imageResolver'
+import { ensureMapImages } from './mapImages'
+import { LightingLayer } from './lighting/LightingLayer'
+import { RunwayGateLayer } from './RunwayGateLayer'
 import type { LiveAircraft } from './livePositions'
-import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
+import { ProceduresLayer } from './ProceduresLayer'
+import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, KEEPOUT_IMAGE, KEEPOUT_PX, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
+import { RippleLayer } from './RippleLayer'
+import { useRadioCamera } from './useRadioCamera'
+
+/**
+ * Images the style itself names, drawn the first time a tile asks for them:
+ * the aircraft artwork and effect sprites, the plates and gate chips, the
+ * pavement grain and water sheen, the runway keep-out block.
+ */
+const STYLE_IMAGES: ImageHandler[] = [
+  (map, id) => ensureMapImages(map, id),
+  surfaceImage,
+  (map, id) => {
+    if (id === KEEPOUT_IMAGE && !map.hasImage(id)) map.addImage(id, { width: KEEPOUT_PX, height: KEEPOUT_PX, data: new Uint8Array(KEEPOUT_PX * KEEPOUT_PX * 4) })
+  },
+]
+
+/** Called with the map as soon as it exists, before its first tiles are laid out. */
+function onMapRef(ref: MapRef | null) {
+  const map = ref?.getMap()
+  if (map) installImageResolver(map, STYLE_IMAGES)
+}
 
 /** Extra zoom applied when the camera closes in on a talking/selected aircraft. */
 const FOCUS_ZOOM_BOOST = 1.5
@@ -25,7 +59,6 @@ const FOCUS_ZOOM_MAX = 15.6
 const UNFOCUS_DELAY_MS = 1600
 /** Time constant of the follow camera; lower is tighter. */
 const FOLLOW_TAU_MS = 260
-const TILT_PITCH = 58
 
 // Lazy so the ~1 MB MapLibre bundle doesn't block first paint. The worker URL
 // must be configured before the first Map is constructed (see maplibreSetup).
@@ -50,11 +83,11 @@ function resetFocus(homeAt = 0) {
   focus.homeAt = homeAt
 }
 
-/** Space the floating chrome takes at the top and bottom, so the camera frames around it. */
+/** Space the floating chrome takes at the top and bottom (and the docked side panel on the right), so the camera frames around it. */
 function chromePadding() {
   const bottom = document.getElementById('bottom-stack')?.offsetHeight ?? 150
   const wide = window.innerWidth >= 768
-  return { top: 76, bottom: Math.min(bottom + (wide ? 24 : 8), window.innerHeight * 0.62), left: 0, right: 0 }
+  return { top: 76, bottom: Math.min(bottom + (wide ? 24 : 8), window.innerHeight * 0.62), left: 0, right: readDockReserve() }
 }
 
 export function MapView() {
@@ -64,7 +97,6 @@ export function MapView() {
 
   const mode = usePlayhead((s) => s.mode)
   const airportIcao = usePlayhead((s) => s.airportIcao)
-  const tilt = usePlayhead((s) => s.tilt)
   const cameraMode = usePlayhead((s) => s.cameraMode)
   const sheet = usePlayhead((s) => s.sheet)
   const select = usePlayhead((s) => s.select)
@@ -79,7 +111,7 @@ export function MapView() {
   const shadows = useSettings((s) => s.shadows)
   const approachPaths = useSettings((s) => s.approachPaths)
   const weatherRadar = useSettings((s) => s.weatherRadar)
-  const reduceMotion = useSettings((s) => s.reduceMotion)
+  const reduceMotion = useReducedMotion()
   const mapTheme = useSettings((s) => s.mapTheme)
 
   const airport = useMemo(() => getAirport(airportIcao), [airportIcao])
@@ -114,7 +146,10 @@ export function MapView() {
         usePlayhead.getState().addEvents(events)
       }
       setLive('ok', data.aircraft.length, data.provider)
-    } else if (isPending) {
+    } else if (isPending && usePlayhead.getState().liveStatus !== 'error') {
+      // A query that has never had data goes back to "pending" on every retry and poll. Once the feed
+      // is known to be down it stays "offline" through those, instead of flashing the loading card
+      // (and "Connecting…" in the pill) each time. A new airport resets the status to loading itself.
       setLive('loading')
     }
   }, [data, dataUpdatedAt, isError, isPending, mode, ends, airport.elevationFt, setLive])
@@ -125,7 +160,7 @@ export function MapView() {
   const goHome = useCallback(
     (ms = 1100) => {
       if (!map) return
-      map.fitBounds(airport.bounds, { padding: 36, maxZoom: 14.4, duration: duration(ms), essential: true, bearing: usePlayhead.getState().tilt ? map.getBearing() : 0 })
+      map.fitBounds(airport.bounds, { padding: 36, maxZoom: 14.4, duration: duration(ms), easing: CAMERA_EASE, essential: true, bearing: 0 })
     },
     [map, airport, duration],
   )
@@ -138,8 +173,12 @@ export function MapView() {
       const have = map.getPadding()
       // Setting padding stops any camera move in flight, so only do it for a real change,
       // and re-frame afterwards if the app is the one steering.
-      if (Math.abs((have.top ?? 0) - want.top) < 2 && Math.abs((have.bottom ?? 0) - want.bottom) < 2) return
-      map.setPadding(want)
+      if (Math.abs((have.top ?? 0) - want.top) < 2 && Math.abs((have.bottom ?? 0) - want.bottom) < 2 && Math.abs((have.right ?? 0) - want.right) < 2) return
+      // Keep what is on screen where it is (the centre point moves with the padding instead of the map jumping);
+      // in automatic mode the re-frame below then glides to the new framing.
+      const { clientWidth: w, clientHeight: h } = map.getContainer()
+      const centre = map.unproject([(want.left + w - want.right) / 2, (want.top + h - want.bottom) / 2])
+      map.jumpTo({ center: centre, padding: want })
       const s = usePlayhead.getState()
       if (s.cameraMode === 'auto' && !s.selectedIcao && !focus.id) focus.homeAt = performance.now()
     }
@@ -148,9 +187,11 @@ export function MapView() {
     const ro = stack ? new ResizeObserver(apply) : null
     if (stack) ro?.observe(stack)
     window.addEventListener('resize', apply)
+    window.addEventListener(DOCK_EVENT, apply)
     return () => {
       ro?.disconnect()
       window.removeEventListener('resize', apply)
+      window.removeEventListener(DOCK_EVENT, apply)
     }
   }, [map, sheet])
 
@@ -182,18 +223,19 @@ export function MapView() {
     map.on('dragstart', takeOver)
     map.on('zoomstart', adjust)
     map.on('rotatestart', adjust)
-    map.on('pitchstart', adjust)
     return () => {
       map.off('dragstart', takeOver)
       map.off('zoomstart', adjust)
       map.off('rotatestart', adjust)
-      map.off('pitchstart', adjust)
     }
   }, [map])
 
+  // Live radio steers the automatic camera onto whoever is being talked to.
+  const radioCamera = useRadioCamera(map, airport, goHome, reduceMotion)
+
   const onFrame = useCallback(
     (list: LiveAircraft[], dt: number) => {
-      if (!map) return
+      if (!map || radioCamera(list, dt)) return
       const s = usePlayhead.getState()
       const now = performance.now()
       const f = focus
@@ -202,7 +244,9 @@ export function MapView() {
       // automatic mode, whoever is being talked about.
       const talking = (s.activeCallsign ?? (s.mode === 'live' ? s.caption?.icao24 : null))?.toLowerCase() ?? null
       const wanted = s.following && s.selectedIcao ? s.selectedIcao : s.cameraMode === 'auto' && !s.selectedIcao ? talking : null
-      const target = wanted ? list.find((a) => a.icao24 === wanted) : undefined
+      let target = wanted ? list.find((a) => a.icao24 === wanted) : undefined
+      // Whoever is talked about on the ground at another airport keeps the highlight; the automatic camera stays home.
+      if (target && !s.following && atOtherField(target, airport)) target = undefined
 
       if (target) {
         f.homeAt = 0
@@ -213,6 +257,7 @@ export function MapView() {
             center: [target.lon, target.lat],
             zoom: Math.min(FOCUS_ZOOM_MAX, Math.max(map.getZoom(), airport.zoom + FOCUS_ZOOM_BOOST)),
             duration: duration(900),
+            easing: CAMERA_EASE,
             essential: true,
           })
         } else if (now >= f.settleAt && !map.isZooming() && !map.isRotating()) {
@@ -236,7 +281,7 @@ export function MapView() {
         if (s.cameraMode === 'auto' && !s.selectedIcao) goHome(1300)
       }
     },
-    [map, airport, duration, reduceMotion, goHome],
+    [map, airport, duration, reduceMotion, goHome, radioCamera],
   )
 
   // ---- theme and toggles -------------------------------------------------------
@@ -252,14 +297,13 @@ export function MapView() {
   useEffect(() => {
     if (!map) return
     const show = (id: string, on: boolean) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none')
-    show(LAYER.buildings3d, tilt)
-    show(LAYER.buildings, !tilt && themeHasVectorBase(theme))
+    show(LAYER.buildings, themeHasVectorBase(theme))
     show(LAYER.approach, approachPaths)
     show(LAYER.approachTick, approachPaths)
     show(LAYER.trails, trails)
     show(LAYER.shadow, shadows)
     show(LAYER.radar, weatherRadar)
-  }, [map, theme, tilt, approachPaths, trails, shadows, weatherRadar])
+  }, [map, theme, approachPaths, trails, shadows, weatherRadar])
 
   // Radar mosaics are republished every five minutes.
   useEffect(() => {
@@ -269,15 +313,6 @@ export function MapView() {
     const id = window.setInterval(refresh, 300_000)
     return () => window.clearInterval(id)
   }, [map, weatherRadar])
-
-  // 3D view: tilt and turn slightly so buildings read as solids.
-  useEffect(() => {
-    if (!map) return
-    const pitch = tilt ? TILT_PITCH : 0
-    // Already there (first load, flat): a no-op ease would still cancel the opening camera move.
-    if (Math.abs(map.getPitch() - pitch) < 0.5) return
-    map.easeTo({ pitch, bearing: tilt ? map.getBearing() || -18 : 0, duration: duration(900), essential: true })
-  }, [map, tilt, duration])
 
   useEffect(() => {
     mapHandle.current = map
@@ -306,11 +341,15 @@ export function MapView() {
     <div className="absolute inset-0 bg-atc-map">
       <Suspense fallback={<MapSkeleton />}>
         <MapGL
+          ref={onMapRef}
           mapStyle={style}
           initialViewState={initialView}
           style={{ width: '100%', height: '100%' }}
-          attributionControl={{ compact: true }}
-          maxPitch={70}
+          attributionControl={{ compact: true, customAttribution: TRAFFIC_ATTRIBUTION }}
+          // A flat, top-down map only: no tilting by gesture, keyboard or accident.
+          maxPitch={0}
+          pitchWithRotate={false}
+          touchPitch={false}
           minZoom={7}
           maxZoom={19}
           onLoad={(e) => {
@@ -327,6 +366,11 @@ export function MapView() {
           }}
         >
           <AirportDiagramLayer map={map} airportIcao={airportIcao} />
+          <LightingLayer map={map} airportIcao={airportIcao} />
+          <ProceduresLayer map={map} airportIcao={airportIcao} />
+          <RunwayGateLayer map={map} airportIcao={airportIcao} />
+          <TaxiRouteLayer map={map} />
+          <RippleLayer map={map} airport={airport} reduceMotion={reduceMotion} />
           <AircraftLayer
             map={map}
             liveBuffer={liveBuffer}
@@ -343,17 +387,13 @@ export function MapView() {
           />
         </MapGL>
       </Suspense>
+      <AtmosphereLayer map={map} airportIcao={airportIcao} />
       {!map && <MapSkeleton />}
     </div>
   )
 }
 
-/** Shown until the map has drawn its first frame: the airfield colours with a slow sweep. */
+/** Shown until the map has drawn its first frame: the map colour, with the radar card (MapStatus) on top saying what is happening. */
 function MapSkeleton() {
-  return (
-    <div className="pointer-events-none absolute inset-0 grid place-items-center overflow-hidden bg-atc-map">
-      <div className="absolute inset-0 animate-sweep bg-[conic-gradient(from_0deg_at_50%_50%,transparent_0deg,rgba(124,92,252,0.16)_40deg,transparent_60deg)]" />
-      <p className="relative text-sm font-medium text-white/50">Loading the airfield…</p>
-    </div>
-  )
+  return <div className="pointer-events-none absolute inset-0 bg-atc-map" />
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { getRunways } from '../api/airportData'
+import { getRunways, icaoCode } from '../api/airportData'
 import { AIRPORTS } from '../api/airports'
-import { buildAirportDiagram, relativeToRunway, runwayEnds } from './airportDiagram'
+import { buildAirportDiagram, markingSpec, relativeToRunway, runwayEnds } from './airportDiagram'
 import { distanceM, M_PER_FT } from './geo'
 
 /**
@@ -39,7 +39,9 @@ describe.each(AIRPORTS.map((a) => a.icao))('%s runways', (code) => {
     const chars = ends.reduce((n, e) => n + e.ident.length, 0)
     // Every character of every designator is drawn (the 'R' is two strokes, '2' one, ...).
     expect(d.designators.features.length).toBeGreaterThanOrEqual(chars)
-    expect(d.paint.features.filter((f) => f.properties?.kind === 'centre').length).toBeGreaterThanOrEqual(runways.length)
+    expect(d.designators.features.filter((f) => f.properties?.kind === 'centre').length).toBeGreaterThanOrEqual(runways.length)
+    // A grey bar across both ends of every runway.
+    expect(d.paint.features.filter((f) => f.properties?.kind === 'end')).toHaveLength(runways.length * 2)
   })
 
   it('keeps every mark on its pavement', () => {
@@ -56,8 +58,10 @@ describe.each(AIRPORTS.map((a) => a.icao))('%s runways', (code) => {
   })
 
   it('fits the numerals before the midpoint, clear of the threshold stripes', () => {
+    const spec = markingSpec(icaoCode(code))
     for (const e of ends) {
       const mine = d.designators.features.filter((f) => {
+        if (f.properties?.kind !== 'numeral') return false
         const pts = f.geometry.coordinates as [number, number][]
         return pts.every((p) => {
           const r = relativeToRunway(e, p)
@@ -66,7 +70,7 @@ describe.each(AIRPORTS.map((a) => a.icao))('%s runways', (code) => {
       })
       expect(mine.length, `${e.ident} numerals`).toBeGreaterThanOrEqual(e.ident.length)
       const along = mine.flatMap((f) => (f.geometry.coordinates as [number, number][]).map((p) => relativeToRunway(e, p).along))
-      expect(Math.min(...along), `${e.ident} numerals start past the 150 ft stripe block`).toBeGreaterThan(150 * M_PER_FT)
+      expect(Math.min(...along), `${e.ident} numerals start past the stripe block`).toBeGreaterThan(spec.stripeStart + spec.stripeLength)
     }
   })
 })

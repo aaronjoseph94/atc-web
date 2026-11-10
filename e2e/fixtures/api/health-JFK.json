@@ -1,0 +1,119 @@
+{
+ "runtime": "vite-dev",
+ "sources": [
+  {
+   "name": "adsb.fi",
+   "kind": "adsb",
+   "breaker": "closed",
+   "ok": true,
+   "latencyMs": 152,
+   "count": 19,
+   "error": null,
+   "lastSuccessAt": "2026-11-10T08:54:25.572Z",
+   "lastFailureAt": "2026-11-10T08:49:31.659Z",
+   "retryAt": null
+  },
+  {
+   "name": "adsb.lol",
+   "kind": "adsb",
+   "breaker": "closed",
+   "ok": true,
+   "latencyMs": 390,
+   "count": 22,
+   "error": null,
+   "lastSuccessAt": "2026-11-10T08:54:25.810Z",
+   "lastFailureAt": null,
+   "retryAt": null
+  },
+  {
+   "name": "airplanes.live",
+   "kind": "adsb",
+   "breaker": "open",
+   "ok": false,
+   "latencyMs": 99,
+   "count": null,
+   "error": "HTTP 403",
+   "lastSuccessAt": null,
+   "lastFailureAt": "2026-11-10T08:54:25.520Z",
+   "retryAt": "2026-11-10T08:59:25.520Z"
+  },
+  {
+   "name": "opensky",
+   "kind": "adsb",
+   "breaker": "closed",
+   "ok": null,
+   "latencyMs": null,
+   "count": null,
+   "error": null,
+   "lastSuccessAt": null,
+   "lastFailureAt": null,
+   "retryAt": null,
+   "note": "Last resort; not probed (small anonymous allowance)"
+  },
+  {
+   "name": "adsbdb.com",
+   "kind": "metadata",
+   "breaker": "closed",
+   "ok": true,
+   "latencyMs": 133,
+   "count": 1,
+   "error": null,
+   "lastSuccessAt": "2026-11-10T08:54:25.555Z",
+   "lastFailureAt": null,
+   "retryAt": null
+  },
+  {
+   "name": "hexdb.io",
+   "kind": "metadata",
+   "breaker": "closed",
+   "ok": true,
+   "latencyMs": 26,
+   "count": 1,
+   "error": null,
+   "lastSuccessAt": "2026-11-10T08:54:25.449Z",
+   "lastFailureAt": null,
+   "retryAt": null
+  },
+  {
+   "name": "aviationweather.gov",
+   "kind": "weather",
+   "breaker": "closed",
+   "ok": true,
+   "latencyMs": 179,
+   "count": 1,
+   "error": null,
+   "lastSuccessAt": "2026-11-10T08:54:25.602Z",
+   "lastFailureAt": null,
+   "retryAt": null
+  },
+  {
+   "name": "tgftp.nws.noaa.gov",
+   "kind": "weather",
+   "breaker": "closed",
+   "ok": true,
+   "latencyMs": 218,
+   "count": 1,
+   "error": null,
+   "lastSuccessAt": "2026-11-10T08:54:25.642Z",
+   "lastFailureAt": null,
+   "retryAt": null
+  },
+  {
+   "name": "atis.info",
+   "kind": "weather",
+   "breaker": "closed",
+   "ok": true,
+   "latencyMs": 148,
+   "count": 1,
+   "error": null,
+   "lastSuccessAt": "2026-11-10T08:54:25.573Z",
+   "lastFailureAt": null,
+   "retryAt": null
+  }
+ ],
+ "checkedAt": "2026-11-10T08:54:25.846Z",
+ "latencyMs": 426,
+ "ok": true,
+ "provider": "adsb.lol",
+ "aircraft": 22
+}

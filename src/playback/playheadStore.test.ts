@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { ClipPack } from '../api/types'
+import { useSettings } from '../settings/settingsStore'
 import { playbackInstant, usePlayhead } from './playheadStore'
 
 const clip: ClipPack = {
@@ -23,6 +24,22 @@ describe('playhead store', () => {
     expect(s.mode).toBe('live')
     expect(s.airportIcao).toBe('LAX')
     expect(s.stationId).toMatch(/^lax-twr-/)
+  })
+
+  it('keeps the camera manual across airports and replays when Automatic camera is off', () => {
+    useSettings.getState().update('autoCamera', false)
+    try {
+      usePlayhead.getState().setAirport('JFK')
+      expect(usePlayhead.getState().cameraMode).toBe('manual')
+      usePlayhead.getState().enterPlayback(clip)
+      expect(usePlayhead.getState().cameraMode).toBe('auto')
+      usePlayhead.getState().exitPlayback()
+      expect(usePlayhead.getState().cameraMode).toBe('manual')
+    } finally {
+      useSettings.getState().update('autoCamera', true)
+    }
+    usePlayhead.getState().setAirport('ORD')
+    expect(usePlayhead.getState().cameraMode).toBe('auto')
   })
 
   it('setAirport resets selection, playback and panels', () => {

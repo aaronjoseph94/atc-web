@@ -9,36 +9,32 @@
  * Either way the active cue is published so the map, subtitles and station
  * bar stay in step. The audio is also routed through an analyser so the
  * station bar can draw the real waveform.
+ *
+ * Live mode has its own audio, the LiveATC stream; `useLiveRadio` runs it.
  */
 import { useEffect, useRef } from 'react'
+import { analysers, getAudioContext, makeAnalyser, resumeAudio } from '../live/radio/audioGraph'
+import { useLiveRadio } from '../live/radio/useLiveRadio'
 import { getActiveCue, trackId } from './interpolate'
 import { playbackInstant, usePlayhead } from './playheadStore'
 
 /** Seek tolerance: avoids fighting the element's own progress. */
 const SEEK_EPSILON_S = 0.35
 
-/** Live spectrum of whatever is playing, for the waveform. Null until audio first plays. */
-export const audioAnalyser: { node: AnalyserNode | null } = { node: null }
+let replaySource: MediaElementAudioSourceNode | null = null
 
-let audioContext: AudioContext | null = null
-
-/** Route the element through an analyser. Must first run from a user gesture. */
+/** Route the element through an analyser on the shared context. Must first run from a user gesture. */
 function connectAnalyser(el: HTMLAudioElement) {
-  if (audioAnalyser.node) {
-    void audioContext?.resume()
-    return
-  }
+  resumeAudio()
+  if (replaySource) return
+  const ctx = getAudioContext()
+  if (!ctx) return
   try {
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (!Ctx) return
-    audioContext = new Ctx()
-    const source = audioContext.createMediaElementSource(el)
-    const analyser = audioContext.createAnalyser()
-    analyser.fftSize = 256
-    analyser.smoothingTimeConstant = 0.72
-    source.connect(analyser)
-    analyser.connect(audioContext.destination)
-    audioAnalyser.node = analyser
+    replaySource = ctx.createMediaElementSource(el)
+    const analyser = makeAnalyser(ctx)
+    replaySource.connect(analyser)
+    analyser.connect(ctx.destination)
+    analysers.replay = analyser
   } catch {
     // No Web Audio: playback still works, the waveform just stays flat.
   }
@@ -62,6 +58,8 @@ export function AudioEngine() {
   const setActive = usePlayhead((s) => s.setActive)
 
   const hasAudio = mode === 'playback' && !!clip?.audioUrl
+
+  useLiveRadio()
 
   // Publish who is talking at a given clip time.
   const publish = (ms: number) => {

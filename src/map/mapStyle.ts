@@ -11,6 +11,9 @@
  */
 import type { LayerSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import type { MapTheme } from '../settings/settingsStore'
+import { NOISE_IMAGE, SHEEN_IMAGE } from './atmosphere/textures'
+import { LIGHT_BAND_ZOOMS } from './fx/sprites'
+import { differs, formatColor, mixColor, nightShade, parseColor } from './lighting/color'
 
 /** Ids other modules need to reference. */
 export const SRC = {
@@ -25,10 +28,16 @@ export const SRC = {
   shadows: 'aircraft-shadows',
   trails: 'aircraft-trails',
   events: 'aircraft-events',
+  procAll: 'proc-all',
+  procNet: 'proc-net',
+  procFinal: 'proc-final',
+  procHi: 'proc-hi',
+  runwayUse: 'apt-runway-use',
+  gateUse: 'apt-gate-use',
+  ripple: 'radio-ripple',
 } as const
 
 export const LAYER = {
-  buildings3d: 'building-3d',
   buildings: 'building',
   radar: 'weather-radar',
   runwayChip: 'apt-runway-chip',
@@ -45,6 +54,19 @@ export const LAYER = {
   aircraft: 'ac-icon',
   label: 'ac-label',
   event: 'ac-event',
+  procHit: 'proc-hit',
+  runwayGlow: 'apt-runway-use-glow',
+  runwayUseMark: 'apt-runway-use-mark',
+  gateBusyDot: 'apt-gate-busy-dot',
+  gateBusy: 'apt-gate-busy',
+  // Aircraft effects (see `fx/aircraftFx.ts`).
+  contrail: 'ac-contrail',
+  contrailWide: 'ac-contrail-wide',
+  shadowSoft: 'ac-shadow-soft',
+  landing: 'ac-landing',
+  exhaust: 'ac-exhaust',
+  livery: 'ac-livery',
+  lights: 'ac-lights',
 } as const
 
 type Palette = {
@@ -71,10 +93,11 @@ type Palette = {
   paintMid: string
   paintDim: string
   paintFaint: string
+  /** The dashed runway centreline, a hairline brighter than the rest of the paint. */
+  centreLine: string
   taxiLine: string
   building: string
   buildingEdge: string
-  buildingTop: string
   roadMinor: string
   roadMajor: string
   motorway: string
@@ -94,6 +117,8 @@ type Palette = {
   hideBase: boolean
   /** Hide generated pavement and paint because the imagery already shows the real thing. */
   hidePaint: boolean
+  /** Soft navy aircraft shadows instead of black ones (the neutral and paper themes, where black reads as dirty grey). */
+  softShadows?: { color: string; opacity: number }
 }
 
 const NAVY: Palette = {
@@ -103,23 +128,25 @@ const NAVY: Palette = {
   land: '#1C243B',
   wood: '#27453A',
   grass: '#2A4A3B',
-  infield: '#33594A',
+  infield: '#33594C',
   far: '#26332F',
   farLand: '#2F3749',
-  apron: '#191C33',
-  taxiway: '#191C33',
-  shoulder: '#2E3A57',
-  pad: '#343D58',
-  runway: '#12152E',
-  runwayConcrete: '#151932',
-  paint: '#C9CCD7',
-  paintMid: '#A9AEBF',
-  paintDim: '#8D93A8',
+  // Sampled from the reference: pavement a shade apart from runway to apron, slate shoulders.
+  apron: '#161C31',
+  taxiway: '#161B2F',
+  shoulder: '#2D3A50',
+  pad: '#2D3A50',
+  runway: '#10182F',
+  runwayConcrete: '#121A31',
+  // Threshold stripes and numbers; end bars, side stripes and aiming blocks; touchdown bars.
+  paint: '#C2C2C8',
+  paintMid: '#9699A3',
+  paintDim: '#7A7E8A',
   paintFaint: '#6F7790',
-  taxiLine: '#9A852E',
+  centreLine: '#EEF2FA',
+  taxiLine: '#8C7B2F',
   building: '#2A2D3B',
   buildingEdge: '#3A3E4F',
-  buildingTop: '#32364A',
   roadMinor: '#1D2640',
   roadMajor: '#212A45',
   motorway: '#252F4C',
@@ -150,17 +177,17 @@ const GRAPHITE: Palette = {
   apron: '#1B1D20',
   taxiway: '#1B1D20',
   shoulder: '#33383E',
-  pad: '#3A4046',
+  pad: '#33383E',
   runway: '#141618',
   runwayConcrete: '#17191C',
   paint: '#C8CBD0',
   paintMid: '#A6A9AF',
   paintDim: '#8A8D93',
   paintFaint: '#6C6F75',
+  centreLine: '#E8EAEE',
   taxiLine: '#8F7F3A',
   building: '#1A1D21',
   buildingEdge: '#2B3036',
-  buildingTop: '#24282D',
   roadMinor: '#1B1E22',
   roadMajor: '#23272C',
   motorway: '#2B3036',
@@ -171,6 +198,7 @@ const GRAPHITE: Palette = {
   labelHalo: '#17191C',
   waterLabel: '#4A5A6B',
   approach: '#9AA1AA',
+  softShadows: { color: '#0C1533', opacity: 0.34 },
 }
 
 const SATELLITE: Palette = {
@@ -200,6 +228,7 @@ const CHART: Palette = {
   plane: '#14203B',
   planeEdge: 'rgba(255,255,255,0.95)',
   raster: 'chart',
+  softShadows: { color: '#1B2A55', opacity: 0.17 },
   hideBase: true,
   hidePaint: false,
 }
@@ -208,7 +237,7 @@ const PALETTES: Record<MapTheme, Palette> = { navy: NAVY, graphite: GRAPHITE, sa
 
 /** Display metadata for the theme picker. */
 export const MAP_THEMES: { id: MapTheme; label: string; hint: string; usOnly: boolean; swatch: [string, string, string] }[] = [
-  { id: 'navy', label: 'Night', hint: 'Navy airfield chart', usOnly: false, swatch: ['#191C33', '#33594A', '#12152E'] },
+  { id: 'navy', label: 'Navy', hint: 'Navy airfield chart', usOnly: false, swatch: ['#161B2F', '#33594C', '#10182F'] },
   { id: 'graphite', label: 'Graphite', hint: 'Neutral dark', usOnly: false, swatch: ['#1B1D20', '#34493C', '#141618'] },
   { id: 'satellite', label: 'Satellite', hint: 'USGS aerial photos', usOnly: true, swatch: ['#3A4A3C', '#6E7A63', '#9AA08F'] },
   { id: 'chart', label: 'FAA chart', hint: 'VFR sectional', usOnly: true, swatch: ['#E9E2CF', '#8FB7D9', '#C7B8E0'] },
@@ -220,15 +249,35 @@ export function effectiveTheme(theme: MapTheme, isUs: boolean): MapTheme {
   return meta?.usOnly && !isUs ? 'navy' : theme
 }
 
+/** Transparent square the runway keep-out layer is made of, and its size in pixels. */
+export const KEEPOUT_IMAGE = 'runway-keepout'
+export const KEEPOUT_PX = 8
+
+/** Runway-in-use colours: arrivals green, departures blue, both cyan (as in iOS's system palette). */
+export const RUNWAY_USE_COLOR = { arrivals: '#34C759', departures: '#3D9BFF', both: '#5AC8FA' } as const
+
 const FONT = ['Noto Sans Regular']
 const FONT_BOLD = ['Noto Sans Bold']
 
-/** Line width that tracks a real-world width in metres (doubles every zoom level). */
-function metres(m: number, lat = 40): unknown[] {
+/**
+ * Line width that tracks a real-world width in metres (doubles every zoom
+ * level), worked out at 40°N. `m` may be an expression, so generated features
+ * can carry their own width and latitude factor (`k`, see `widthScale`).
+ * `minPx` keeps small marks visible when zoomed out; `topZoom` is the last stop.
+ */
+function metres(m: number | unknown[], minPx = 0, topZoom = 22): unknown[] {
   // Pixels at z10, then ×2 per zoom: with 512 px tiles one pixel is 76.44 m at the equator at z10.
-  const px10 = m / (76.437 * Math.cos((lat * Math.PI) / 180))
-  return ['interpolate', ['exponential', 2], ['zoom'], 10, px10, 22, px10 * 4096]
+  const px10 = 1 / (76.437 * Math.cos((40 * Math.PI) / 180))
+  const stops = [10, 13, 14, 15, 16, topZoom].flatMap((z) => {
+    const f = px10 * 2 ** (z - 10)
+    const v = typeof m === 'number' ? m * f : ['*', m, f]
+    return [z, minPx ? (typeof v === 'number' ? Math.max(minPx, v) : ['max', minPx, v]) : v]
+  })
+  return ['interpolate', ['exponential', 2], ['zoom'], ...stops]
 }
+
+/** A generated feature's own real-world width (`w`, metres, default `fallback`), true to its latitude. */
+const ownWidth = (fallback: number): unknown[] => ['*', ['coalesce', ['get', 'w'], fallback], ['coalesce', ['get', 'k'], 1]]
 
 const vis = (show: boolean) => ({ visibility: show ? ('visible' as const) : ('none' as const) })
 const empty = { type: 'FeatureCollection' as const, features: [] }
@@ -264,17 +313,19 @@ function layers(p: Palette): LayerSpecification[] {
     // Pavement is drawn twice: a wide, lighter "shoulder" pass first, then the dark
     // pavement on top. What shows of the first pass is the band that rings every
     // grass island, and round joins give the islands their rounded corners.
-    { id: 'aero-apron-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14, 1], 'line-color': p.shoulder, 'line-width': metres(16) } },
-    { id: 'aero-taxiway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14, 1], 'line-color': p.shoulder, 'line-width': metres(54) } },
-    { id: 'aero-runway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14, 1], 'line-color': p.shoulder, 'line-width': metres(72) } },
+    { id: 'aero-apron-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1], 'line-color': p.shoulder, 'line-width': metres(16) } },
+    { id: 'aero-taxiway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1], 'line-color': p.shoulder, 'line-width': metres(54) } },
+    { id: 'aero-runway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1], 'line-color': p.shoulder, 'line-width': metres(61) } },
     { id: 'aero-apron', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: vis(base), paint: { 'fill-color': p.apron } },
     { id: 'aero-taxiway', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, 0.35, 13.5, 1], 'line-color': p.taxiway, 'line-width': metres(38) } },
-    { id: 'aero-runway-area', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'runway']], layout: vis(base), paint: { 'fill-color': p.runway } },
+    // OpenStreetMap runway outlines often take in the paved shoulders, so they are
+    // shoulder-coloured: the runway proper is the stroke and generated surface on top.
+    { id: 'aero-runway-area', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'runway']], layout: vis(base), paint: { 'fill-color': p.shoulder } },
     // Other airports in view (and far zooms) only get this plain stroke.
     { id: 'aero-runway-line', type: 'line', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-color': p.runway, 'line-width': metres(46) } },
 
     // ---- buildings ----------------------------------------------------------
-    { id: LAYER.buildings, type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 12, layout: vis(base), paint: { 'fill-color': p.building, 'fill-outline-color': p.buildingEdge, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.25, 14.5, 1] } },
+    { id: LAYER.buildings, type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 12, layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 14, p.building, 16.5, roofTone(p)], 'fill-outline-color': p.buildingEdge, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.25, 14.5, 1] } },
 
     // ---- roads --------------------------------------------------------------
     { id: 'road-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13.5, filter: ['in', ['get', 'class'], ['literal', ['minor', 'tertiary']]], layout: { ...vis(roads), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 14.5, 1], 'line-color': p.roadMinor, 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 12, 0.5, 16, 4] } },
@@ -294,23 +345,30 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.approach, type: 'line', source: SRC.approach, filter: ['==', ['get', 'kind'], 'centreline'], minzoom: 9, paint: { 'line-color': p.approach, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.12, 12, 0.28, 15, 0.16], 'line-width': 1, 'line-dasharray': [6, 5] } },
     { id: LAYER.approachTick, type: 'line', source: SRC.approach, filter: ['==', ['get', 'kind'], 'tick'], minzoom: 10.5, paint: { 'line-color': p.approach, 'line-opacity': 0.32, 'line-width': 1 } },
 
-    // ---- runway pavement and paint (generated from OurAirports) ----------------
+    // ---- instrument procedures (CIFP; empty unless "Procedures" is on) ----------
+    ...procedureLayers(p),
+
+    // ---- runway pavement and paint (generated from the runway data) ----------------
     // A dashed centreline makes runways read as runways long before the paint is legible.
     { id: 'aero-runway-dash', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, maxzoom: 14.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: vis(base), paint: { 'line-color': p.paint, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0.35, 13, 0.6, 14.2, 0], 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 14, 1.2], 'line-dasharray': [5, 4] } },
+    // Taxiway centrelines go under the runway pavement, so they stop at the runway edge as in the reference.
+    { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.9], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.6, 16, 1.7, 19, 7] } },
     // Blast pads beyond the runway ends, with their yellow chevrons.
     { id: 'apt-pad', type: 'fill', source: SRC.pads, minzoom: 12.5, filter: ['==', ['get', 'kind'], 'pad'], layout: vis(paint), paint: { 'fill-color': p.pad } },
-    { id: 'apt-pad-chevron', type: 'line', source: SRC.pads, minzoom: 14, filter: ['==', ['get', 'kind'], 'chevron'], layout: { ...vis(paint), 'line-join': 'miter' }, paint: { 'line-color': p.taxiLine, 'line-opacity': 0.85, 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 0.7, 17, 2.4, 20, 14] } },
+    // Yellow at about 70%, so they read olive over the pad as in the reference.
+    { id: 'apt-pad-chevron', type: 'line', source: SRC.pads, minzoom: 14, filter: ['==', ['get', 'kind'], 'chevron'], layout: { ...vis(paint), 'line-join': 'miter' }, paint: { 'line-color': p.taxiLine, 'line-opacity': 0.75, 'line-width': metres(ownWidth(1.4), 0.6) } },
     { id: 'apt-surface', type: 'fill', source: SRC.surface, minzoom: 10, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'surface'], 'concrete', p.runwayConcrete, p.runway] } },
-    { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.9], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.6, 16, 1.7, 19, 7] } },
-    { id: 'apt-hold', type: 'line', source: SRC.hold, minzoom: 14, layout: vis(paint), paint: { 'line-color': p.taxiLine, 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 1, 17, 2.8, 20, 11], 'line-dasharray': ['case', ['==', ['get', 'dashed'], 1], ['literal', [1.6, 1.2]], ['literal', [1, 0]]] } },
-    // Each marking has its own grey: the threshold block brightest, the aiming blocks next,
-    // then the touchdown bars, centreline and side stripes receding into the pavement.
-    { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'kind'], 'threshold', p.paint, 'threshold-bar', p.paint, 'aim', p.paintMid, 'edge', p.paintMid, p.paintDim], 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, 1] } },
-    // Runway numbers and letters, as thin stencil strokes with a real-world width.
-    { id: 'apt-designator', type: 'line', source: SRC.designators, minzoom: 13.6, layout: { ...vis(paint), 'line-cap': 'square', 'line-join': 'miter' }, paint: { 'line-color': p.paintMid, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, 1], 'line-width': metres(1.8) } },
-
-    // ---- 3D buildings (only when the map is tilted) ------------------------------
-    { id: LAYER.buildings3d, type: 'fill-extrusion', source: 'omt', 'source-layer': 'building', minzoom: 13, layout: vis(false), paint: { 'fill-extrusion-color': p.buildingTop, 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.92, 'fill-extrusion-vertical-gradient': true } },
+    // Holding-position markings: a dark band carrying two solid and two dashed yellow lines.
+    { id: 'apt-hold-band', type: 'line', source: SRC.hold, minzoom: 14, filter: ['==', ['get', 'kind'], 'band'], layout: vis(paint), paint: { 'line-color': '#15140F', 'line-opacity': 0.85, 'line-width': metres(['*', 3.2, ['coalesce', ['get', 'k'], 1]], 3) } },
+    { id: 'apt-hold', type: 'line', source: SRC.hold, minzoom: 14, filter: ['==', ['get', 'kind'], 'solid'], layout: vis(paint), paint: { 'line-color': p.taxiLine, 'line-width': metres(['*', 0.36, ['coalesce', ['get', 'k'], 1]], 0.7) } },
+    { id: 'apt-hold-dash', type: 'line', source: SRC.hold, minzoom: 14, filter: ['==', ['get', 'kind'], 'dashed'], layout: vis(paint), paint: { 'line-color': p.taxiLine, 'line-width': metres(['*', 0.36, ['coalesce', ['get', 'k'], 1]], 0.7), 'line-dasharray': [2.5, 2.5] } },
+    // Greys sampled from the reference: threshold stripes and numbers brightest; the end bars,
+    // side stripes, aiming blocks and arrows a mid grey; touchdown bars dimmest.
+    { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'kind'], ['threshold', 'threshold-bar'], p.paint, ['end', 'aim', 'edge', 'arrow'], p.paintMid, p.paintDim], 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, 1] } },
+    // Runway numbers and letters, as stencil strokes with a real-world width.
+    { id: 'apt-designator', type: 'line', source: SRC.designators, minzoom: 13.6, filter: ['==', ['get', 'kind'], 'numeral'], layout: { ...vis(paint), 'line-cap': 'square', 'line-join': 'miter' }, paint: { 'line-color': p.paint, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, 1], 'line-width': metres(ownWidth(1.5)) } },
+    // The dashed centreline is a bright hairline at every zoom, as in the reference.
+    { id: 'apt-centreline', type: 'line', source: SRC.designators, minzoom: 13.2, filter: ['==', ['get', 'kind'], 'centre'], layout: { ...vis(paint), 'line-cap': 'butt' }, paint: { 'line-color': p.centreLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.85], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 0.6, 17, 1, 19, 2.4] } },
 
     // ---- labels ----------------------------------------------------------------
     { id: 'water-name', type: 'symbol', source: 'omt', 'source-layer': 'water_name', layout: { ...vis(base), 'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']], 'text-font': ['Noto Sans Italic'], 'text-size': 12, 'text-letter-spacing': 0.08, 'symbol-placement': 'point' }, paint: { 'text-color': p.waterLabel, 'text-halo-color': p.labelHalo, 'text-halo-width': 1 } },
@@ -319,9 +377,9 @@ function layers(p: Palette): LayerSpecification[] {
     { id: 'place-city', type: 'symbol', source: 'omt', 'source-layer': 'place', maxzoom: 13, filter: ['==', ['get', 'class'], 'city'], layout: { ...vis(sat), 'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 12, 15], 'text-max-width': 7 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
 
     // Gate numbers and taxiway location signs straight from OpenStreetMap.
-    // Gates: small yellow chips at terminal scale, numbered once you are close.
-    { id: 'aero-gate-dot', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 14.8, maxzoom: 16.6, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate']], layout: { 'icon-image': 'gate-chip', 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.8, 0.3, 16.6, 0.5], 'icon-allow-overlap': true }, paint: {} },
-    { id: 'aero-gate', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 16.6, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate'], ['has', 'ref']], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 16.6, 11, 18.5, 15], 'icon-image': 'gate-chip', 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 2, 4], 'text-padding': 2 }, paint: { 'text-color': '#1C1503' } },
+    // Gates: small yellow chips at terminal scale, numbered from about 15.8 (as in the reference's gate views).
+    { id: 'aero-gate-dot', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 14.4, maxzoom: 15.8, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate']], layout: { 'icon-image': 'gate-chip', 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.3, 15.8, 0.5], 'icon-allow-overlap': false, 'icon-padding': 0 }, paint: {} },
+    { id: 'aero-gate', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 15.8, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate'], ['has', 'ref']], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.8, 10.5, 18.5, 14], 'icon-image': 'gate-chip', 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 2, 4], 'text-padding': 2 }, paint: { 'text-color': '#1C1503' } },
     // Taxiway letters, laid along the pavement beside the centreline.
     {
       id: 'aero-taxi-sign',
@@ -335,7 +393,7 @@ function layers(p: Palette): LayerSpecification[] {
         'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 14, 280, 17, 560],
         'text-field': ['get', 'ref'],
         'text-font': FONT_BOLD,
-        'text-size': ['interpolate', ['linear'], ['zoom'], 14.2, 9.5, 16, 12.5, 18, 16],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 14.2, 10, 16, 13, 18, 16.5],
         'text-rotation-alignment': 'map',
         'text-pitch-alignment': 'map',
         'text-keep-upright': true,
@@ -346,6 +404,27 @@ function layers(p: Palette): LayerSpecification[] {
       },
       paint: { 'text-color': chart ? '#1B2540' : '#F1F3F8', 'text-halo-color': chart ? 'rgba(255,255,255,0.8)' : sat ? 'rgba(0,0,0,0.7)' : p.taxiway, 'text-halo-width': 1.1 },
     },
+    // Invisible blocks along each runway's axis. Symbols are placed top layer first,
+    // so these claim the runway before the taxiway letters, which then never land on the paint.
+    {
+      id: 'apt-runway-keepout',
+      type: 'symbol',
+      source: SRC.designators,
+      minzoom: 14.2,
+      filter: ['==', ['get', 'kind'], 'axis'],
+      layout: {
+        'symbol-placement': 'line',
+        'symbol-spacing': metres(40, 1) as never,
+        'icon-image': KEEPOUT_IMAGE,
+        // Topped out at z20 (past the map's deepest zoom): MapLibre evaluates icon sizes at the
+        // surrounding stops, and the z22 one would pass its 255 limit and fill the console with warnings.
+        'icon-size': metres(['/', ownWidth(45), KEEPOUT_PX], 0.1, 20) as never,
+        'icon-rotation-alignment': 'map',
+        'icon-allow-overlap': true,
+        'icon-padding': 0,
+      },
+      paint: { 'icon-opacity': 0 },
+    },
     { id: 'aero-other', type: 'symbol', source: 'omt', 'source-layer': 'aerodrome_label', minzoom: 8, maxzoom: 11, layout: { ...vis(sat), 'text-field': ['coalesce', ['get', 'iata'], ['get', 'name_en'], ['get', 'name']], 'text-font': FONT_BOLD, 'text-size': 11, 'text-letter-spacing': 0.06, 'text-padding': 8 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
     // Runway designators at the ends, for the zooms where the painted numbers are too small to read.
     {
@@ -355,7 +434,7 @@ function layers(p: Palette): LayerSpecification[] {
       minzoom: 11.2,
       maxzoom: sat ? 24 : 14,
       layout: {
-        'text-field': ['get', 'ident'],
+        'text-field': runwaySignText(chart),
         'text-font': FONT_BOLD,
         'text-size': ['interpolate', ['linear'], ['zoom'], 11.2, 9, 14, 12],
         'text-letter-spacing': 0.04,
@@ -364,12 +443,64 @@ function layers(p: Palette): LayerSpecification[] {
       paint: { 'text-color': chart ? '#1B2540' : 'rgba(232,236,245,0.9)', 'text-halo-color': chart ? 'rgba(255,255,255,0.85)' : 'rgba(12,16,34,0.9)', 'text-halo-width': 1.6 },
     },
 
+    // ---- runways in use and occupied gates (fed by RunwayGateLayer) ------------
+    // A soft glow along both edges of an active runway's first stretch, in the
+    // colour of what it is used for; the pavement itself stays as painted.
+    {
+      id: LAYER.runwayGlow,
+      type: 'line',
+      source: SRC.runwayUse,
+      minzoom: 11,
+      filter: ['==', ['get', 'kind'], 'glow'],
+      layout: { 'line-cap': 'butt' },
+      paint: {
+        'line-color': ['match', ['get', 'role'], 'arrivals', RUNWAY_USE_COLOR.arrivals, 'departures', RUNWAY_USE_COLOR.departures, RUNWAY_USE_COLOR.both],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0.45, 14, 0.32, 17, 0.26],
+        'line-gap-width': metres(ownWidth(45), 1),
+        'line-width': ['interpolate', ['exponential', 2], ['zoom'], 11, 2.5, 14, 7, 17, 36],
+        'line-blur': ['interpolate', ['exponential', 2], ['zoom'], 11, 2, 14, 6, 17, 30],
+      },
+    },
+    // Occupied gates: the same chips as `aero-gate`, filled with the parked airline's colour.
+    // Placed first (top layer), they win the collision and hide the plain chip underneath.
+    { id: LAYER.gateBusyDot, type: 'symbol', source: SRC.gateUse, minzoom: 14.4, maxzoom: 15.8, layout: { 'icon-image': ['get', 'chip'], 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.36, 15.8, 0.6], 'icon-allow-overlap': false, 'icon-padding': 0 }, paint: {} },
+    { id: LAYER.gateBusy, type: 'symbol', source: SRC.gateUse, minzoom: 15.8, filter: ['!=', ['get', 'ref'], ''], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.8, 10.5, 18.5, 14], 'icon-image': ['get', 'chip'], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 2, 4], 'text-padding': 2 }, paint: { 'text-color': ['get', 'tc'] } },
+    // Arrival / departure badge just right of an active runway's designator chip.
+    {
+      id: LAYER.runwayUseMark,
+      type: 'symbol',
+      source: SRC.runwayUse,
+      minzoom: 11.2,
+      filter: ['==', ['get', 'kind'], 'mark'],
+      layout: {
+        'icon-image': ['get', 'icon'],
+        'icon-anchor': 'left',
+        // Clear of the designator, whose width depends on its length and the zoom (text 9 → 12 px).
+        'icon-offset': ['interpolate', ['linear'], ['zoom'], 11.2, ['match', ['get', 'len'], 1, ['literal', [6, 0]], 2, ['literal', [9, 0]], ['literal', [12, 0]]], 14, ['match', ['get', 'len'], 1, ['literal', [7, 0]], 2, ['literal', [11, 0]], ['literal', [15, 0]]]],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 11.2, 0.8, 14, 1],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+      paint: {},
+    },
+
     // ---- aircraft ----------------------------------------------------------------
+    // Contrails behind aircraft cruising above ~FL250: a thin bright core that forms a little behind the aircraft, and a wider, softer spread further back.
+    { id: LAYER.contrailWide, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 2], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 8, 2.2, 11, 4.5, 14, 14], 'line-blur': ['interpolate', ['exponential', 2], ['zoom'], 8, 1.6, 11, 3.5, 14, 11], 'line-opacity': ['get', 'co'], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(236,242,255,0)', 0.3, chart ? 'rgba(90,100,120,0.12)' : 'rgba(236,242,255,0.2)', 0.8, chart ? 'rgba(90,100,120,0.1)' : 'rgba(236,242,255,0.16)', 1, 'rgba(236,242,255,0)'] } },
+    { id: LAYER.contrail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 2], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 8, 0.9, 11, 1.4, 14, 3.2], 'line-blur': 0.6, 'line-opacity': ['get', 'co'], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(244,248,255,0)', 0.5, chart ? 'rgba(80,90,110,0.18)' : 'rgba(244,248,255,0.3)', 0.9, chart ? 'rgba(80,90,110,0.3)' : 'rgba(244,248,255,0.62)', 0.975, 'rgba(244,248,255,0.2)', 1, 'rgba(244,248,255,0)'] } },
     // Faint wake behind every airborne aircraft; the selected one gets the bright trail.
     { id: LAYER.trails, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 0], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 1.6], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(160,178,220,0)', 1, chart ? 'rgba(27,37,64,0.55)' : 'rgba(160,178,220,0.42)'] } },
-    { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7C5CFC', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
-    { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(124,92,252,0.02)', 0.5, 'rgba(124,92,252,0.5)', 1, 'rgba(168,140,255,1)'] } },
-    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#000000', 'icon-opacity': ['*', chart ? 0.22 : 0.42, ['get', 'o']], 'icon-halo-color': 'rgba(0,0,0,0.4)', 'icon-halo-width': 1.6, 'icon-halo-blur': 1.6 } },
+    // The selected aircraft's trail is in the selected tag's violet (#5B3DF5), lifted a little toward the aircraft so it reads on navy: one family with the tag and the halo.
+    { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#6A4CF8', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
+    { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(98,68,246,0.02)', 0.5, 'rgba(98,68,246,0.52)', 1, 'rgba(146,122,255,1)'] } },
+    // The shadow sharpens on the ground and softens with height: a crisp distance-field silhouette cross-fades into a pre-blurred one (`bl`).
+    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': p.softShadows?.color ?? '#000000', 'icon-opacity': ['*', p.softShadows?.opacity ?? (chart ? 0.22 : 0.42), ['get', 'o'], ['-', 1, ['coalesce', ['get', 'bl'], 0]]], 'icon-halo-color': p.softShadows ? tone(p.softShadows.color, 'rgba(0,0,0,0)', 0.6) : 'rgba(0,0,0,0.4)', 'icon-halo-width': p.softShadows ? 2.2 : 1.6, 'icon-halo-blur': p.softShadows ? 2.4 : 1.6 } },
+    { id: LAYER.shadowSoft, type: 'symbol', source: SRC.shadows, filter: ['>', ['coalesce', ['get', 'bl'], 0], 0], layout: { 'icon-image': ['concat', 'fx-blur-', ['get', 'sh']], 'icon-size': iconScale(['*', ['get', 'scale'], 1.06]), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['*', chart ? 0.24 : 0.46, ['get', 'o'], ['get', 'bl']] } },
+    // Landing lights thrown ahead of the nose, and heat shimmer behind the engines on the takeoff roll.
+    { id: LAYER.landing, type: 'symbol', source: SRC.aircraft, filter: ['>', ['coalesce', ['get', 'll'], 0], 0], layout: { 'icon-image': ['concat', 'fx-land-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 10, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.35], 14, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.85]] } },
+    { id: LAYER.exhaust, type: 'symbol', source: SRC.aircraft, filter: ['!=', ['coalesce', ['get', 'ex'], ''], ''], layout: { 'icon-image': ['get', 'ex'], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['*', ['get', 'o'], ['get', 'exo']] } },
+    // Radio ripple between tower and aircraft, under the aircraft and their halos.
+    ...rippleLayers(),
     { id: LAYER.event, type: 'circle', source: SRC.events, paint: { 'circle-radius': ['get', 'r'], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2, 'circle-stroke-opacity': ['get', 'o'], 'circle-pitch-alignment': 'map' } },
     { id: LAYER.ping, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'tx'], 1], paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#F5C518', 'circle-stroke-width': 2, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } },
     // Two flat discs, one inside the other, under whoever is selected or being talked to.
@@ -382,8 +513,8 @@ function layers(p: Palette): LayerSpecification[] {
       type: 'symbol',
       source: SRC.aircraft,
       layout: {
-        'icon-image': ['case', ['==', ['get', 'hi'], 1], ['concat', ['get', 'icon'], '-hi'], ['get', 'icon']],
-        'icon-size': iconScale(['*', ['get', 'scale'], ['case', ['==', ['get', 'hi'], 1], 1.25, 1]]),
+        'icon-image': artImage(['case', ['==', ['get', 'hi'], 1], ['concat', ['get', 'icon'], '-hi'], ['get', 'icon']]),
+        'icon-size': iconScale(acSize),
         'icon-rotate': ['get', 'heading'],
         'icon-rotation-alignment': 'map',
         'icon-pitch-alignment': 'map',
@@ -393,40 +524,128 @@ function layers(p: Palette): LayerSpecification[] {
       },
       // The silhouettes are shaded artwork (white, and yellow when highlighted), not tinted masks.
       paint: {
-        'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.58, 1]]],
+        // Parked aircraft use a greyer drawing (`-pk`), so they need less fading to sit back.
+        'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.8, 1]]],
       },
     },
+    // The airline's colour on the fin: a distance-field patch tinted per aircraft, over the white artwork.
     {
-      id: LAYER.label,
+      id: LAYER.livery,
       type: 'symbol',
       source: SRC.aircraft,
-      filter: ['==', ['get', 'lbl'], 1],
+      minzoom: 12,
+      filter: ['!=', ['coalesce', ['get', 'lv'], ''], ''],
+      layout: { 'icon-image': ['concat', 'fx-fin-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'symbol-sort-key': ['get', 'z'] },
+      paint: { 'icon-color': ['get', 'lv'], 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13, ['*', ['get', 'o'], ['match', ['get', 'state'], 0, 0.4, 0.66]]] },
+    },
+    // Navigation lights, strobes and beacon: `lt` names the sprite lit this instant; the glow size steps with zoom.
+    {
+      id: LAYER.lights,
+      type: 'symbol',
+      source: SRC.aircraft,
+      filter: ['!=', ['coalesce', ['get', 'lt'], ''], ''],
       layout: {
-        'text-field': ['format', ['get', 'callsign'], {}, ['get', 'sub'], { 'font-scale': 0.82, 'text-color': ['case', ['==', ['get', 'hi'], 1], 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0.62)'] }],
-        'text-font': FONT_BOLD,
-        'text-size': ['interpolate', ['linear'], ['zoom'], 9, 11.5, 15, 12],
-        'text-letter-spacing': 0.03,
-        'text-line-height': 1.15,
-        'text-justify': 'center',
-        // Fixed anchor and no collision pass: positions update every frame, and
-        // collision-driven placement would make the tags hop between anchors.
-        // The tag floats centred above the aircraft, as in the reference.
-        'text-anchor': 'bottom',
-        'text-offset': ['interpolate', ['linear'], ['zoom'], 9, ['literal', [0, -1.5]], 14, ['literal', [0, -1.9]], 16, ['literal', [0, -2.6]], 18, ['literal', [0, -4.5]]],
-        'text-allow-overlap': true,
-        'text-ignore-placement': true,
+        'icon-image': ['step', ['zoom'], ['concat', ['get', 'lt'], '0'], LIGHT_BAND_ZOOMS[0], ['concat', ['get', 'lt'], '1'], LIGHT_BAND_ZOOMS[1], ['concat', ['get', 'lt'], '2']],
+        'icon-size': iconScale(acSize),
+        'icon-rotate': ['get', 'heading'],
+        'icon-rotation-alignment': 'map',
+        'icon-pitch-alignment': 'map',
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
-        'icon-image': ['case', ['==', ['get', 'hi'], 1], 'tag-active', 'tag'],
-        'icon-text-fit': 'both',
-        'icon-text-fit-padding': [5, 8, 5, 8],
         'symbol-sort-key': ['get', 'z'],
       },
-      paint: { 'text-color': '#FFFFFF', 'text-opacity': ['get', 'o'], 'icon-opacity': ['get', 'o'] },
+      paint: { 'icon-opacity': ['*', ['get', 'o'], ['get', 'lo'], chart ? 0.5 : 1] },
     },
+    // Callsign tags. The whole tag (plate, airline logo, callsign, data block) is one
+    // bitmap drawn in the UI font by `tagImages.ts`; `tag` is its image id. The tag
+    // floats centred above the aircraft, as in the reference.
+    // Tags take part in symbol collision, so the gate chips, gate numbers and taxiway
+    // letters under them give way instead of showing through. Symbols are placed top
+    // layer first: moving and highlighted aircraft (always shown, never pushed around,
+    // as their positions change every frame) claim their space, then parked aircraft's
+    // tags, which give way to those and to each other rather than piling up along a pier.
+    tagLayer('ac-label-parked', ['all', ['==', ['get', 'lbl'], 1], ['==', ['get', 'state'], 0], ['==', ['get', 'hi'], 0]], false),
+    tagLayer(LAYER.label, ['all', ['==', ['get', 'lbl'], 1], ['any', ['!=', ['get', 'state'], 0], ['==', ['get', 'hi'], 1]]], true),
   ]
-  return list as LayerSpecification[]
+  return withAtmosphere(list as LayerSpecification[], p)
 }
+
+/**
+ * Reduced copies of the aircraft artwork, each used below its zoom (image
+ * ids carry the tier's suffix). MapLibre packs every image a symbol tile uses
+ * into that tile's atlas and uploads it again whenever the tile's data
+ * changes, which for the aircraft is every frame; with full-size artwork
+ * that was several megabytes uploaded (and premultiplied in JavaScript) per
+ * frame. A copy only needs to be as big as the aircraft is drawn on this
+ * screen at its top zoom; the style picks the copy with a `step` on zoom.
+ * Layout properties are evaluated at the tile's whole zoom level (a map at
+ * 14.9 lays out z14 tiles), so the thresholds are whole numbers and each copy
+ * is sized for the very top of its range.
+ */
+const ART_TIERS = [
+  { below: 15, suffix: '~s' },
+  { below: 16, suffix: '~m' },
+] as const
+
+/** Full-size artwork in pixels (see `mapImages`). */
+export const ART_PX = 384
+const ART_BOX = 48
+
+export type ArtTier = { below: number; suffix: string }
+
+/** Pixels a tier's copy needs for a class drawn at `scale`: its drawn box at the tier's top zoom, highlighted (a quarter bigger), on a `dpr` screen. */
+export function artTierPx(below: number, scale: number, dpr: number): number {
+  const need = ART_BOX * iconZoomFactor(below) * scale * 1.25 * Math.max(1, dpr)
+  return Math.min(ART_PX, Math.max(32, Math.ceil(need / 16) * 16))
+}
+
+/** The tiers worth having on a `dpr` screen: one whose airliner copy would be near full size anyway is left out. */
+export function artTiersFor(dpr: number): ArtTier[] {
+  return ART_TIERS.filter((t) => artTierPx(t.below, 1, dpr) < 0.8 * ART_PX)
+}
+
+let tiersHere: ArtTier[] | null = null
+/** This screen's tiers, decided once so the style and the images always agree. */
+export function artTiers(): ArtTier[] {
+  tiersHere ??= artTiersFor(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)
+  return tiersHere
+}
+
+/** An aircraft artwork id, switched to the reduced copies on the wider views. */
+export function artImage(id: unknown): unknown {
+  const tiers = artTiers()
+  if (!tiers.length) return id
+  const out: unknown[] = ['step', ['zoom'], ['concat', id, tiers[0].suffix]]
+  for (let i = 1; i < tiers.length; i++) out.push(tiers[i - 1].below, ['concat', id, tiers[i].suffix])
+  out.push(tiers[tiers.length - 1].below, id)
+  return out
+}
+
+/** A callsign tag layer; `overlap` lets its tags draw over anything already placed (but still keep later layers' symbols off them). */
+function tagLayer(id: string, filter: unknown[], overlap: boolean): LayerSpecification {
+  return {
+    id,
+    type: 'symbol',
+    source: SRC.aircraft,
+    filter,
+    layout: {
+      'icon-image': ['get', 'tag'],
+      // Fixed anchor: collision-driven anchor changes would make the tags hop around.
+      'icon-anchor': 'bottom',
+      'icon-offset': ['interpolate', ['linear'], ['zoom'], 9, ['literal', [0, -12]], 14, ['literal', [0, -17.5]], 16, ['literal', [0, -26]], 18, ['literal', [0, -49]]],
+      'icon-allow-overlap': overlap,
+      'icon-ignore-placement': false,
+      'icon-padding': 1,
+      'symbol-sort-key': ['get', 'z'],
+    },
+    // Parked aircraft carry a faded tag, as their silhouettes are faded.
+    // Tags toward the screen edges are fainter (`eo`), keeping the eye on the middle.
+    paint: { 'icon-opacity': ['*', ['get', 'o'], ['coalesce', ['get', 'eo'], 1], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.7, 1]]] },
+  } as unknown as LayerSpecification
+}
+
+/** Drawn size of an aircraft feature relative to the class's base: the highlighted one is a quarter bigger. Effects drawn over or under the aircraft use it too, so they stay registered. */
+const acSize: unknown[] = ['*', ['get', 'scale'], ['case', ['==', ['get', 'hi'], 1], 1.25, 1]]
 
 /**
  * Icon size by zoom, times a per-feature factor. Below z15 the silhouettes
@@ -435,21 +654,120 @@ function layers(p: Palette): LayerSpecification[] {
  * (MapLibre only allows `zoom` at the top of an expression, so the per-feature
  * factor is multiplied into every stop.)
  */
+const ICON_ZOOM_STOPS: [number, number][] = [
+  [9, 0.5],
+  [12, 0.64],
+  [14, 0.9],
+  [15, 1.2],
+  [16, 1.8],
+  [19, 14.4],
+]
+
 function iconScale(factor: unknown): unknown[] {
-  const stops: [number, number][] = [
-    [9, 0.5],
-    [12, 0.64],
-    [14, 0.9],
-    [15, 1.2],
-    [16, 1.8],
-    [19, 14.4],
-  ]
-  return ['interpolate', ['exponential', 2], ['zoom'], ...stops.flatMap(([z, v]) => [z, ['*', v, factor]])]
+  return ['interpolate', ['exponential', 2], ['zoom'], ...ICON_ZOOM_STOPS.flatMap(([z, v]) => [z, ['*', v, factor]])]
+}
+
+/** The zoom part of `iconScale` worked out in JS (same stops, same base-2 exponential interpolation), for sizing against it per frame. */
+export function iconZoomFactor(zoom: number): number {
+  const s = ICON_ZOOM_STOPS
+  if (zoom <= s[0][0]) return s[0][1]
+  for (let i = 1; i < s.length; i++) {
+    const [z1, v1] = s[i]
+    if (zoom > z1) continue
+    const [z0, v0] = s[i - 1]
+    const t = (2 ** (zoom - z0) - 1) / (2 ** (z1 - z0) - 1)
+    return v0 + (v1 - v0) * t
+  }
+  return s[s.length - 1][1]
 }
 
 const USGS_ATTR = 'Imagery: <a href="https://www.usgs.gov/programs/national-geospatial-program/national-map" target="_blank" rel="noreferrer">USGS The National Map</a>'
 const FAA_ATTR = 'Charts: <a href="https://www.faa.gov/air_traffic/flight_info/aeronav/" target="_blank" rel="noreferrer">FAA Aeronautical Information Services</a> (not for navigation)'
 const RADAR_ATTR = 'Radar: NOAA NEXRAD via <a href="https://mesonet.agron.iastate.edu/" target="_blank" rel="noreferrer">Iowa Environmental Mesonet</a>'
+
+/** Triangle drawn for procedure fixes (registered by `ProceduresLayer`, signed-distance so it takes any colour). */
+export const PROC_FIX_IMAGE = 'proc-fix'
+
+/**
+ * Arrivals, departures and approaches from the FAA's CIFP, filled in by
+ * `ProceduresLayer`. Thin blue-grey routes that are strongest at the
+ * approach-control zooms and fade away over the airfield; finals of the
+ * runways in use drawn brighter; the procedure the selected aircraft is
+ * flying (or a tapped one) in the selection lilac.
+ */
+function procedureLayers(p: Palette): LayerSpecification[] {
+  const sat = p.raster === 'satellite'
+  const chart = p.raster === 'chart'
+  const route = chart ? '#33406A' : sat ? '#E4EAFF' : '#8E9CC4'
+  const finalOn = chart ? '#141B33' : sat ? '#FFFFFF' : '#DCE4FF'
+  const hi = chart ? '#5B3DF5' : '#B9A5FF'
+  const label = chart ? '#26304F' : sat ? '#F2F5FF' : '#AEB9D8'
+  const altLabel = chart ? '#4A5680' : sat ? '#D5DCF0' : '#8592B6'
+  const on = ['==', ['get', 'on'], 1]
+  // Strongest where the procedures are what you look at (approach control), quiet over the field.
+  const routeOpacity = (k: number) => ['interpolate', ['linear'], ['zoom'], 7, 0.32 * k, 9, 0.55 * k, 10.5, 0.42 * k, 11.5, 0.22 * k, 12.5, 0.12 * k, 14, 0.05 * k]
+  const fixText = (minZoom: number) => [
+    'step',
+    ['zoom'],
+    '',
+    minZoom,
+    ['format', ['get', 'n'], {}],
+    minZoom + 0.75,
+    ['format', ['get', 'n'], {}, ['case', ['has', 'a'], ['concat', '\n', ['get', 'a']], ''], { 'font-scale': 0.88, 'text-color': altLabel }],
+  ]
+  const fixLayer = (id: string, filter: unknown[], minzoom: number, textZoom: number): LayerSpecification =>
+    ({
+      id,
+      type: 'symbol',
+      source: SRC.procAll,
+      minzoom,
+      filter,
+      layout: {
+        'icon-image': PROC_FIX_IMAGE,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], minzoom, 0.5, 13, 0.7],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'text-field': fixText(textZoom),
+        'text-font': FONT,
+        'text-size': 10,
+        'text-letter-spacing': 0.05,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.55],
+        'text-optional': true,
+        'text-padding': 4,
+      },
+      paint: {
+        'icon-color': route,
+        'icon-opacity': ['interpolate', ['linear'], ['zoom'], minzoom, 0, minzoom + 0.6, 0.85, 13.5, 0.7, 15, 0.25],
+        'text-color': label,
+        'text-opacity': ['interpolate', ['linear'], ['zoom'], textZoom, 0, textZoom + 0.4, 0.9, 13.5, 0.75, 15, 0.3],
+        'text-halo-color': p.labelHalo,
+        'text-halo-width': 1.2,
+      },
+    }) as unknown as LayerSpecification
+  return [
+    { id: 'proc-star', type: 'line', source: SRC.procNet, filter: ['==', ['get', 'k'], 'star'], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': route, 'line-opacity': routeOpacity(1), 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 1.2, 15, 1.4] } },
+    { id: 'proc-sid', type: 'line', source: SRC.procNet, filter: ['==', ['get', 'k'], 'sid'], layout: { 'line-join': 'round' }, paint: { 'line-color': route, 'line-opacity': routeOpacity(0.75), 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 1.2, 15, 1.4], 'line-dasharray': [3, 2.5] } },
+    {
+      id: 'proc-final',
+      type: 'line',
+      source: SRC.procFinal,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': ['case', on, finalOn, route],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 7, ['case', on, 0.55, 0.3], 10, ['case', on, 0.85, 0.5], 13, ['case', on, 0.7, 0.32], 15, ['case', on, 0.35, 0.12]],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 8, ['case', on, 1.3, 0.9], 12, ['case', on, 1.8, 1.2], 15, ['case', on, 2.2, 1.4]],
+      },
+    },
+    { id: 'proc-hi-glow', type: 'line', source: SRC.procHi, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': hi, 'line-opacity': 0.28, 'line-width': 7, 'line-blur': 4 } },
+    { id: 'proc-hi', type: 'line', source: SRC.procHi, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': hi, 'line-opacity': 0.95, 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.6, 13, 2.4] } },
+    { id: 'proc-hi-label', type: 'symbol', source: SRC.procHi, minzoom: 8.5, layout: { 'symbol-placement': 'line', 'symbol-spacing': 420, 'text-field': ['get', 'n'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-letter-spacing': 0.04, 'text-offset': [0, -0.9], 'text-max-angle': 30 }, paint: { 'text-color': hi, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
+    // Invisible, finger-wide: what a tap on a procedure finds.
+    { id: LAYER.procHit, type: 'line', source: SRC.procAll, filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 18 } },
+    fixLayer('proc-fix-approach', ['all', ['==', ['get', 'k'], 'fix'], ['has', 'f']], 9.5, 11),
+    fixLayer('proc-fix-route', ['all', ['==', ['get', 'k'], 'fix'], ['!', ['has', 'f']]], 10.5, 11.75),
+  ] as unknown as LayerSpecification[]
+}
 
 /**
  * NEXRAD base-reflectivity mosaic (US, public domain data). The mosaic
@@ -511,13 +829,21 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.shadows]: { type: 'geojson', data: empty },
       [SRC.trails]: { type: 'geojson', data: empty, lineMetrics: true },
       [SRC.events]: { type: 'geojson', data: empty },
+      [SRC.procAll]: { type: 'geojson', data: empty },
+      [SRC.procNet]: { type: 'geojson', data: empty },
+      [SRC.procFinal]: { type: 'geojson', data: empty },
+      [SRC.procHi]: { type: 'geojson', data: empty },
+      [SRC.runwayUse]: { type: 'geojson', data: empty },
+      [SRC.gateUse]: { type: 'geojson', data: empty },
+      [SRC.ripple]: { type: 'geojson', data: empty },
+      ...atmosphereSources(),
     },
     layers: layers(PALETTES[theme]),
   }
 }
 
 /** Layer properties the app toggles at runtime; a theme change must not undo them. */
-const RUNTIME_VISIBILITY = new Set<string>([LAYER.buildings3d, LAYER.buildings, LAYER.approach, LAYER.approachTick, LAYER.trails, LAYER.shadow, LAYER.radar])
+const RUNTIME_VISIBILITY = new Set<string>([LAYER.buildings, LAYER.approach, LAYER.approachTick, LAYER.trails, LAYER.shadow, LAYER.radar])
 
 /** Re-colour the live map for a theme by pushing each layer's paint and visibility. */
 export function applyTheme(map: MapLibreMap, theme: MapTheme) {
@@ -546,6 +872,413 @@ export function themeHasVectorBase(theme: MapTheme): boolean {
  */
 export function applyGroundCover(map: MapLibreMap, theme: MapTheme, arid: boolean) {
   if (!map.getLayer('landcover-grass')) return
+  map.setPaintProperty('landcover-grass', 'fill-color', groundCover(PALETTES[theme], arid) as never)
+}
+
+function groundCover(p: Palette, arid: boolean): unknown[] {
+  return ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield]
+}
+
+// ---------------------------------------------------------------------------
+// Night: the darker ground and the airfield lights (driven by `lighting/LightingLayer`)
+// ---------------------------------------------------------------------------
+
+/**
+ * How each ground colour changes after dark: [brightness kept, saturation kept].
+ * Vegetation loses the most colour; pavement and paint dim least, so the
+ * airfield still reads under its lights.
+ */
+const NIGHT_SHADE: Partial<Record<keyof Palette, [number, number]>> = {
+  bg: [0.72, 0.75],
+  water: [0.7, 0.85],
+  land: [0.72, 0.75],
+  wood: [0.6, 0.55],
+  grass: [0.6, 0.55],
+  infield: [0.6, 0.55],
+  far: [0.66, 0.6],
+  farLand: [0.72, 0.75],
+  apron: [0.8, 0.8],
+  taxiway: [0.8, 0.8],
+  shoulder: [0.7, 0.7],
+  pad: [0.7, 0.7],
+  runway: [0.82, 0.8],
+  runwayConcrete: [0.82, 0.8],
+  paint: [0.72, 0.8],
+  paintMid: [0.72, 0.8],
+  paintDim: [0.72, 0.8],
+  paintFaint: [0.72, 0.8],
+  centreLine: [0.78, 1],
+  taxiLine: [0.72, 0.8],
+  building: [0.72, 0.75],
+  buildingEdge: [0.72, 0.75],
+  roadMinor: [0.75, 0.75],
+  roadMajor: [0.75, 0.75],
+  motorway: [0.75, 0.75],
+  roadCase: [0.75, 0.75],
+  rail: [0.75, 0.75],
+  boundary: [0.75, 0.75],
+}
+
+function nightPalette(p: Palette): Palette {
+  const out = { ...p }
+  for (const [key, [dim, sat]] of Object.entries(NIGHT_SHADE) as [keyof Palette, [number, number]][]) {
+    const v = out[key]
+    if (typeof v === 'string') (out as Record<string, unknown>)[key] = nightShade(v, dim, sat)
+  }
+  return out
+}
+
+/** One paint property that changes between day and night, with both values. */
+export type NightPaint = { layer: string; prop: string; day: unknown; night: unknown }
+
+/**
+ * Every base-map paint value that differs at night for a theme, worked out by
+ * building the style with the day and the night palette and comparing them,
+ * so layers added later darken without being listed here. Blend each pair
+ * with `mixValue` and push it with `setPaintProperty`.
+ */
+export function nightPaint(theme: MapTheme, arid: boolean): NightPaint[] {
   const p = PALETTES[theme]
-  map.setPaintProperty('landcover-grass', 'fill-color', ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield] as never)
+  // A paper chart has no night.
+  if (p.raster === 'chart') return []
+  const n = nightPalette(p)
+  const day = layers(p)
+  const night = layers(n)
+  const out: NightPaint[] = []
+  day.forEach((l, i) => {
+    const hidden = (l.layout as { visibility?: string } | undefined)?.visibility === 'none' && !RUNTIME_VISIBILITY.has(l.id)
+    if (hidden || l.id === LAYER.halo || l.id === LAYER.haloOuter || l.id === LAYER.ping) return
+    const a = (l.paint ?? {}) as Record<string, unknown>
+    const b = (night[i].paint ?? {}) as Record<string, unknown>
+    for (const prop of Object.keys(a)) if (differs(a[prop], b[prop])) out.push({ layer: l.id, prop, day: a[prop], night: b[prop] })
+  })
+  // The grass colour is set per airport (`applyGroundCover`), not by the theme.
+  const grass = out.find((e) => e.layer === 'landcover-grass' && e.prop === 'fill-color')
+  if (grass) Object.assign(grass, { day: groundCover(p, arid), night: groundCover(n, arid) })
+  // Aerial photos are daylight pictures: darken and drain them instead.
+  if (p.raster === 'satellite') {
+    out.push({ layer: 'raster-satellite', prop: 'raster-brightness-max', day: 0.82, night: 0.42 })
+    out.push({ layer: 'raster-satellite', prop: 'raster-saturation', day: -0.15, night: -0.55 })
+  }
+  return out
+}
+
+/** Does this theme show airfield lights at night? (Not on the paper chart.) */
+export function themeHasLights(theme: MapTheme): boolean {
+  return PALETTES[theme].raster !== 'chart'
+}
+
+export const LIGHT_SRC = { runway: 'lights-runway', taxi: 'lights-taxi', apron: 'lights-apron' } as const
+
+export const LIGHT_LAYER = {
+  apronWash: 'lights-apron-wash',
+  apron: 'lights-apron-glow',
+  taxiBloom: 'lights-taxi-bloom',
+  taxiCore: 'lights-taxi-core',
+  runwayBloom: 'lights-runway-bloom',
+  runwayCore: 'lights-runway-core',
+} as const
+
+/**
+ * Taxiway lights and floodlights fade in over 12.8–13.6 and are absent below.
+ * Runway lights start a little further out, so the overview of the whole
+ * airfield already shows its runways drawn in light.
+ */
+export const LIGHT_MIN_ZOOM = 12.8
+const RUNWAY_LIGHT_MIN_ZOOM = 11.8
+
+/** Each light layer's zoom fade (none at the first zoom, full at the second) and opacity at full night. */
+const LIGHT_FADE: Record<string, [number, number, number]> = {
+  [LIGHT_LAYER.apronWash]: [LIGHT_MIN_ZOOM, 13.6, 0.04],
+  [LIGHT_LAYER.apron]: [LIGHT_MIN_ZOOM, 13.6, 0.2],
+  // Taxiway lights outline every taxiway, so they come up more slowly than the rest, keeping the wide view calm.
+  [LIGHT_LAYER.taxiBloom]: [LIGHT_MIN_ZOOM, 14.2, 0.4],
+  [LIGHT_LAYER.taxiCore]: [LIGHT_MIN_ZOOM, 14.2, 0.9],
+  [LIGHT_LAYER.runwayBloom]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 0.45],
+  [LIGHT_LAYER.runwayCore]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 1],
+}
+
+/** The opacity property of a light layer and its value at night factor `t` (0..1). */
+export function lightOpacity(layer: string, t: number): { prop: string; value: unknown[] } {
+  const [z0, z1, peak] = LIGHT_FADE[layer] ?? [LIGHT_MIN_ZOOM, 13.6, 1]
+  return { prop: layer === LIGHT_LAYER.apronWash ? 'fill-opacity' : 'circle-opacity', value: ['interpolate', ['linear'], ['zoom'], z0, 0, z1, peak * t] }
+}
+
+/** Screen size of a light by zoom (times its own size factor `s`): point sources, growing gently. */
+function lightRadius(stops: [number, number][]): unknown[] {
+  return ['interpolate', ['exponential', 1.6], ['zoom'], ...stops.flatMap(([z, r]) => [z, ['*', r, ['coalesce', ['get', 's'], 1]]])]
+}
+
+const CORE_RADIUS: [number, number][] = [
+  [12, 0.75],
+  [13, 0.9],
+  [15, 1.4],
+  [17, 2.5],
+  [19, 4.6],
+]
+const BLOOM_RADIUS: [number, number][] = [
+  [12, 2],
+  [13, 2.6],
+  [15, 4.4],
+  [17, 8.5],
+  [19, 16],
+]
+
+/**
+ * The light layers, each with the layer it goes under. They start hidden and
+ * transparent; `LightingLayer` adds them at runtime and fades them in. Each
+ * light is a soft, wide disc under a small, whiter core, which reads as a
+ * gentle bloom without any post-processing.
+ */
+export function lightingLayers(): { layer: LayerSpecification; before: string }[] {
+  const hidden = { visibility: 'none' as const }
+  const bloom = (id: string, source: string) =>
+    ({ id, type: 'circle', source, minzoom: LIGHT_FADE[id][0], layout: hidden, paint: { 'circle-color': ['get', 'c'], 'circle-radius': lightRadius(BLOOM_RADIUS) as never, 'circle-blur': 1, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' } }) as LayerSpecification
+  const core = (id: string, source: string) =>
+    ({ id, type: 'circle', source, minzoom: LIGHT_FADE[id][0], layout: hidden, paint: { 'circle-color': ['get', 'k'], 'circle-radius': lightRadius(CORE_RADIUS) as never, 'circle-blur': 0.45, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' } }) as LayerSpecification
+  return [
+    // A faint warm cast over every apron, the spill of the floodlights, under the apron's own paint and buildings.
+    {
+      before: LAYER.buildings,
+      layer: {
+        id: LIGHT_LAYER.apronWash,
+        type: 'fill',
+        source: 'omt',
+        'source-layer': 'aeroway',
+        minzoom: LIGHT_MIN_ZOOM,
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']],
+        layout: hidden,
+        paint: { 'fill-color': '#FFD6A0', 'fill-opacity': 0 },
+      } as LayerSpecification,
+    },
+    // Floodlight pools by the gates, over the buildings (they light the terminal faces) and under the roads.
+    {
+      before: 'road-minor',
+      layer: {
+        id: LIGHT_LAYER.apron,
+        type: 'circle',
+        source: LIGHT_SRC.apron,
+        minzoom: LIGHT_MIN_ZOOM,
+        layout: hidden,
+        // `r` is the pool's radius in pixels at zoom 0; it doubles with every zoom level, like the ground.
+        paint: { 'circle-color': '#FFB45E', 'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 0, ['get', 'r'], 22, ['*', ['get', 'r'], 2 ** 22]], 'circle-blur': 1, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' },
+      } as LayerSpecification,
+    },
+    // Taxiway and runway lights over all the paint, under the labels and aircraft.
+    { before: 'water-name', layer: bloom(LIGHT_LAYER.taxiBloom, LIGHT_SRC.taxi) },
+    { before: 'water-name', layer: core(LIGHT_LAYER.taxiCore, LIGHT_SRC.taxi) },
+    { before: 'water-name', layer: bloom(LIGHT_LAYER.runwayBloom, LIGHT_SRC.runway) },
+    { before: 'water-name', layer: core(LIGHT_LAYER.runwayCore, LIGHT_SRC.runway) },
+  ]
+}
+
+/**
+ * The transmission ripple (`RippleLayer.tsx` writes the features): a faint
+ * guide line between tower and aircraft, travelling arcs drawn twice (a wide
+ * soft glow under a thin bright core) and a small light at the tower. Colour
+ * and opacity come from each feature, so these layers never change at runtime.
+ */
+export function rippleLayers(): LayerSpecification[] {
+  const opacity = (k: number): unknown => ['*', k, ['get', 'o']]
+  return [
+    { id: 'radio-ripple-beam', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'beam'], layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(1), 'line-width': 2, 'line-blur': 0.8, 'line-dasharray': [1.4, 2.2] } },
+    { id: 'radio-ripple-glow', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'wave'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(0.38), 'line-width': 9, 'line-blur': 6 } },
+    { id: 'radio-ripple-wave', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'wave'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(0.85), 'line-width': 2, 'line-blur': 0.6 } },
+    { id: 'radio-ripple-tower', type: 'circle', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'tower'], paint: { 'circle-radius': 4, 'circle-color': ['get', 'c'], 'circle-opacity': opacity(0.8), 'circle-blur': 0.35, 'circle-stroke-color': ['get', 'c'], 'circle-stroke-width': 6, 'circle-stroke-opacity': opacity(0.16), 'circle-pitch-alignment': 'map' } },
+  ] as unknown as LayerSpecification[]
+}
+
+// ---------------------------------------------------------------------------
+// Taxi route preview (drawn by `src/live/taxi/TaxiRouteLayer.tsx`)
+// ---------------------------------------------------------------------------
+// Added at runtime under the aircraft, so `applyTheme` never touches them and
+// they read the same on every theme: a purple glow and line in the card's
+// colour, marching yellow dashes like the painted taxi lines, and yellow
+// hold-short bars with chips.
+
+export const TAXI_SRC = { line: 'taxi-route', marks: 'taxi-route-marks' } as const
+export const TAXI_LAYER = {
+  glow: 'taxi-route-glow',
+  casing: 'taxi-route-casing',
+  line: 'taxi-route-line',
+  dash: 'taxi-route-dash',
+  hit: 'taxi-route-hit',
+  holdBand: 'taxi-route-hold-band',
+  holdBar: 'taxi-route-hold-bar',
+  chip: 'taxi-route-chip',
+} as const
+/** Chip images the layer component draws: purple for the runway, yellow for hold-short points. */
+export const TAXI_CHIP = { runway: 'taxi-chip-runway', hold: 'taxi-chip-hold' } as const
+
+/** Each feature carries `o` (0–1, its route's fade) and, on the line, `beyond` (1 past the first hold). */
+export function taxiRouteLayers(): LayerSpecification[] {
+  const o = ['coalesce', ['get', 'o'], 1]
+  const dim = ['case', ['==', ['get', 'beyond'], 1], 0.45, 1]
+  const w = (a: number, b: number, c: number) => ['interpolate', ['exponential', 1.6], ['zoom'], 12, a, 15, b, 18, c]
+  return [
+    { id: TAXI_LAYER.glow, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7C5CFC', 'line-opacity': ['*', 0.7, o, dim], 'line-width': w(10, 20, 48), 'line-blur': ['interpolate', ['linear'], ['zoom'], 12, 5, 16, 10] } },
+    { id: TAXI_LAYER.casing, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#170C4F', 'line-opacity': ['*', 0.9, o], 'line-width': w(3.6, 7, 16) } },
+    { id: TAXI_LAYER.line, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#8B6CFF', 'line-opacity': ['*', o, dim], 'line-width': w(2.4, 4.6, 11) } },
+    { id: TAXI_LAYER.dash, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': '#FFD23F', 'line-opacity': ['*', 0.95, o, dim], 'line-width': w(1, 1.8, 4.2), 'line-dasharray': [0, 4, 3] } },
+    { id: TAXI_LAYER.holdBand, type: 'line', source: TAXI_SRC.marks, filter: ['==', ['get', 'kind'], 'hold'], layout: { 'line-cap': 'butt' }, paint: { 'line-color': '#15140F', 'line-opacity': ['*', 0.9, o], 'line-width': w(4, 7, 16) } },
+    { id: TAXI_LAYER.holdBar, type: 'line', source: TAXI_SRC.marks, filter: ['==', ['get', 'kind'], 'hold'], layout: { 'line-cap': 'butt' }, paint: { 'line-color': '#FFD23F', 'line-opacity': o, 'line-width': w(1.6, 2.6, 6) } },
+    // Fat and invisible: the route is easy to tap with a finger.
+    { id: TAXI_LAYER.hit, type: 'line', source: TAXI_SRC.line, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#000000', 'line-opacity': 0.001, 'line-width': 28 } },
+    {
+      id: TAXI_LAYER.chip,
+      type: 'symbol',
+      source: TAXI_SRC.marks,
+      filter: ['==', ['get', 'kind'], 'chip'],
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-font': FONT_BOLD,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 16, 12.5],
+        'text-letter-spacing': 0.02,
+        'icon-image': ['case', ['==', ['get', 'tone'], 'runway'], TAXI_CHIP.runway, TAXI_CHIP.hold],
+        'icon-text-fit': 'both',
+        'icon-text-fit-padding': [3, 7, 3, 7],
+        // Above the stop, clear of the bar and the line.
+        'text-anchor': 'bottom',
+        'text-offset': ['literal', [0, -0.9]],
+        'icon-allow-overlap': true,
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': ['case', ['==', ['get', 'tone'], 'runway'], '#FFFFFF', '#1C1503'], 'text-opacity': o, 'icon-opacity': o },
+    },
+  ] as LayerSpecification[]
+}
+
+// ---------------------------------------------------------------------------
+// Atmosphere and surface detail: water sheen, pavement grain, tyre marks,
+// hairline edges, roof highlights, jet bridges, stand lead-in lines and painted
+// gate numbers. Each layer is slotted in under a named neighbour, so the rest
+// of the style never has to list them; colours come from the palette, so
+// they darken at night with everything else. Animated and screen-space
+// effects (weather, wind, vignette) live in `atmosphere/AtmosphereLayer`.
+// ---------------------------------------------------------------------------
+
+export const ATMO_SRC = { tyres: 'atmo-tyres', stands: 'atmo-stands' } as const
+
+export const ATMO_LAYER = {
+  sheen: 'atmo-water-sheen',
+  grassEdge: 'atmo-grass-edge',
+  apronRim: 'atmo-apron-rim',
+  taxiwayRim: 'atmo-taxiway-rim',
+  runwayRim: 'atmo-runway-rim',
+  apronGrain: 'atmo-apron-grain',
+  runwayGrain: 'atmo-runway-grain',
+  tyres: 'atmo-tyres',
+  buildingShade: 'atmo-building-shade',
+  leadIn: 'atmo-lead-in',
+  stopBar: 'atmo-stop-bar',
+  roofEdge: 'atmo-roof-edge',
+  jetBridge: 'atmo-jet-bridge',
+  jetBridgeWalk: 'atmo-jet-bridge-walk',
+  gatePaint: 'atmo-gate-paint',
+} as const
+
+/** `a` moved `t` of the way toward `b` (both CSS colours), for tones derived from the palette. */
+function tone(a: string, b: string, t: number): string {
+  const x = parseColor(a)
+  const y = parseColor(b)
+  return x && y ? formatColor(mixColor(x, y, t)) : a
+}
+
+/** Roofs up close: a touch lighter and cooler than the building colour, as sunlit roofs read from above. */
+function roofTone(p: Palette): string {
+  return tone(p.building, '#C9D2EA', 0.09)
+}
+
+/**
+ * Runway designators set like an airfield sign: bold digits, the L/C/R a
+ * lighter weight and tone.
+ */
+function runwaySignText(chart: boolean): unknown[] {
+  const id = ['get', 'ident']
+  const n = ['length', id]
+  const last = ['slice', id, ['-', n, 1]]
+  const letter = chart ? 'rgba(27,37,64,0.75)' : 'rgba(196,204,224,0.8)'
+  return [
+    'case',
+    ['all', ['>', n, 1], ['in', last, 'LCR']],
+    ['format', ['slice', id, 0, ['-', n, 1]], { 'text-font': ['literal', FONT_BOLD] }, last, { 'text-font': ['literal', FONT], 'font-scale': 0.94, 'text-color': letter }],
+    ['format', id, { 'text-font': ['literal', FONT_BOLD] }],
+  ]
+}
+
+function atmosphereSources(): Record<string, { type: 'geojson'; data: typeof empty }> {
+  return { [ATMO_SRC.tyres]: { type: 'geojson', data: empty }, [ATMO_SRC.stands]: { type: 'geojson', data: empty } }
+}
+
+const fadeIn = (z0: number, z1: number, to: unknown = 1): unknown[] => ['interpolate', ['linear'], ['zoom'], z0, 0, z1, to]
+
+/** The detail layers, each with the layer it goes under. */
+function atmosphereLayers(p: Palette): [string, unknown][] {
+  const base = !p.hideBase
+  const paint = !p.hidePaint
+  const isTaxiway = ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']]
+  const rim = tone(p.shoulder, '#FFFFFF', 0.14)
+  const bridge = tone(p.building, '#FFFFFF', 0.12)
+  return [
+    // A slow sheen drifting over open water (the pattern image animates itself).
+    ['landuse-residential', { id: ATMO_LAYER.sheen, type: 'fill', source: 'omt', 'source-layer': 'water', layout: vis(base), paint: { 'fill-pattern': SHEEN_IMAGE, 'fill-opacity': fadeIn(9, 11) } }],
+    // Hairlines: the outer edge of every shoulder band and of the grass, a shade lighter, for crisp islands on retina screens.
+    ['waterway', { id: ATMO_LAYER.grassEdge, type: 'line', source: 'omt', 'source-layer': 'landcover', minzoom: 14, filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland', 'wetland']]], layout: vis(base), paint: { 'line-color': rim, 'line-width': 0.5, 'line-opacity': fadeIn(14, 15, 0.3) } }],
+    // Under the shoulders, so only the outermost rim shows where bands meet.
+    ['aero-apron-shoulder', { id: ATMO_LAYER.apronRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(16), 'line-opacity': fadeIn(14, 15, 0.8) } }],
+    ['aero-apron-shoulder', { id: ATMO_LAYER.taxiwayRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: isTaxiway, layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(54), 'line-opacity': fadeIn(14, 15, 0.8) } }],
+    ['aero-apron-shoulder', { id: ATMO_LAYER.runwayRim, type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-color': rim, 'line-width': 0.5, 'line-gap-width': metres(61), 'line-opacity': fadeIn(14, 15, 0.8) } }],
+    // Concrete and asphalt grain, only up close.
+    ['aero-taxiway', { id: ATMO_LAYER.apronGrain, type: 'fill', source: 'omt', 'source-layer': 'aeroway', minzoom: 15, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: vis(base), paint: { 'fill-pattern': NOISE_IMAGE, 'fill-opacity': fadeIn(15, 16.5) } }],
+    ['apt-hold-band', { id: ATMO_LAYER.runwayGrain, type: 'fill', source: SRC.surface, minzoom: 15, layout: vis(paint), paint: { 'fill-pattern': NOISE_IMAGE, 'fill-opacity': fadeIn(15, 16.5) } }],
+    // Rubber laid down in the touchdown zones: soft dark streaks along the main-gear tracks.
+    [
+      'apt-hold-band',
+      {
+        id: ATMO_LAYER.tyres,
+        type: 'line',
+        source: ATMO_SRC.tyres,
+        minzoom: 13.6,
+        layout: { ...vis(paint), 'line-cap': 'round' },
+        paint: {
+          'line-color': tone(p.runway, '#000000', 0.6),
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 15, ['get', 'o']],
+          'line-width': metres(ownWidth(1.5)),
+          'line-blur': ['interpolate', ['linear'], ['zoom'], 14, ['*', 0.25, ['get', 'w']], 16, ['*', 1, ['get', 'w']], 18, ['*', 4, ['get', 'w']]],
+        },
+      },
+    ],
+    // Buildings cast a small soft shadow down and to the right, so they sit up off the apron.
+    [LAYER.buildings, { id: ATMO_LAYER.buildingShade, type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 14, layout: vis(base), paint: { 'fill-color': tone(p.bg, '#000000', 0.7), 'fill-opacity': fadeIn(14, 15.5, 0.42), 'fill-translate': ['interpolate', ['linear'], ['zoom'], 14, ['literal', [0.8, 1.2]], 17, ['literal', [2.5, 3.5]]], 'fill-translate-anchor': 'viewport', 'fill-antialias': false } }],
+    // Stand lead-in lines and stop bars, painted on the apron under the jet bridges.
+    [LAYER.buildings, { id: ATMO_LAYER.leadIn, type: 'line', source: ATMO_SRC.stands, minzoom: 15.6, filter: ['==', ['get', 'kind'], 'lead'], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': fadeIn(15.6, 16.4, 0.85), 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 15.6, 0.7, 17, 1.2, 19, 4.2] } }],
+    [LAYER.buildings, { id: ATMO_LAYER.stopBar, type: 'line', source: ATMO_SRC.stands, minzoom: 16, filter: ['==', ['get', 'kind'], 'stop'], layout: { ...vis(paint), 'line-cap': 'butt' }, paint: { 'line-color': p.taxiLine, 'line-opacity': fadeIn(16, 16.8, 0.85), 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 16, 1, 17, 1.6, 19, 6] } }],
+    // A lighter rim along every roof edge, and the jet bridges (picked out of the bridge outlines by size) as their own pale shapes.
+    ['road-minor', { id: ATMO_LAYER.roofEdge, type: 'line', source: 'omt', 'source-layer': 'building', minzoom: 14.5, layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-color': tone(p.building, '#FFFFFF', 0.2), 'line-width': 0.75, 'line-opacity': fadeIn(14.5, 16, 0.75) } }],
+    ['road-minor', { id: ATMO_LAYER.jetBridge, type: 'fill', source: ATMO_SRC.stands, minzoom: 15.2, filter: ['==', ['get', 'kind'], 'bridge'], layout: vis(base), paint: { 'fill-color': bridge, 'fill-outline-color': tone(p.building, '#FFFFFF', 0.26), 'fill-opacity': fadeIn(15.2, 15.8) } }],
+    ['road-minor', { id: ATMO_LAYER.jetBridgeWalk, type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 15, filter: ['all', ['==', ['get', 'class'], 'path'], ['==', ['get', 'brunnel'], 'bridge']], layout: { ...vis(base), 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': bridge, 'line-width': metres(3.4, 1), 'line-opacity': fadeIn(15, 16) } }],
+    // Gate numbers painted on the stand, read along the lead-in line, once the stands are big enough.
+    [
+      'aero-gate-dot',
+      {
+        id: ATMO_LAYER.gatePaint,
+        type: 'symbol',
+        source: ATMO_SRC.stands,
+        minzoom: 16.6,
+        filter: ['==', ['get', 'kind'], 'num'],
+        layout: { ...vis(paint), 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['exponential', 2], ['zoom'], 16.6, 8, 18, 16, 19, 24], 'text-rotate': ['get', 'rot'], 'text-rotation-alignment': 'map', 'text-pitch-alignment': 'map', 'text-letter-spacing': 0.06, 'text-padding': 1 },
+        paint: { 'text-color': p.taxiLine, 'text-opacity': fadeIn(16.6, 17.2, 0.85) },
+      },
+    ],
+  ]
+}
+
+/** The style's layers with the detail layers slotted in under their neighbours. */
+function withAtmosphere(list: LayerSpecification[], p: Palette): LayerSpecification[] {
+  const out = [...list]
+  for (const [before, layer] of atmosphereLayers(p)) {
+    const i = out.findIndex((l) => l.id === before)
+    out.splice(i < 0 ? out.length : i, 0, layer as LayerSpecification)
+  }
+  return out
 }

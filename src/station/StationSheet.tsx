@@ -2,11 +2,14 @@
  * Channel switcher: every published controller position at the airport,
  * grouped the way a pilot thinks of them (tower by runway, ground by sector,
  * approach, departure…). The sheet grows out of the yellow station bar.
+ * Channels a LiveATC feed carries are marked, and choosing one starts it.
  */
-import { ChevronDown, ExternalLink, Volume2 } from 'lucide-react'
+import { AudioLines, ChevronDown, ExternalLink, Volume2 } from 'lucide-react'
 import { FAA_CYCLE_DATE, FREQUENCY_LABEL, FREQUENCY_ORDER, FREQUENCY_ROLE, formatMhz, icaoCode } from '../api/airportData'
 import { getAirport, resolveStation } from '../api/airports'
+import { feedFor } from '../api/radioFeeds'
 import type { Station } from '../api/types'
+import { tuneRadio } from '../live/radio/useLiveRadio'
 import { usePlayhead } from '../playback/playheadStore'
 import { Grabber, useDialog } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
@@ -31,8 +34,14 @@ export function StationSheet() {
 
   const choose = (s: Station) => {
     setStationId(s.id)
-    // ATIS is the one channel we can actually let you hear: it opens with the broadcast.
-    setPanel(s.kind === 'ATIS' ? 'weather' : null)
+    // ATIS without a live feed can still be read aloud: it opens with the broadcast.
+    if (s.kind === 'ATIS' && !feedFor(s)) {
+      setPanel('weather')
+      return
+    }
+    // Straight from the tap, so the browser lets the audio start.
+    tuneRadio(s)
+    setPanel(null)
   }
 
   return (
@@ -45,14 +54,14 @@ export function StationSheet() {
         aria-label={`Channels at ${airport.name}`}
         tabIndex={-1}
         style={drag.dragging || drag.style.transform ? drag.style : undefined}
-        className={`on-yellow relative flex max-h-[84dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-atc-yellow text-black shadow-[0_-16px_50px_rgba(0,0,0,0.5)] outline-none md:mb-6 md:w-[min(92vw,40rem)] md:rounded-[1.75rem] ${
+        className={`on-yellow grain relative flex max-h-[84dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] bg-atc-yellow text-black shadow-[0_-16px_50px_rgba(0,0,0,0.5)] outline-none md:mb-6 md:w-[min(92vw,40rem)] md:rounded-[1.75rem] ${
           closing ? 'animate-sheet-out' : 'animate-sheet-in'
         }`}
       >
         <div {...drag.handlers} className="shrink-0 cursor-grab touch-none border-b border-black/10 active:cursor-grabbing">
           <Grabber dark />
           <div className="flex items-center gap-3 px-4 pb-3 pt-1">
-            <div className="shrink-0 font-display text-[3.4rem] leading-[0.95] tracking-tight">{airport.icao}</div>
+            <div className="display-tight shrink-0 font-display text-[3.4rem] leading-[0.95]">{airport.icao}</div>
             <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
               <div className="max-w-full truncate text-[17px] font-bold leading-tight">{airport.stations[0]?.name ?? airport.name}</div>
               <button
@@ -84,7 +93,11 @@ export function StationSheet() {
                         onClick={() => choose(s)}
                       >
                         <span className="min-w-0 flex-1 truncate text-[17px] font-semibold">{s.position}</span>
-                        {s.kind === 'ATIS' && <Volume2 className="size-4 shrink-0 text-black/60" aria-label="Can be read aloud" />}
+                        {feedFor(s) ? (
+                          <AudioLines className="size-4 shrink-0 text-black/60" aria-label="Live audio" />
+                        ) : (
+                          s.kind === 'ATIS' && <Volume2 className="size-4 shrink-0 text-black/60" aria-label="Can be read aloud" />
+                        )}
                         {s.frequencyMhz != null && <span className="shrink-0 text-sm font-medium tabular-nums text-black/70">{formatMhz(s.frequencyMhz)}</span>}
                       </button>
                     </li>
@@ -102,8 +115,8 @@ export function StationSheet() {
             className="mt-6 flex items-center justify-between gap-3 rounded-2xl bg-black px-4 py-3.5 text-white transition hover:bg-black/85 active:scale-[0.99]"
           >
             <span>
-              <span className="block text-[15px] font-semibold">Listen live on LiveATC</span>
-              <span className="block text-xs text-white/65">Opens liveatc.net. Their streams can’t be embedded here.</span>
+              <span className="block text-[15px] font-semibold">More feeds on LiveATC.net</span>
+              <span className="block text-xs text-white/65">Channels marked with bars play live here, streamed from LiveATC.net.</span>
             </span>
             <ExternalLink className="size-4 shrink-0" />
           </a>

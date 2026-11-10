@@ -1,0 +1,44 @@
+{
+ "airport": "JFK",
+ "icao": "KJFK",
+ "metar": {
+  "raw": "KJFK 100751Z 30009KT 10SM SCT046 BKN250 10/02 A2999 RMK AO2 SLP154 T01000017 $",
+  "observedAt": "2026-11-10T07:51:00.000Z",
+  "windDirDeg": 300,
+  "windVariable": false,
+  "windKt": 9,
+  "gustKt": null,
+  "visibilitySm": 10,
+  "visibilityPlus": true,
+  "tempC": 10,
+  "dewpointC": 1.7,
+  "altimeterInHg": 29.99,
+  "flightCategory": "VFR",
+  "clouds": [
+   {
+    "cover": "SCT",
+    "baseFt": 4600
+   },
+   {
+    "cover": "BKN",
+    "baseFt": 25000
+   }
+  ],
+  "weather": null
+ },
+ "taf": "TAF KJFK 100839Z 1009/1112 28010KT P6SM BKN045 BKN200 FM101500 26013G21KT P6SM SCT045 SCT200 FM101800 25017G26KT P6SM SKC FM102300 29011KT P6SM SKC FM110800 31007KT P6SM SKC",
+ "atis": [
+  {
+   "code": "Q",
+   "kind": "combined",
+   "text": "JFK ATIS INFO Q 0751Z. 31009KT 10SM SCT046 BKN250 10/02 A2999 (TWO NINER NINER NINER). APPROACH IN USE ILS RY 31L. DEPG RY 31L. RWY 4L, 22R CLSD, RWY 13L, 31R CLSD. TWY MB TURNOFF CLSD. RY 31L PAPI OTS. NUM CRANES OPERATING AT JFK. BIRD ACTIVITY VICINITY ARPT. READBACK ALL RWY ASSIGNMENTS AND HOLD SHORT INSTRUCTIONS. ...ADVS YOU HAVE INFO Q.",
+   "updatedAt": "2026-11-10T08:54:00.1830163Z"
+  }
+ ],
+ "sources": {
+  "metar": "aviationweather.gov",
+  "taf": "aviationweather.gov",
+  "atis": "atis.info"
+ },
+ "fetchedAt": "2026-11-10T08:54:36.000Z"
+}

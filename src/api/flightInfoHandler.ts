@@ -1,12 +1,9 @@
 /**
  * Shared logic for `GET /api/flight` (Pages Function + Vite dev plugin).
  *
- * Looks up where a flight is going and what the airframe is, from two free,
- * key-less community databases:
- *  - adsbdb.com: scheduled route for a callsign + airframe details for a
- *    transponder address, in one request.
- *  - airport-data.com: a thumbnail of the airframe with the photographer's
- *    name and a link back (both are shown, as the site asks).
+ * Looks up where a flight is going and what the airframe is, from adsbdb.com,
+ * a free, key-less community database: the scheduled route for a callsign and
+ * the airframe details for a transponder address, in one request.
  *
  * Routes come from schedules, not from the aircraft, so they can be wrong for
  * diversions or re-used flight numbers; the UI labels them "scheduled".
@@ -34,7 +31,6 @@ export type AdsbdbResponse = {
           manufacturer?: string
           registration?: string
           registered_owner?: string
-          url_photo_thumbnail?: string | null
         }
         flightroute?: {
           callsign?: string
@@ -44,8 +40,6 @@ export type AdsbdbResponse = {
         }
       }
 }
-
-export type AirportDataThumb = { data?: { image?: string; link?: string; photographer?: string }[] }
 
 const HEX = /^[0-9a-f]{6}$/
 const CALLSIGN = /^[A-Z0-9]{3,8}$/
@@ -73,29 +67,11 @@ function routeAirport(a: AdsbdbAirport | undefined): RouteAirport | null {
   }
 }
 
-/** Only https images from the two hosts we expect are passed to the browser. */
-function safeImage(url: string | null | undefined): string | null {
-  if (!url) return null
-  try {
-    const u = new URL(url)
-    return u.protocol === 'https:' && /(^|\.)airport-data\.com$/.test(u.hostname) ? u.href : null
-  } catch {
-    return null
-  }
-}
-
-/** Merge the two upstream payloads into one `FlightInfo`. Pure; unit-tested. */
-export function buildFlightInfo(
-  callsign: string | null,
-  db: AdsbdbResponse | null,
-  thumb: AirportDataThumb | null,
-): FlightInfo {
+/** Turn the upstream payload into a `FlightInfo`. Pure; unit-tested. */
+export function buildFlightInfo(callsign: string | null, db: AdsbdbResponse | null): FlightInfo {
   const r = db && typeof db.response === 'object' ? db.response : undefined
   const ac = r?.aircraft
   const route = r?.flightroute
-  const credited = thumb?.data?.[0]
-  const creditedImage = safeImage(credited?.image)
-  const fallbackImage = safeImage(ac?.url_photo_thumbnail)
 
   return {
     callsign: route?.callsign ?? callsign,
@@ -106,40 +82,21 @@ export function buildFlightInfo(
     manufacturer: ac?.manufacturer || null,
     registration: ac?.registration || null,
     owner: ac?.registered_owner || null,
-    photo: creditedImage
-      ? { thumbnail: creditedImage, link: credited?.link || null, photographer: credited?.photographer || null }
-      : fallbackImage
-        ? { thumbnail: fallbackImage, link: 'https://www.airport-data.com/', photographer: null }
-        : null,
   }
 }
 
-/** Fetch route + airframe + photo. Never throws; unknown parts come back null. */
+/** Fetch route + airframe. Never throws; unknown parts come back null. */
 export async function fetchFlightInfo(hex: string | null, callsign: string | null): Promise<FlightInfo> {
   const dbUrl = hex
     ? `https://api.adsbdb.com/v0/aircraft/${hex}${callsign ? `?callsign=${callsign}` : ''}`
     : callsign
       ? `https://api.adsbdb.com/v0/callsign/${callsign}`
       : null
-
-  const [db, thumb] = await Promise.all([
-    dbUrl
-      ? getJson<AdsbdbResponse>(dbUrl, AbortSignal.timeout(TIMEOUT_MS)).catch(() =>
-          // adsbdb 404s the whole request when the airframe is unknown; the route may still exist.
-          hex && callsign
-            ? getJson<AdsbdbResponse>(`https://api.adsbdb.com/v0/callsign/${callsign}`, AbortSignal.timeout(TIMEOUT_MS)).catch(
-                () => null,
-              )
-            : null,
-        )
-      : Promise.resolve(null),
-    hex
-      ? getJson<AirportDataThumb>(
-          `https://airport-data.com/api/ac_thumb.json?m=${hex}&n=1`,
-          AbortSignal.timeout(TIMEOUT_MS),
-        ).catch(() => null)
-      : Promise.resolve(null),
-  ])
-
-  return buildFlightInfo(callsign, db, thumb)
+  const db = dbUrl
+    ? await getJson<AdsbdbResponse>(dbUrl, AbortSignal.timeout(TIMEOUT_MS)).catch(() =>
+        // adsbdb 404s the whole request when the airframe is unknown; the route may still exist.
+        hex && callsign ? getJson<AdsbdbResponse>(`https://api.adsbdb.com/v0/callsign/${callsign}`, AbortSignal.timeout(TIMEOUT_MS)).catch(() => null) : null,
+      )
+    : null
+  return buildFlightInfo(callsign, db)
 }

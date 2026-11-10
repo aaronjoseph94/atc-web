@@ -3,12 +3,14 @@
  * frequency at the airport, short ticks between, and a bright needle in the
  * middle on the channel you are listening to. Drag (or flick) the scale to
  * tune to a neighbouring channel, tap a frequency to jump to it, or use the
- * arrow keys.
+ * arrow keys. Tuning starts that channel's live audio when a feed carries it.
  */
 import { useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { formatMhz } from '../api/airportData'
 import { getAirport, resolveStation } from '../api/airports'
+import { tuneRadio } from '../live/radio/useLiveRadio'
 import { usePlayhead } from '../playback/playheadStore'
+import { haptic } from '../ui/haptics'
 import { GAP, settle, tunerStops } from './tuner'
 
 /** Short ticks between two channels. */
@@ -29,12 +31,18 @@ export function FrequencyTuner() {
   const [dx, setDx] = useState(0)
   const [dragging, setDragging] = useState(false)
   const start = useRef<{ x: number; t: number; id: number; moved: boolean } | null>(null)
+  // The channel under the needle while dragging, so each detent crossed can tick once.
+  const detent = useRef(-1)
 
   if (stops.length < 2) return null
 
-  const tune = (i: number) => {
+  const tune = (i: number, felt = false) => {
     const s = stops[Math.max(0, Math.min(stops.length - 1, i))]
-    if (s && s.id !== current?.id) setStationId(s.id)
+    if (!s || s.id === current?.id) return
+    if (!felt) haptic('tick')
+    setStationId(s.id)
+    // Called from the pointer or key handler, so the browser allows the audio to start.
+    tuneRadio(s)
   }
 
   const down = (e: ReactPointerEvent) => {
@@ -49,9 +57,16 @@ export function FrequencyTuner() {
       s.moved = true
       e.currentTarget.setPointerCapture(e.pointerId)
       setDragging(true)
+      detent.current = at
     }
     // Past either end the dial resists.
     const pos = at - d / GAP
+    // A tick each time another channel's mark passes under the needle, like a detented knob.
+    const under = Math.max(0, Math.min(stops.length - 1, Math.round(pos)))
+    if (under !== detent.current) {
+      detent.current = under
+      haptic('tick')
+    }
     const over = pos < 0 ? pos : pos > stops.length - 1 ? pos - (stops.length - 1) : 0
     setDx(d + over * GAP * 0.7)
   }
@@ -63,7 +78,9 @@ export function FrequencyTuner() {
     const d = e.clientX - s.x
     setDragging(false)
     setDx(0)
-    tune(settle(at, d, d / Math.max(1, e.timeStamp - s.t), stops.length))
+    const to = settle(at, d, d / Math.max(1, e.timeStamp - s.t), stops.length)
+    // The last detent crossed already ticked; a flick that carries further ticks on landing.
+    tune(to, to === detent.current)
   }
   const key = (e: KeyboardEvent) => {
     const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0

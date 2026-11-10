@@ -58,16 +58,17 @@ export function AirportPicker() {
     const active = a.icao === value
     const pinned = favourites.includes(a.icao)
     return (
-      <li key={a.icao} className={`flex items-center rounded-2xl transition-colors ${active ? 'bg-atc-yellow/15 ring-1 ring-atc-yellow/60' : 'bg-white/[0.05] hover:bg-white/10'}`}>
-        <button type="button" aria-current={active || undefined} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left" onClick={() => setAirport(a.icao)}>
-          <span className="w-14 shrink-0 font-display text-2xl leading-none tracking-wide text-atc-yellow">{a.icao}</span>
-          <span className="min-w-0 flex-1 truncate text-[15px]">{a.name}</span>
+      <li key={a.icao} className={`flex items-center rounded-2xl transition-colors duration-[var(--duration-fast)] ${active ? 'bg-atc-yellow/15 ring-1 ring-inset ring-atc-yellow/60' : 'bg-white/[0.05] hover:bg-white/[0.09]'}`}>
+        <button type="button" aria-current={active || undefined} className="pressable-soft flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 text-left" onClick={() => setAirport(a.icao)}>
+          {/* Wide enough for the widest code (MDW), so every name starts on the same line. */}
+          <span className="w-14 shrink-0 font-display text-[26px] leading-none text-atc-yellow">{a.icao}</span>
+          <span className="min-w-0 flex-1 truncate text-subhead">{a.name}</span>
         </button>
         <button
           type="button"
           aria-label={pinned ? `Unpin ${a.icao}` : `Pin ${a.icao}`}
           aria-pressed={pinned}
-          className={`mr-1.5 grid size-9 shrink-0 place-items-center rounded-full transition hover:bg-white/10 active:scale-90 ${pinned ? 'text-atc-yellow' : 'text-white/35'}`}
+          className={`pressable mr-1.5 grid size-9 shrink-0 place-items-center rounded-full hover:bg-white/10 ${pinned ? 'text-atc-yellow' : 'text-white/30 hover:text-white/60'}`}
           onClick={() => toggleFavourite(a.icao)}
         >
           <Pin className={`size-4 ${pinned ? 'fill-current' : ''}`} />
@@ -79,21 +80,27 @@ export function AirportPicker() {
   return (
     <Sheet open={open} title="Airports" onClose={() => setPanel(null)}>
       <div className="flex gap-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-white/10 px-3 ring-1 ring-white/10 focus-within:ring-atc-yellow/70">
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-white/10 px-3 ring-1 ring-inset ring-transparent transition-shadow duration-[var(--duration-fast)] focus-within:ring-atc-yellow/70">
           <Search className="size-4 shrink-0 text-atc-muted" />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && results[0] && setAirport(results[0].icao)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || !results[0]) return
+              // Closing the sheet hands focus back to the "Change airport" button before this
+              // Enter's keypress arrives, which would press that button and reopen the picker.
+              e.preventDefault()
+              setAirport(results[0].icao)
+            }}
             placeholder="Code, airport or city"
             aria-label="Search airports"
-            className="h-11 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-atc-muted"
+            className="h-10 min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-atc-muted"
           />
         </label>
         <button
           type="button"
-          className="flex h-11 shrink-0 items-center gap-1.5 rounded-2xl bg-white/10 px-3 text-sm font-semibold ring-1 ring-white/10 transition hover:bg-white/15 active:scale-95 disabled:opacity-60"
+          className="pressable flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-white/10 px-3 text-footnote font-semibold hover:bg-white/[0.15] disabled:opacity-60"
           onClick={locate}
           disabled={locating}
         >
@@ -110,11 +117,11 @@ export function AirportPicker() {
               <li key={a.icao} className="shrink-0">
                 <button
                   type="button"
-                  className={`flex min-w-[5.5rem] flex-col items-start rounded-2xl px-3 py-2.5 text-left transition active:scale-95 ${a.icao === value ? 'bg-atc-yellow text-black' : 'bg-white/[0.07] hover:bg-white/12'}`}
+                  className={`pressable flex min-w-[5.5rem] flex-col items-start rounded-2xl px-3 py-2.5 text-left ${a.icao === value ? 'bg-atc-yellow text-black' : 'bg-white/[0.07] hover:bg-white/[0.12]'}`}
                   onClick={() => setAirport(a.icao)}
                 >
-                  <span className="font-display text-3xl leading-none tracking-wide">{a.icao}</span>
-                  <span className={`mt-1 max-w-[7rem] truncate text-xs ${a.icao === value ? 'text-black/70' : 'text-atc-muted'}`}>{a.stations[0]?.name ?? a.name}</span>
+                  <span className="font-display text-[32px] leading-none">{a.icao}</span>
+                  <span className={`mt-1 max-w-[7rem] truncate text-caption font-medium ${a.icao === value ? 'text-black/70' : 'text-atc-muted'}`}>{a.stations[0]?.name ?? a.name}</span>
                 </button>
               </li>
             ))}
@@ -123,7 +130,7 @@ export function AirportPicker() {
       )}
 
       {results.length === 0 ? (
-        <p className="py-10 text-center text-sm text-atc-muted">
+        <p className="py-10 text-center text-subhead text-atc-muted">
           No airport matches “{query}”. {AIRPORTS.length} major US and Canadian airports are covered.
         </p>
       ) : (

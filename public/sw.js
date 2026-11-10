@@ -1,7 +1,7 @@
 /*
  * Service worker: makes the app installable and caches the heavy, immutable
- * assets (map tiles, glyphs, imagery, replay clips) so revisits are fast and
- * work with a flaky connection.
+ * assets (map tiles, glyphs, imagery, replay clips, airline logos) so revisits
+ * are fast and work with a flaky connection.
  *
  * Deliberately NOT cached: the app shell (Vite emits hashed URLs; the HTML
  * must stay fresh) and `/api/*` (live data).
@@ -9,7 +9,9 @@
 const VERSION = 'v3'
 const TILES = `atc-tiles-${VERSION}`
 const CLIPS = `atc-clips-${VERSION}`
-const KNOWN = new Set([TILES, CLIPS])
+// Bump when scripts/fetch-airline-logos.py rebuilds the logo set, so changed files are refetched.
+const LOGOS = 'atc-logos-v1'
+const KNOWN = new Set([TILES, CLIPS, LOGOS])
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -42,6 +44,10 @@ self.addEventListener('fetch', (event) => {
   if (url.origin === self.location.origin && url.pathname.startsWith('/clips/')) {
     // The clip catalogue can change between deploys; audio and manifests are replaced wholesale.
     event.respondWith(url.pathname.endsWith('/index.json') ? networkFirst(CLIPS, request) : cacheFirst(CLIPS, request))
+    return
+  }
+  if (url.origin === self.location.origin && url.pathname.startsWith('/airline-logos/')) {
+    event.respondWith(url.pathname.endsWith('/index.json') ? networkFirst(LOGOS, request) : cacheFirst(LOGOS, request))
   }
 })
 

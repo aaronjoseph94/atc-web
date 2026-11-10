@@ -67,8 +67,6 @@ type PlayheadState = {
   cameraMode: CameraMode
   /** Camera is locked onto the selected aircraft. */
   following: boolean
-  /** Map is tilted into the 3D view. */
-  tilt: boolean
   /** Tower log: detected takeoffs, landings and go-arounds, newest first. */
   events: LiveEvent[]
   /** The event currently shown as a caption in live mode. */
@@ -92,7 +90,6 @@ type PlayheadState = {
   setLive: (status: LiveStatus, count?: number, provider?: string | null) => void
   setCameraMode: (mode: CameraMode) => void
   setFollowing: (following: boolean) => void
-  setTilt: (tilt: boolean) => void
   addEvents: (events: LiveEvent[]) => void
   setCaption: (caption: LiveEvent | null) => void
   enterPlayback: (clip: ClipPack) => void
@@ -135,7 +132,6 @@ export const usePlayhead = create<PlayheadState>((set) => ({
   liveProvider: null,
   cameraMode: useSettings.getState().autoCamera ? 'auto' : 'manual',
   following: false,
-  tilt: false,
   events: [],
   caption: null,
   returnTo: null,
@@ -160,7 +156,8 @@ export const usePlayhead = create<PlayheadState>((set) => ({
       tSyncedAt: now(),
       liveStatus: 'loading',
       liveCount: 0,
-      cameraMode: 'auto',
+      // A new airport is always framed whole; who steers after that follows the "Automatic camera" setting.
+      cameraMode: useSettings.getState().autoCamera ? 'auto' : 'manual',
       following: false,
       events: [],
       caption: null,
@@ -195,7 +192,6 @@ export const usePlayhead = create<PlayheadState>((set) => ({
     })),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setFollowing: (following) => set({ following }),
-  setTilt: (tilt) => set({ tilt }),
   addEvents: (events) => set((s) => (events.length ? { events: [...events.toReversed(), ...s.events].slice(0, MAX_EVENTS) } : s)),
   setCaption: (caption) => set({ caption }),
 
@@ -240,7 +236,8 @@ export const usePlayhead = create<PlayheadState>((set) => ({
       selectedIcao: null,
       sheet: 'closed',
       following: false,
-      cameraMode: 'auto',
+      // Replays steer the camera themselves; back in live, the user's "Automatic camera" choice applies again.
+      cameraMode: useSettings.getState().autoCamera ? 'auto' : 'manual',
     })),
 }))
 

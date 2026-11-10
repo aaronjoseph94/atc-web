@@ -3,6 +3,7 @@
  * served by Cloudflare Pages Functions in production and by the Vite
  * middleware in development.
  */
+import type { SourceStatus } from './sourceHealth'
 import type { AiStatus, SummarizeRequest, SummarizeResponse } from './summarizeHandler'
 import type { Aircraft, AircraftSnapshot, ClipPack, ClipSummary, FlightInfo, Station, Weather } from './types'
 
@@ -16,6 +17,8 @@ export type Health = {
   region?: string
   error?: string
   checkedAt: string
+  /** Every upstream source (ADS-B, metadata, weather) with its own status. */
+  sources?: SourceStatus[]
 }
 
 async function getJson<T>(url: string, what: string): Promise<T> {
@@ -43,7 +46,7 @@ export function getWeather(airport = 'ORD'): Promise<Weather> {
   return getJson(`/api/weather?airport=${encodeURIComponent(airport)}`, 'weather')
 }
 
-/** Scheduled route, airframe details and a credited photo for one flight. */
+/** Scheduled route and airframe details for one flight. */
 export function getFlightInfo(hex: string | null, callsign: string | null): Promise<FlightInfo> {
   const q = new URLSearchParams()
   if (hex) q.set('hex', hex)

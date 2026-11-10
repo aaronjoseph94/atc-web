@@ -20,7 +20,6 @@ describe('buildFlightInfo', () => {
         manufacturer: 'Airbus',
         registration: 'N139AN',
         registered_owner: 'American Airlines',
-        url_photo_thumbnail: 'https://airport-data.com/images/aircraft/thumbnails/001/559/001559382.jpg',
       },
       flightroute: {
         callsign: 'AAL834',
@@ -31,33 +30,25 @@ describe('buildFlightInfo', () => {
     },
   }
 
-  it('merges route, airframe and a credited photo', () => {
-    const info = buildFlightInfo('AAL834', db, {
-      data: [{ image: 'https://airport-data.com/images/aircraft/thumbnails/001/755/001755603.jpg', link: 'https://airport-data.com/aircraft/photo/001755603', photographer: 'Florida Metal' }],
-    })
+  it('merges route and airframe', () => {
+    const info = buildFlightInfo('AAL834', db)
     expect(info.origin).toMatchObject({ iata: 'PHX', city: 'Phoenix', lat: 33.4 })
     expect(info.destination).toMatchObject({ iata: 'MSN', lat: null })
     expect(info.typeName).toBe('A321 231SL')
-    expect(info.photo).toEqual({
-      thumbnail: 'https://airport-data.com/images/aircraft/thumbnails/001/755/001755603.jpg',
-      link: 'https://airport-data.com/aircraft/photo/001755603',
-      photographer: 'Florida Metal',
-    })
+    expect(info.registration).toBe('N139AN')
+    expect(info.airline).toBe('American Airlines')
   })
 
-  it('falls back to the database thumbnail, and refuses images from other hosts', () => {
-    expect(buildFlightInfo('AAL834', db, null).photo?.photographer).toBeNull()
-    const evil = buildFlightInfo('X', null, { data: [{ image: 'https://evil.example/x.jpg' }] })
-    expect(evil.photo).toBeNull()
+  it('carries no photo: the flight view draws the type instead', () => {
+    expect('photo' in buildFlightInfo('AAL834', db)).toBe(false)
   })
 
   it('handles an unknown flight', () => {
-    expect(buildFlightInfo('N123AB', { response: 'unknown aircraft' }, null)).toMatchObject({
+    expect(buildFlightInfo('N123AB', { response: 'unknown aircraft' })).toMatchObject({
       callsign: 'N123AB',
       origin: null,
       destination: null,
       typeName: null,
-      photo: null,
     })
   })
 })

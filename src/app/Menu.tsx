@@ -1,8 +1,9 @@
 /** The "⋯" menu: a popover under the button, like a native context menu. */
-import { CloudRain, FileText, History, Keyboard, Layers, List, Pin, PinOff, Radio, Settings, type LucideIcon } from 'lucide-react'
+import { CircleHelp, CloudSun, FileText, History, Layers, List, Pin, PinOff, Radio, Settings, type LucideIcon } from 'lucide-react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { usePlayhead, type Panel } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
-import { useDialog } from '../ui/Panel'
+import { Kbd, useDialog } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
 
 export function Menu() {
@@ -14,35 +15,49 @@ export function Menu() {
   const setToast = usePlayhead((s) => s.setToast)
   const pinned = useSettings((s) => s.favourites.includes(airportIcao))
   const toggleFavourite = useSettings((s) => s.toggleFavourite)
-  const radar = useSettings((s) => s.weatherRadar)
-  const update = useSettings((s) => s.update)
 
   const close = () => setPanel(null)
-  const { mounted, closing } = usePresence(open, 140)
+  const { mounted, closing } = usePresence(open, 180)
   const ref = useDialog(open, close)
   if (!mounted) return null
 
   const go = (panel: Panel) => () => setPanel(panel)
 
+  // A role="menu" is expected to move with the arrow keys (and Home/End), not just Tab.
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+    if (!items.length) return
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    let next: number
+    if (e.key === 'ArrowDown') next = at < 0 ? 0 : (at + 1) % items.length
+    else if (e.key === 'ArrowUp') next = at < 0 ? items.length - 1 : (at - 1 + items.length) % items.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = items.length - 1
+    else return
+    e.preventDefault()
+    items[next].focus()
+  }
+
   return (
-    <div className="absolute inset-0 z-50">
+    <div className={`absolute inset-0 z-50 ${closing ? 'pointer-events-none' : ''}`}>
       <button type="button" tabIndex={-1} aria-label="Close menu" className="absolute inset-0 cursor-default" onClick={close} />
       <div
         ref={ref}
         role="menu"
         aria-label="Menu"
         tabIndex={-1}
-        className={`absolute right-3 top-[calc(max(0.75rem,var(--safe-top))+3.25rem)] w-64 origin-top-right overflow-hidden rounded-2xl bg-[#1b2333]/95 py-1.5 shadow-2xl ring-1 ring-white/15 outline-none backdrop-blur-xl ${
-          closing ? 'animate-pop-out' : 'animate-pop'
-        }`}
+        onKeyDown={onKeyDown}
+        data-closing={closing ? '' : undefined}
+        className="motion-pop absolute right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none md:right-4"
       >
         {mode === 'playback' ? (
           <Item icon={Radio} label="Back to live" onClick={exitPlayback} />
         ) : (
-          <Item icon={History} label="Replay" hint="Rewind traffic or play a scene" onClick={go('replay')} />
+          <Item icon={History} label="Replay" shortcut="R" onClick={go('replay')} />
         )}
-        <Item icon={FileText} label={mode === 'playback' ? 'Transcript' : 'Tower log'} onClick={go('transcripts')} />
-        <Item icon={List} label="Traffic list" onClick={go('traffic')} />
+        <Item icon={FileText} label={mode === 'playback' ? 'Transcript' : 'Tower log'} shortcut="T" onClick={go('transcripts')} />
+        <Item icon={List} label="Traffic" shortcut="/" onClick={go('traffic')} />
+        <Item icon={CloudSun} label="Weather and ATIS" shortcut="W" onClick={go('weather')} />
         <Divider />
         <Item
           icon={pinned ? PinOff : Pin}
@@ -53,35 +68,30 @@ export function Menu() {
             close()
           }}
         />
-        <Item
-          icon={CloudRain}
-          label={radar ? 'Weather radar off' : 'Weather radar on'}
-          onClick={() => {
-            update('weatherRadar', !radar)
-            close()
-          }}
-        />
-        <Item icon={Layers} label="Map layers" onClick={go('layers')} />
-        <Divider />
+        <Item icon={Layers} label="Map" shortcut="L" onClick={go('layers')} />
         <Item icon={Settings} label="Settings" onClick={go('settings')} />
-        <Item icon={Keyboard} label="Shortcuts and credits" onClick={go('help')} />
+        <Item icon={CircleHelp} label="Help" shortcut="?" onClick={go('help')} />
       </div>
     </div>
   )
 }
 
 function Divider() {
-  return <div className="my-1.5 h-px bg-white/10" role="separator" />
+  return <div className="mx-4 my-1.5 h-px bg-white/10" role="separator" />
 }
 
-function Item({ icon: Icon, label, hint, onClick }: { icon: LucideIcon; label: string; hint?: string; onClick: () => void }) {
+function Item({ icon: Icon, label, shortcut, onClick }: { icon: LucideIcon; label: string; shortcut?: string; onClick: () => void }) {
   return (
-    <button type="button" role="menuitem" className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/10 active:bg-white/15" onClick={onClick}>
-      <Icon className="size-[18px] shrink-0 text-white/80" />
-      <span className="min-w-0">
-        <span className="block text-[15px] font-medium">{label}</span>
-        {hint && <span className="block truncate text-xs text-atc-muted">{hint}</span>}
-      </span>
+    <button
+      type="button"
+      role="menuitem"
+      aria-keyshortcuts={shortcut}
+      className="flex min-h-11 w-full items-center gap-3 px-4 text-left transition-colors duration-[var(--duration-fast)] hover:bg-white/[0.08] focus-visible:bg-white/[0.08] focus-visible:-outline-offset-2 active:bg-white/[0.14]"
+      onClick={onClick}
+    >
+      <Icon className="size-[18px] shrink-0 text-white/75" />
+      <span className="min-w-0 flex-1 truncate text-subhead font-medium">{label}</span>
+      {shortcut && <Kbd className="hidden [@media(hover:hover)]:inline-grid">{shortcut}</Kbd>}
     </button>
   )
 }

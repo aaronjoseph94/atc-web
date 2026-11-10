@@ -22,6 +22,10 @@
     {
       "files": ["scripts/**/*.mjs"],
       "rules": { "no-console": "off", "no-shadow": "off" }
+    },
+    {
+      "files": ["e2e/**"],
+      "rules": { "no-await-in-loop": "off", "no-underscore-dangle": "off" }
     }
   ],
   "ignorePatterns": ["dist", "node_modules", ".wrangler", "coverage", "public/sw.js"]
