@@ -17,7 +17,7 @@
  * Phones get a full-height sheet; wide screens a panel docked at the right,
  * so the map stays in view and in reach.
  */
-import { AudioLines, Play, Plane, Route, Search, X } from 'lucide-react'
+import { ArrowRightLeft, AudioLines, ChevronDown, Hourglass, OctagonMinus, Play, Plane, PlaneLanding, PlaneTakeoff, Radio, RotateCcw, Route, Search, X, type LucideIcon } from 'lucide-react'
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { getAirport, resolveStation } from '../api/airports'
@@ -102,6 +102,55 @@ export function TranscriptsView({ docked = false }: { docked?: boolean }) {
   )
 }
 
+/** An icon for each quick-search phrase, so the pills read at a glance. */
+const PHRASE_ICON: Record<string, LucideIcon> = {
+  goaround: RotateCcw,
+  holdshort: OctagonMinus,
+  land: PlaneLanding,
+  luaw: Hourglass,
+  takeoff: PlaneTakeoff,
+  taxi: Route,
+  contact: ArrowRightLeft,
+}
+
+/**
+ * The filter pills on one line; when they don't all fit, a small arrow at the
+ * end shows the rest (and folds them away again).
+ */
+function FilterRow({ children }: { children: ReactNode }) {
+  const row = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const [overflows, setOverflows] = useState(false)
+  useEffect(() => {
+    const el = row.current
+    if (!el) return
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 2 || (open && el.scrollHeight > 36))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [open])
+  return (
+    <div className="mt-2.5 flex items-start gap-1.5">
+      <div ref={row} className={`flex min-w-0 flex-1 flex-wrap gap-1.5 overflow-hidden ${open ? '' : 'max-h-7'}`} role="toolbar" aria-label="Filters">
+        {children}
+      </div>
+      {overflows && (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={open ? 'Show fewer filters' : 'Show more filters'}
+          title={open ? 'Fewer' : 'More'}
+          className="pressable-soft grid size-7 shrink-0 place-items-center rounded-full bg-white/[0.09] text-white/75 hover:bg-white/[0.15] hover:text-white"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <ChevronDown className={`size-4 transition-transform duration-[var(--duration-fast)] ${open ? 'rotate-180' : ''}`} strokeWidth={2.5} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 function Chip({ active, onClick, children, label, tone = 'plain', disabled }: { active?: boolean; onClick: () => void; children: ReactNode; label?: string; tone?: 'plain' | 'purple'; disabled?: boolean }) {
   return (
     <button
@@ -111,7 +160,7 @@ function Chip({ active, onClick, children, label, tone = 'plain', disabled }: { 
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={`pressable-soft flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-footnote font-semibold transition-colors duration-[var(--duration-fast)] disabled:opacity-35 ${
+      className={`pressable-soft flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full pl-2 pr-2.5 text-caption font-semibold transition-colors duration-[var(--duration-fast)] disabled:opacity-35 ${
         tone === 'purple' ? 'bg-atc-card text-white' : active ? 'bg-white text-black' : 'bg-white/[0.09] text-white/75 enabled:hover:bg-white/[0.15] enabled:hover:text-white'
       }`}
     >
@@ -273,7 +322,7 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
     <div className="relative">
       <style>{'@keyframes tt-eq { from { transform: scaleY(0.25) } to { transform: scaleY(1) } }'}</style>
       <div ref={head} className={`sticky top-0 z-20 pb-2.5 ${gutter} ${docked ? 'bg-atc-panel' : 'bg-black'}`}>
-        <p className="-mt-1.5 mb-3 px-1 text-footnote text-white/55">{subtitle}</p>
+        <p className="mb-2.5 truncate text-footnote text-white/55">{subtitle}</p>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-white/45" strokeWidth={2.25} />
           <input
@@ -297,9 +346,10 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
             </button>
           )}
         </div>
-        <div className={`no-scrollbar mt-2.5 flex gap-1.5 overflow-x-auto ${gutter}`} role="toolbar" aria-label="Filters">
+        <FilterRow>
           {!playback && (
             <Chip active={!!filters.stationId} onClick={() => patch({ stationId: filters.stationId ? null : stationId })} label="Only calls on this channel">
+              <Radio className="size-3.5" strokeWidth={2.5} aria-hidden />
               This channel
             </Chip>
           )}
@@ -313,15 +363,18 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
               <X className="size-3.5" strokeWidth={2.75} />
             </Chip>
           )}
-          <span className="mx-0.5 my-1.5 w-px shrink-0 bg-white/15" aria-hidden />
           {PHRASES.map((p) => (
             <Chip key={p.id} active={filters.phrase === p.id} onClick={() => patch({ phrase: filters.phrase === p.id ? null : p.id })}>
+              {(() => {
+                const Icon = PHRASE_ICON[p.id]
+                return Icon ? <Icon className="size-3.5" strokeWidth={2.5} aria-hidden /> : null
+              })()}
               {p.label}
             </Chip>
           ))}
-        </div>
+        </FilterRow>
         {suggestions.length > 0 && (
-          <div className="animate-fade mt-2 flex flex-wrap items-center gap-1.5 px-1">
+          <div className="animate-fade mt-2 flex flex-wrap items-center gap-1.5">
             <span className="text-caption font-medium text-white/45">Callsigns</span>
             {suggestions.map((c) => (
               <button key={c} type="button" className="pressable-soft flex h-7 items-center gap-1.5 rounded-full bg-atc-card/25 px-2.5 text-caption font-bold text-white ring-1 ring-inset ring-atc-card/60 hover:bg-atc-card/45" onClick={() => patch({ callsign: c, query: '' })}>
@@ -332,7 +385,7 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
           </div>
         )}
         {filtering && (
-          <p className="mt-2 px-1 text-caption font-medium text-white/50" aria-live="polite">
+          <p className="mt-2 text-caption font-medium text-white/50" aria-live="polite">
             {hits.length === 0 ? 'No matches' : `${hits.length} ${hits.length === 1 ? 'match' : 'matches'}`}
             {withAudio.size > 0 && ` · ${withAudio.size} with audio`}
           </p>
