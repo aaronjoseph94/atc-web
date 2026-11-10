@@ -1,17 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { chooseGlass, contrast, downgrade, GLASS_TINT, medianFrame, over, type Rgb } from './glass'
 import { clampDockWidth, DOCK_DEFAULT, DOCK_INSET, DOCK_MAX, DOCK_MIN, dockReserve } from './layout'
-import { mapStateFor } from './mapStatus'
+import { mapStateFor } from './mapStatusModel'
 import { fadeEdges } from './scrollFade'
 import { sheetStretch } from './useSheetDrag'
 
 describe('chooseGlass', () => {
   const strong = { supports: true, cores: 8, memoryGb: 8 }
-  it('gives capable machines the full glass', () => {
-    expect(chooseGlass(strong)).toBe('full')
-    expect(chooseGlass({ supports: true, cores: 4, apple: true })).toBe('full')
-  })
-  it('keeps big surfaces solid on middling machines', () => {
+  it('keeps big surfaces solid even on capable machines', () => {
+    expect(chooseGlass(strong)).toBe('lite')
+    expect(chooseGlass({ supports: true, cores: 4, apple: true })).toBe('lite')
     expect(chooseGlass({ supports: true, cores: 4, memoryGb: 4 })).toBe('lite')
     expect(chooseGlass({ ...strong, frameMs: 20 })).toBe('lite')
   })

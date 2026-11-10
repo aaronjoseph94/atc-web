@@ -16,7 +16,7 @@ export function SpottingSettingsGroup() {
     <>
       <SectionLabel>Spotting</SectionLabel>
       <Group>
-        <Row label="Rare aircraft alerts" hint="A short note when something unusual comes within range">
+        <Row label="Rare aircraft alerts" hint="Toast when something rare arrives">
           <Toggle checked={s.toasts} onChange={(v) => s.update('toasts', v)} label="Rare aircraft alerts" />
         </Row>
         <Row label="Star rare aircraft on the map">

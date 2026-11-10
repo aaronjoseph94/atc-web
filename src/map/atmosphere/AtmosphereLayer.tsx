@@ -1,36 +1,18 @@
 /**
- * Weather, wind and depth over the map, plus the generated surface detail.
- *
- * Over the map (under the app's chrome, never catching taps): cloud shadows,
- * rain, snow, wind lines and windsocks on two canvases (`overlay.ts`), and,
- * as plain CSS gradients that cost nothing per frame, the haze of low
- * visibility, the cool cast of rain and a soft vignette with a lighter top.
- *
- * In the map itself: the touchdown-zone tyre marks, the stand lead-in lines
- * and painted gate numbers (worked out from the tiles after each camera move,
- * the way the hold bars are), and the pattern images the water sheen and
- * pavement grain are drawn with. Their layers are in `mapStyle.ts`.
+ * Generated surface detail in the map itself: the touchdown-zone tyre marks,
+ * the stand lead-in lines and painted gate numbers (worked out from the tiles
+ * after each camera move, the way the hold bars are), and the pattern images
+ * the water sheen and pavement grain are drawn with. Their layers are in
+ * `mapStyle.ts`. Nothing here draws per frame.
  */
 import type { Feature, FeatureCollection } from 'geojson'
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { getAirport } from '../../api/airports'
-import { usePlayhead } from '../../playback/playheadStore'
-import { useSettings } from '../../settings/settingsStore'
-import { useReducedMotion } from '../../ui/motion'
-import { usePerf } from '../../perf/governor'
-import { profileFor } from '../../perf/quality'
-import { useWeather } from '../../station/StationBar'
-import { runwayEnds, standMarkings, tyreMarks } from '../airportDiagram'
+import { useEffect } from 'react'
+import { standMarkings, tyreMarks } from '../airportDiagram'
 import type { LngLat } from '../geo'
-import { nightFactor, sunElevation } from '../lighting/sun'
-import { ATMO_SRC, effectiveTheme } from '../mapStyle'
-import { AtmosphereOverlay, type OverlayState } from './overlay'
+import { ATMO_SRC } from '../mapStyle'
 import { isJetBridge, standPose } from './stands'
-import { addPavementGrain, SHEEN_IMAGE, surfaceImage, waterSheenFor, type WaterSheen } from './textures'
-import { screenWashes } from './washes'
-import { weatherFx } from './weatherFx'
-import { windsockSites } from './windsocks'
+import { addPavementGrain, SHEEN_IMAGE, surfaceImage, waterSheenFor } from './textures'
 
 /** Stand markings are worked out from this zoom (they show from 15.6). */
 const STAND_MIN_ZOOM = 15.2
@@ -40,91 +22,16 @@ function setData(map: MapLibreMap, id: string, data: FeatureCollection) {
   ;(map.getSource(id) as GeoJSONSource | undefined)?.setData(data)
 }
 
-/** How dark it is at the airport (0 day … 1 night), following the lighting setting; checked every half minute. */
-function readNight(lighting: string, center: LngLat): number {
-  if (lighting !== 'auto') return lighting === 'night' ? 1 : 0
-  const s = usePlayhead.getState()
-  const t = s.mode === 'playback' && s.clip?.startedAt != null ? s.clip.startedAt + s.tMs : Date.now()
-  return Math.round(nightFactor(sunElevation(t, center[1], center[0])) * 20) / 20
-}
-
-function useNight(center: LngLat): number {
-  const lighting = useSettings((s) => s.lighting)
-  const [night, setNight] = useState(() => readNight(lighting, center))
-  useEffect(() => {
-    const update = () => setNight(readNight(lighting, center))
-    update()
-    if (lighting !== 'auto') return
-    const id = window.setInterval(update, 30_000)
-    return () => window.clearInterval(id)
-  }, [lighting, center])
-  return night
-}
-
 export function AtmosphereLayer({ map, airportIcao }: { map: MapLibreMap | null; airportIcao: string }) {
-  const reduceMotion = useReducedMotion()
-  const streamlines = useSettings((s) => s.windStreamlines)
-  const mapTheme = useSettings((s) => s.mapTheme)
-  const airport = useMemo(() => getAirport(airportIcao), [airportIcao])
-  const theme = effectiveTheme(mapTheme, airport.group === 'US')
-  const { data } = useWeather(airportIcao)
-  const fx = useMemo(() => weatherFx(data?.metar), [data?.metar])
-  const night = useNight(airport.center)
-  const sites = useMemo(() => windsockSites(runwayEnds(airportIcao)), [airportIcao])
-  const quality = profileFor(usePerf((s) => s.tier))
-
-  const cloudRef = useRef<HTMLCanvasElement>(null)
-  const fxRef = useRef<HTMLCanvasElement>(null)
-  const overlay = useRef<AtmosphereOverlay | null>(null)
-  const sheen = useRef<WaterSheen | null>(null)
-
   // ---- pattern images, once per map ------------------------------------------
   useEffect(() => {
     if (!map) return
     addPavementGrain(map)
+    // A still sheen: animating it re-uploads the tile and repaints the whole map several times a second.
     const s = waterSheenFor(map)
-    sheen.current = s
+    s.animate = false
+    s.strength = 0.5
     surfaceImage(map, SHEEN_IMAGE)
-  }, [map])
-
-  // The sheen is sunlight on water: full on a clear day, faint under cloud, haze or at night; still under reduced motion.
-  useEffect(() => {
-    const s = sheen.current
-    if (!s || !map) return
-    s.strength = Math.max(0.12, (1 - 0.7 * fx.cloud) * (1 - 0.6 * fx.fog) * (1 - 0.65 * night))
-    const sync = () => {
-      s.animate = !reduceMotion && !document.hidden && quality.waterSheen
-    }
-    sync()
-    map.triggerRepaint()
-    document.addEventListener('visibilitychange', sync)
-    return () => document.removeEventListener('visibilitychange', sync)
-  }, [map, fx, night, reduceMotion, quality])
-
-  // ---- canvas overlay ---------------------------------------------------------
-  const overlayState = useMemo<OverlayState>(
-    () => ({ fx, night, streamlines, reduceMotion, shadows: theme !== 'chart', center: airport.center, sites, particles: quality.particles, fps: quality.overlayFps }),
-    [fx, night, streamlines, reduceMotion, theme, airport.center, sites, quality],
-  )
-  // Read when the overlay is created, so a new map starts from the current state.
-  const latest = useRef(overlayState)
-
-  useEffect(() => {
-    latest.current = overlayState
-    overlay.current?.update(overlayState)
-  }, [overlayState])
-
-  useEffect(() => {
-    if (!map || !cloudRef.current || !fxRef.current) return
-    const o = new AtmosphereOverlay(map, cloudRef.current, fxRef.current)
-    o.update(latest.current)
-    overlay.current = o
-    // For measuring its frame cost from the browser console in development.
-    if (import.meta.env.DEV) Object.assign(window, { __atcAtmosphere: o })
-    return () => {
-      o.destroy()
-      overlay.current = null
-    }
   }, [map])
 
   // ---- tyre marks, jet bridges and stand markings ----------------------------------------------
@@ -207,16 +114,5 @@ export function AtmosphereLayer({ map, airportIcao }: { map: MapLibreMap | null;
     }
   }, [map, airportIcao])
 
-  // ---- screen-space washes -------------------------------------------------------
-  const washes = useMemo(() => screenWashes(theme, fx.fog, fx.rain, night), [theme, fx.fog, fx.rain, night])
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      <canvas ref={cloudRef} className="absolute inset-0 h-full w-full" />
-      {washes.tint && <div className="absolute inset-0" style={washes.tint} />}
-      {washes.fog && <div className="absolute inset-0" style={washes.fog} />}
-      <canvas ref={fxRef} className="absolute inset-0 h-full w-full" />
-      {washes.vignette && <div className="absolute inset-0" style={washes.vignette} />}
-    </div>
-  )
+  return null
 }

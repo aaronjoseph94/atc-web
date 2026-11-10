@@ -19,10 +19,10 @@ const OPTIONS: [PerformanceMode, string][] = [
 
 /** What each choice trades, in a sentence. */
 const HINT: Record<PerformanceMode, string> = {
-  auto: 'Picks the richest look this device keeps smooth, and steps down when frames slow.',
-  smooth: 'Fewest effects and a lighter map canvas, for the steadiest frame rate.',
-  balanced: 'Most effects, a slightly lighter canvas on high-density screens.',
-  beautiful: 'Every effect at full resolution.',
+  auto: 'Steps down when frames slow.',
+  smooth: 'Fewest effects, steadiest frame rate.',
+  balanced: 'Most effects, lighter canvas.',
+  beautiful: 'Every effect.',
 }
 
 export function PerformanceSettings() {

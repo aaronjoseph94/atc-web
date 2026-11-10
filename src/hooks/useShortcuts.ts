@@ -5,30 +5,29 @@ import { usePlayhead, type Panel } from '../playback/playheadStore'
 
 /** Shown in the help panel; the handler below is the source of truth for behaviour. */
 export const SHORTCUTS: [string, string][] = [
-  ['/', 'Traffic and recent activity'],
-  ['A', 'Change airport'],
-  ['C', 'Switch channel'],
-  ['T', 'Radio transcript'],
-  ['W', 'Weather and ATIS'],
+  ['/', 'Search traffic'],
+  ['A', 'Airport'],
+  ['C', 'Channel'],
+  ['T', 'Transcript'],
+  ['W', 'Weather'],
   ['R', 'Replay'],
-  ['L', 'Map layers'],
   ['M', 'Menu'],
-  ['F', 'Follow the selected flight'],
-  ['H', 'Show the whole airfield'],
-  ['N', 'Turn the map north up'],
-  ['+ −', 'Zoom in or out'],
-  ['Space', 'Play or pause a replay'],
-  ['← →', 'Skip 5 seconds in a replay'],
-  ['Esc', 'Close, or clear the selection'],
-  ['?', 'This list'],
+  ['F', 'Follow flight'],
+  ['H', 'Whole airfield'],
+  ['N', 'North up'],
+  ['+ −', 'Zoom'],
+  ['Space', 'Play / pause replay'],
+  ['← →', 'Skip 5 s'],
+  ['Esc', 'Close / clear'],
+  ['?', 'Help'],
   // Handled by the side panel itself (DesktopPanel); listed only where that panel exists.
-  [']', 'Hide or show the side panel'],
+  [']', 'Side panel'],
 ]
 
 /** Shortcuts that only do something on wide screens, where the side panel docks. */
 export const WIDE_ONLY_SHORTCUTS = new Set([']'])
 
-const PANEL_KEYS: Record<string, Panel> = { '/': 'traffic', a: 'airports', c: 'stations', t: 'transcripts', w: 'weather', r: 'replay', l: 'layers', m: 'menu', '?': 'help' }
+const PANEL_KEYS: Record<string, Panel> = { '/': 'traffic', a: 'airports', c: 'stations', t: 'transcripts', w: 'weather', r: 'replay', m: 'menu', '?': 'help' }
 
 /** Global keyboard shortcuts. Ignored while typing or while a dialog is handling keys itself. */
 export function useShortcuts() {

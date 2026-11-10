@@ -40,7 +40,7 @@ function Body() {
   return (
     <>
       <Group>
-        <Row label="Learn mode" hint="Underline these terms in transcripts, captions and the weather; tap one to see what it means">
+        <Row label="Learn mode" hint="Tap underlined terms for a definition">
           <Toggle checked={learn} onChange={(v) => update('learn', v)} label="Learn mode" />
         </Row>
       </Group>
@@ -66,7 +66,7 @@ function Body() {
           </ul>
         </section>
       ))}
-      <p className="mt-5 px-1 text-caption text-atc-muted">Plain-English explanations written for listeners, not for flying. Phraseology follows FAA usage, with ICAO differences noted.</p>
+      <p className="mt-5 px-1 text-caption text-atc-muted">FAA phraseology; ICAO differences noted. Not for flying.</p>
     </>
   )
 }

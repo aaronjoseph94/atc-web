@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { getAirport } from '../api/airports'
 import { usePlayhead } from '../playback/playheadStore'
 import { useMap } from '../app/useMap'
-import { mapStateFor, type MapState } from './mapStatus'
+import { mapStateFor, type MapState } from './mapStatusModel'
 import { EmptyState, OfflineArt, QuietArt, RadarSweep, StateAction } from './States'
 import { usePresence } from './usePresence'
 

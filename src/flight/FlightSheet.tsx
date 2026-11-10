@@ -12,7 +12,7 @@
  * timeline, and the conversation so far (radio calls in a
  * replayed scene, logged events for live traffic).
  */
-import { Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
+import { Check, ChevronRight, Crosshair, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { useMemo, type CSSProperties } from 'react'
 import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
@@ -379,7 +379,7 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
                   <LiveCallBubble key={c.id} call={c} />
                 ))}
               </ol>
-              <p className="mt-4 text-center text-xs text-white/40">New transmissions will appear here</p>
+              <p className="mt-4 text-center text-xs text-white/40">New calls appear here</p>
             </section>
           )}
 
@@ -395,7 +395,7 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
                   <CallBubble key={c.id} cue={c} />
                 ))}
               </ol>
-              <p className="mt-4 text-center text-xs text-white/40">New transmissions will appear here</p>
+              <p className="mt-4 text-center text-xs text-white/40">New calls appear here</p>
             </section>
           ) : liveCalls.length > 0 && flight.events.length === 0 ? null : (
             <section className="mt-6" aria-label="Tower log">
@@ -412,25 +412,12 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
                 </ol>
               ) : (
                 <p className="rounded-2xl bg-white/[0.06] px-3.5 py-3 text-sm leading-relaxed text-white/65">
-                  {mode === 'live'
-                    ? 'Nothing logged for this aircraft yet. Takeoffs, landings and go-arounds show up here as they happen, and with the radio playing, every call that names this flight.'
-                    : 'No radio calls for this flight yet. Keep listening.'}
+                  {mode === 'live' ? 'Nothing logged yet.' : 'No radio calls yet.'}
                 </p>
               )}
             </section>
           )}
 
-          {flight.real && (
-            <a
-              href={`https://www.flightaware.com/live/flight/${encodeURIComponent(flight.callsign)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-5 flex items-center justify-between gap-3 rounded-2xl bg-white/[0.06] px-4 py-3 text-sm font-medium transition hover:bg-white/10"
-            >
-              Look up {flight.callsign} on FlightAware
-              <ExternalLink className="size-4 shrink-0 text-white/60" />
-            </a>
-          )}
         </div>
       </div>
     </div>

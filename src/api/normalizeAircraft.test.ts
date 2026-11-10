@@ -103,6 +103,7 @@ describe('normalizeOpenSkyStates', () => {
         speedKt: 250,
         onGround: false,
         verticalRateFpm: 1000,
+        source: 'adsb',
       },
     ])
   })

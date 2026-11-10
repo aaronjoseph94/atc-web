@@ -41,7 +41,12 @@ export type Aircraft = {
   emergency?: string | null
   /** Altitude dialled into the autopilot, when broadcast. */
   selectedAltitudeFt?: number | null
+  /** How the position was obtained: ADS-B, multilateration, TIS-B/ADS-R rebroadcast, ADS-C, or bare Mode S. */
+  source?: PositionSource
 }
+
+export type PositionSource = 'adsb' | 'mlat' | 'tisb' | 'adsr' | 'adsc' | 'modes'
+export const POSITION_SOURCE_LABEL: Record<PositionSource, string> = { adsb: 'ADS-B', mlat: 'MLAT', tisb: 'TIS-B', adsr: 'ADS-R', adsc: 'ADS-C', modes: 'Mode S' }
 
 /** What `/api/aircraft` resolved to, including which feed answered. */
 export type AircraftSnapshot = {

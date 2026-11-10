@@ -12,9 +12,10 @@
  * and the space it takes is published as `--dock-w` so the map chrome and
  * the camera keep clear of it.
  */
-import { PanelRightClose } from 'lucide-react'
+import { MoreHorizontal, PanelRightClose, Search, X } from 'lucide-react'
 import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
+import { getAirport } from '../api/airports'
 import { FlightDetail } from '../flight/FlightSheet'
 import { BriefingCard } from '../insights/Briefing'
 import { useFlight } from '../flight/useFlight'
@@ -67,18 +68,27 @@ export function DesktopPanel() {
   const setTab = useDock((s) => s.setTab)
   const setCollapsed = useDock((s) => s.setCollapsed)
   const selected = usePlayhead((s) => s.selectedIcao)
+  const airportIcao = usePlayhead((s) => s.airportIcao)
+  const panel = usePlayhead((s) => s.panel)
+  const setPanel = usePlayhead((s) => s.setPanel)
   const vw = useViewportWidth()
   const w = clampDockWidth(width, vw)
   const aside = useRef<HTMLElement>(null)
+  // The search box is the panel's: typing shows the traffic list filtered by it.
+  const [search, setSearch] = useState('')
 
   // A new selection takes the panel; picking a tab while one is selected keeps the selection (and the camera on it).
   const [showFlight, setShowFlight] = useState(!!selected)
   const [lastSelected, setLastSelected] = useState(selected)
   if (selected !== lastSelected) {
     setLastSelected(selected)
-    if (selected) setShowFlight(true)
+    if (selected) {
+      setShowFlight(true)
+      // Picked from the search results: the flight takes the panel, the search is done.
+      setSearch('')
+    }
   }
-  const view: View = selected && showFlight ? 'flight' : tab
+  const view: View = search ? 'traffic' : selected && showFlight ? 'flight' : tab
   const swap = useSwap(view)
   const body = usePresence(!collapsed, 260)
 
@@ -141,12 +151,15 @@ export function DesktopPanel() {
   }, [])
 
   const pick = (v: View) => {
+    setSearch('')
     if (v === 'flight') setShowFlight(true)
     else {
       setTab(v)
       setShowFlight(false)
     }
   }
+
+  const iconBtn = 'has-tooltip pressable relative grid size-9 shrink-0 place-items-center rounded-full text-white/70 hover:bg-white/10 hover:text-white'
 
   return (
     <aside
@@ -158,18 +171,52 @@ export function DesktopPanel() {
       className="dock glass-sheet grain absolute bottom-3 right-3 top-[max(0.75rem,var(--safe-top))] z-30 flex flex-col overflow-hidden rounded-[1.6rem] shadow-pop ring-1 ring-white/[0.09]"
     >
       <ResizeHandle width={w} vw={vw} />
-      <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
-        <Tabs view={view} selected={!!selected} onPick={pick} />
+      {/* Header: airport, search, menu, hide. */}
+      <div className="flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-3">
         <button
           type="button"
-          aria-label="Hide side panel"
-          aria-keyshortcuts="]"
-          className="has-tooltip pressable relative grid size-9 shrink-0 place-items-center rounded-full text-white/70 hover:bg-white/10 hover:text-white"
-          onClick={() => setCollapsed(true)}
+          className="display-tight pressable shrink-0 rounded-lg px-1.5 font-display text-[26px] leading-none hover:bg-white/10"
+          onClick={() => setPanel('airports')}
+          aria-label={`Change airport. Showing ${getAirport(airportIcao).name}`}
+          aria-keyshortcuts="A"
         >
+          {airportIcao}
+        </button>
+        <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full bg-white/[0.07] px-3 ring-1 ring-inset ring-transparent transition-shadow duration-[var(--duration-fast)] focus-within:ring-atc-yellow/70">
+          <Search className="size-4 shrink-0 text-white/50" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search traffic"
+            aria-label="Search traffic"
+            aria-keyshortcuts="/"
+            className="h-9 min-w-0 flex-1 bg-transparent text-footnote outline-none placeholder:text-white/45 [&::-webkit-search-cancel-button]:hidden"
+          />
+          {search && (
+            <button type="button" aria-label="Clear search" className="pressable grid size-5 place-items-center rounded-full bg-white/15 text-white/80" onClick={() => setSearch('')}>
+              <X className="size-3" strokeWidth={2.5} />
+            </button>
+          )}
+        </label>
+        <button
+          type="button"
+          aria-label="Menu"
+          aria-keyshortcuts="M"
+          aria-pressed={panel === 'menu' || undefined}
+          className={`${iconBtn} ${panel === 'menu' ? 'bg-atc-yellow text-black hover:bg-atc-yellow hover:text-black' : ''}`}
+          onClick={() => setPanel(panel === 'menu' ? null : 'menu')}
+        >
+          <MoreHorizontal className="size-[18px]" />
+          {panel !== 'menu' && <Tooltip label="Menu" shortcut="M" side="bottom" />}
+        </button>
+        <button type="button" aria-label="Hide side panel" aria-keyshortcuts="]" className={iconBtn} onClick={() => setCollapsed(true)}>
           <PanelRightClose className="size-[18px]" />
           <Tooltip label="Hide panel" shortcut="]" side="left" />
         </button>
+      </div>
+      <div className="flex shrink-0 items-center px-3 pb-2">
+        <Tabs view={view} selected={!!selected} onPick={pick} />
       </div>
       <BriefingCard docked />
       <div className="mx-3 h-px shrink-0 bg-white/[0.08]" />
@@ -178,7 +225,7 @@ export function DesktopPanel() {
           [swap.current, swap.leaving].map((v) =>
             v ? (
               <div key={v} className="dock-pane min-h-0 min-w-0 [grid-area:1/1]" data-closing={v === swap.leaving ? '' : undefined} inert={v === swap.leaving}>
-                <Pane view={v} />
+                <Pane view={v} search={search} />
               </div>
             ) : null,
           )}
@@ -188,10 +235,10 @@ export function DesktopPanel() {
 }
 
 /** One view's content. Memoised so dragging the panel wider doesn't re-render a long list on every pixel. */
-const Pane = memo(function Pane({ view }: { view: View }) {
+const Pane = memo(function Pane({ view, search }: { view: View; search: string }) {
   if (view === 'flight') return <FlightDetail docked />
   if (view === 'transcripts') return <TranscriptsView docked />
-  if (view === 'traffic') return <TrafficPanel docked />
+  if (view === 'traffic') return <TrafficPanel docked search={search} />
   return <WeatherPanel docked />
 })
 

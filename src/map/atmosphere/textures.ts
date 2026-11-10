@@ -172,19 +172,3 @@ export function surfaceImage(map: MapLibreMap, id: string) {
   else if (id === SHEEN_IMAGE && !map.hasImage(SHEEN_IMAGE)) map.addImage(SHEEN_IMAGE, waterSheenFor(map), { pixelRatio: SHEEN_SCALE })
 }
 
-/** A soft round blob (opaque black centre fading to nothing) to stamp cloud shadows with. */
-export function blobSprite(size = 64): HTMLCanvasElement {
-  const c = document.createElement('canvas')
-  c.width = c.height = size
-  const g = c.getContext('2d')!
-  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  // A gentle bell curve rather than a linear ramp, so no edge is visible.
-  for (let i = 0; i <= 8; i++) {
-    const r = i / 8
-    const a = (Math.exp(-4.2 * r * r) - Math.exp(-4.2)) / (1 - Math.exp(-4.2))
-    grad.addColorStop(r, `rgba(0,0,0,${a.toFixed(3)})`)
-  }
-  g.fillStyle = grad
-  g.fillRect(0, 0, size, size)
-  return c
-}

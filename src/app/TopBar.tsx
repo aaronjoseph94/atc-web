@@ -1,14 +1,15 @@
 /**
  * Chrome along the top of the map: clear/back on the left, the status pill in
  * the middle (LIVE with aircraft count, TRACK while locked onto a flight,
- * REPLAY during playback), traffic search and the menu on the right.
+ * REPLAY during playback); search and the menu on the right where no side
+ * panel is showing (phones, or the panel tucked away).
  */
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, MoreHorizontal, PanelRightOpen, RotateCw, Search, WifiOff, X } from 'lucide-react'
 import { useNow } from '../hooks/useNow'
 import { agoLabel } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
-import { useDock, useIsWide } from '../ui/layout'
+import { useDock, useDockActive, useIsWide } from '../ui/layout'
 import { GlassButton } from '../ui/Panel'
 
 function StatusPill() {
@@ -84,6 +85,7 @@ export function TopBar() {
   const wide = useIsWide()
   const collapsed = useDock((s) => s.collapsed)
   const setCollapsed = useDock((s) => s.setCollapsed)
+  const docked = useDockActive()
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-[max(0.75rem,var(--safe-top))] md:px-4">
@@ -102,7 +104,7 @@ export function TopBar() {
             <ChevronLeft className="size-5" />
             <span className="rounded-full bg-atc-live-badge px-2 py-0.5 text-caption2 font-bold tracking-[0.06em]">LIVE</span>
           </button>
-        ) : (
+        ) : docked ? null : (
           <GlassButton label="Search traffic" shortcut="/" tooltip="right" onClick={() => setPanel('traffic')}>
             <Search className="size-5" />
           </GlassButton>
@@ -117,9 +119,11 @@ export function TopBar() {
             <PanelRightOpen className="size-5" />
           </GlassButton>
         )}
-        <GlassButton label="Menu" shortcut="M" tooltip={panel === 'menu' ? 'none' : 'left'} onClick={() => setPanel(panel === 'menu' ? null : 'menu')} active={panel === 'menu'}>
-          <MoreHorizontal className="size-5" />
-        </GlassButton>
+        {!docked && (
+          <GlassButton label="Menu" shortcut="M" tooltip={panel === 'menu' ? 'none' : 'left'} onClick={() => setPanel(panel === 'menu' ? null : 'menu')} active={panel === 'menu'}>
+            <MoreHorizontal className="size-5" />
+          </GlassButton>
+        )}
       </div>
     </div>
   )

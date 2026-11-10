@@ -10,7 +10,6 @@ test('every panel has a key: sheets close with Escape, docked views switch tabs'
     ['a', 'Airports'],
     ['c', /^Channels at /],
     ['r', 'Replay'],
-    ['l', 'Map'],
     ['?', 'Help'],
   ]
   for (const [key, name] of sheets) {

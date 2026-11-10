@@ -12,19 +12,19 @@ describe('settings store', () => {
   })
 
   it('update() changes one key and reset() restores it', () => {
+    useSettings.getState().update('labels', 'always')
     useSettings.getState().update('pollSeconds', 15)
-    useSettings.getState().update('mapTheme', 'graphite')
+    expect(useSettings.getState().labels).toBe('always')
     expect(useSettings.getState().pollSeconds).toBe(15)
-    expect(useSettings.getState().mapTheme).toBe('graphite')
     useSettings.getState().reset()
-    expect(useSettings.getState().pollSeconds).toBe(8)
-    expect(useSettings.getState().mapTheme).toBe('navy')
+    expect(useSettings.getState().labels).toBe('auto')
+    expect(useSettings.getState().pollSeconds).toBe(5)
   })
 })
 
 describe('restoreSettings', () => {
   it('keeps known keys with the right kind of value', () => {
-    expect(restoreSettings({ mapTheme: 'graphite', pollSeconds: 15, favourites: ['JFK'] })).toEqual({ mapTheme: 'graphite', pollSeconds: 15, favourites: ['JFK'] })
+    expect(restoreSettings({ labels: 'always', pollSeconds: 15, favourites: ['JFK'] })).toEqual({ labels: 'always', pollSeconds: 15, favourites: ['JFK'] })
   })
 
   it('drops options that no longer exist, and values of the wrong type', () => {

@@ -2,18 +2,12 @@
  * The whole map style, authored here instead of recolouring a stock one.
  *
  * Base data: OpenFreeMap vector tiles (OpenMapTiles schema, OpenStreetMap
- * data). Free raster layers sit underneath for the alternative looks:
- * USGS orthoimagery (public domain) and the FAA's VFR charts.
- *
- * Every theme produces the same layers with the same ids, so switching
- * theme is just a matter of pushing new paint values (`applyTheme`); no
- * style reload, no flash, and the aircraft layers stay put.
+ * data). One look: navy.
  */
 import type { LayerSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
-import type { MapTheme } from '../settings/settingsStore'
 import { NOISE_IMAGE, SHEEN_IMAGE } from './atmosphere/textures'
 import { LIGHT_BAND_ZOOMS } from './fx/sprites'
-import { differs, formatColor, mixColor, nightShade, parseColor } from './lighting/color'
+import { formatColor, mixColor, parseColor } from './lighting/color'
 
 /** Ids other modules need to reference. */
 export const SRC = {
@@ -178,90 +172,6 @@ const NAVY: Palette = {
   hidePaint: false,
 }
 
-const GRAPHITE: Palette = {
-  ...NAVY,
-  bg: '#17191C',
-  water: '#0F1318',
-  land: '#1C1F22',
-  wood: '#243029',
-  grass: '#26342B',
-  infield: '#34493C',
-  far: '#262B28',
-  farLand: '#2C2F33',
-  apron: '#1B1D20',
-  taxiway: '#1B1D20',
-  shoulder: '#33383E',
-  pad: '#33383E',
-  runway: '#141618',
-  runwayConcrete: '#17191C',
-  paint: '#C8CBD0',
-  paintMid: '#A6A9AF',
-  paintDim: '#8A8D93',
-  paintFaint: '#6C6F75',
-  centreLine: '#E8EAEE',
-  taxiLine: '#8F7F3A',
-  building: '#1A1D21',
-  buildingEdge: '#2B3036',
-  roadMinor: '#1B1E22',
-  roadMajor: '#23272C',
-  motorway: '#2B3036',
-  roadCase: '#0C0E10',
-  rail: '#202428',
-  boundary: '#33383E',
-  label: '#858B93',
-  labelHalo: '#17191C',
-  waterLabel: '#4A5A6B',
-  approach: '#9AA1AA',
-  softShadows: { color: '#0C1533', opacity: 0.34 },
-}
-
-const SATELLITE: Palette = {
-  ...NAVY,
-  bg: '#05080E',
-  label: '#F4F6FA',
-  labelHalo: 'rgba(0,0,0,0.75)',
-  waterLabel: '#CFE2FF',
-  roadMinor: 'rgba(255,255,255,0.10)',
-  roadMajor: 'rgba(255,255,255,0.22)',
-  motorway: 'rgba(255,214,102,0.45)',
-  roadCase: 'rgba(0,0,0,0)',
-  boundary: 'rgba(255,255,255,0.35)',
-  approach: '#FFFFFF',
-  planeEdge: 'rgba(0,0,0,0.9)',
-  raster: 'satellite',
-  hideBase: true,
-  hidePaint: true,
-}
-
-const CHART: Palette = {
-  ...NAVY,
-  bg: '#E9E2CF',
-  label: '#1B2540',
-  labelHalo: 'rgba(255,255,255,0.85)',
-  approach: '#3B2A8C',
-  plane: '#14203B',
-  planeEdge: 'rgba(255,255,255,0.95)',
-  raster: 'chart',
-  softShadows: { color: '#1B2A55', opacity: 0.17 },
-  hideBase: true,
-  hidePaint: false,
-}
-
-const PALETTES: Record<MapTheme, Palette> = { navy: NAVY, graphite: GRAPHITE, satellite: SATELLITE, chart: CHART }
-
-/** Display metadata for the theme picker. */
-export const MAP_THEMES: { id: MapTheme; label: string; hint: string; usOnly: boolean; swatch: [string, string, string] }[] = [
-  { id: 'navy', label: 'Navy', hint: 'Navy airfield chart', usOnly: false, swatch: ['#161B2F', '#33594C', '#10182F'] },
-  { id: 'graphite', label: 'Graphite', hint: 'Neutral dark', usOnly: false, swatch: ['#1B1D20', '#34493C', '#141618'] },
-  { id: 'satellite', label: 'Satellite', hint: 'USGS aerial photos', usOnly: true, swatch: ['#3A4A3C', '#6E7A63', '#9AA08F'] },
-  { id: 'chart', label: 'FAA chart', hint: 'VFR sectional', usOnly: true, swatch: ['#E9E2CF', '#8FB7D9', '#C7B8E0'] },
-]
-
-/** Themes backed by US-government rasters have nothing to show elsewhere. */
-export function effectiveTheme(theme: MapTheme, isUs: boolean): MapTheme {
-  const meta = MAP_THEMES.find((t) => t.id === theme)
-  return meta?.usOnly && !isUs ? 'navy' : theme
-}
 
 /** Transparent square the runway keep-out layer is made of, and its size in pixels. */
 export const KEEPOUT_IMAGE = 'runway-keepout'
@@ -311,10 +221,6 @@ function layers(p: Palette): LayerSpecification[] {
     // Zoomed out the land is a light slate with darker forest, like a dimmed relief map; closer in it settles to navy.
     { id: 'bg', type: 'background', paint: { 'background-color': base ? ['interpolate', ['linear'], ['zoom'], 10, p.farLand, 12.5, p.bg] : p.bg } },
 
-    // ---- free raster underlays --------------------------------------------
-    { id: 'raster-satellite', type: 'raster', source: 'usgs', layout: vis(sat), paint: { 'raster-opacity': 1, 'raster-saturation': -0.15, 'raster-brightness-max': 0.82, 'raster-fade-duration': 200 } },
-    { id: 'raster-chart-sectional', type: 'raster', source: 'faa-sectional', layout: vis(chart), paint: { 'raster-opacity': 1, 'raster-fade-duration': 200 } },
-    { id: 'raster-chart-terminal', type: 'raster', source: 'faa-terminal', layout: vis(chart), paint: { 'raster-opacity': 1, 'raster-fade-duration': 200 } },
 
     // ---- land and water ---------------------------------------------------
     { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', layout: vis(base), paint: { 'fill-color': p.water } },
@@ -717,8 +623,6 @@ export function iconZoomFactor(zoom: number): number {
   return s[s.length - 1][1]
 }
 
-const USGS_ATTR = 'Imagery: <a href="https://www.usgs.gov/programs/national-geospatial-program/national-map" target="_blank" rel="noreferrer">USGS The National Map</a>'
-const FAA_ATTR = 'Charts: <a href="https://www.faa.gov/air_traffic/flight_info/aeronav/" target="_blank" rel="noreferrer">FAA Aeronautical Information Services</a> (not for navigation)'
 const RADAR_ATTR = 'Radar: NOAA NEXRAD via <a href="https://mesonet.agron.iastate.edu/" target="_blank" rel="noreferrer">Iowa Environmental Mesonet</a>'
 
 /** Triangle drawn for procedure fixes (registered by `ProceduresLayer`, signed-distance so it takes any colour). */
@@ -817,36 +721,13 @@ const OMT_ATTR =
   '<a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'
 
 /** Complete style for a theme. Used once, at map construction. */
-export function buildStyle(theme: MapTheme): StyleSpecification {
+export function buildStyle(): StyleSpecification {
   return {
     version: 8,
     name: 'ATC Web',
     glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
     sources: {
       omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet', attribution: OMT_ATTR },
-      usgs: {
-        type: 'raster',
-        tiles: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}'],
-        tileSize: 256,
-        maxzoom: 16,
-        attribution: USGS_ATTR,
-      },
-      'faa-sectional': {
-        type: 'raster',
-        tiles: ['https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}'],
-        tileSize: 256,
-        minzoom: 8,
-        maxzoom: 12,
-        attribution: FAA_ATTR,
-      },
-      'faa-terminal': {
-        type: 'raster',
-        tiles: ['https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Terminal/MapServer/tile/{z}/{y}/{x}'],
-        tileSize: 256,
-        minzoom: 10,
-        maxzoom: 12,
-        attribution: FAA_ATTR,
-      },
       radar: {
         type: 'raster',
         tiles: [radarTiles()],
@@ -877,16 +758,16 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.ripple]: { type: 'geojson', data: empty },
       ...atmosphereSources(),
     },
-    layers: layers(PALETTES[theme]),
+    layers: layers(NAVY),
   }
 }
 
 /** Layer properties the app toggles at runtime; a theme change must not undo them. */
 const RUNTIME_VISIBILITY = new Set<string>([LAYER.buildings, LAYER.approach, LAYER.approachTick, LAYER.trails, LAYER.shadow, LAYER.parkedShadow, LAYER.radar])
 
-/** Re-colour the live map for a theme by pushing each layer's paint and visibility. */
-export function applyTheme(map: MapLibreMap, theme: MapTheme) {
-  for (const layer of layers(PALETTES[theme])) {
+/** Push every layer's paint and visibility onto the live map (after a style reload). */
+export function applyTheme(map: MapLibreMap) {
+  for (const layer of layers(NAVY)) {
     if (!map.getLayer(layer.id)) continue
     const paint = (layer.paint ?? {}) as Record<string, unknown>
     for (const [prop, value] of Object.entries(paint)) {
@@ -900,215 +781,17 @@ export function applyTheme(map: MapLibreMap, theme: MapTheme) {
   }
 }
 
-/** Does this theme draw the vector base map (land, water, flat buildings)? */
-export function themeHasVectorBase(theme: MapTheme): boolean {
-  return !PALETTES[theme].hideBase
-}
-
 /**
  * Paint grass the way the current airport needs: green, or slate on a desert
  * field where the "grass" in the data is really gravel. Call after `applyTheme`.
  */
-export function applyGroundCover(map: MapLibreMap, theme: MapTheme, arid: boolean) {
+export function applyGroundCover(map: MapLibreMap, arid: boolean) {
   if (!map.getLayer('landcover-grass')) return
-  map.setPaintProperty('landcover-grass', 'fill-color', groundCover(PALETTES[theme], arid) as never)
+  map.setPaintProperty('landcover-grass', 'fill-color', groundCover(NAVY, arid) as never)
 }
 
 function groundCover(p: Palette, arid: boolean): unknown[] {
   return ['interpolate', ['linear'], ['zoom'], 10.5, p.far, 12.3, arid ? p.shoulder : p.infield]
-}
-
-// ---------------------------------------------------------------------------
-// Night: the darker ground and the airfield lights (driven by `lighting/LightingLayer`)
-// ---------------------------------------------------------------------------
-
-/**
- * How each ground colour changes after dark: [brightness kept, saturation kept].
- * Kept gentle on purpose: the reference look (green grass, slate terminals,
- * navy pavement) must still read at night, with the lights on top.
- */
-const NIGHT_SHADE: Partial<Record<keyof Palette, [number, number]>> = {
-  bg: [0.902, 0.912],
-  water: [0.895, 0.948],
-  land: [0.902, 0.912],
-  wood: [0.86, 0.843],
-  grass: [0.86, 0.843],
-  infield: [0.86, 0.843],
-  far: [0.881, 0.86],
-  farLand: [0.902, 0.912],
-  apron: [0.93, 0.93],
-  taxiway: [0.93, 0.93],
-  shoulder: [0.895, 0.895],
-  pad: [0.895, 0.895],
-  runway: [0.937, 0.93],
-  runwayConcrete: [0.937, 0.93],
-  paint: [0.902, 0.93],
-  paintMid: [0.902, 0.93],
-  paintDim: [0.902, 0.93],
-  paintFaint: [0.902, 0.93],
-  centreLine: [0.923, 1.0],
-  taxiLine: [0.902, 0.93],
-  building: [0.902, 0.912],
-  buildingEdge: [0.902, 0.912],
-  roadMinor: [0.912, 0.912],
-  roadMajor: [0.912, 0.912],
-  motorway: [0.912, 0.912],
-  roadCase: [0.912, 0.912],
-  rail: [0.912, 0.912],
-  boundary: [0.912, 0.912],
-}
-
-function nightPalette(p: Palette): Palette {
-  const out = { ...p }
-  for (const [key, [dim, sat]] of Object.entries(NIGHT_SHADE) as [keyof Palette, [number, number]][]) {
-    const v = out[key]
-    if (typeof v === 'string') (out as Record<string, unknown>)[key] = nightShade(v, dim, sat)
-  }
-  return out
-}
-
-/** One paint property that changes between day and night, with both values. */
-export type NightPaint = { layer: string; prop: string; day: unknown; night: unknown }
-
-/**
- * Every base-map paint value that differs at night for a theme, worked out by
- * building the style with the day and the night palette and comparing them,
- * so layers added later darken without being listed here. Blend each pair
- * with `mixValue` and push it with `setPaintProperty`.
- */
-export function nightPaint(theme: MapTheme, arid: boolean): NightPaint[] {
-  const p = PALETTES[theme]
-  // A paper chart has no night.
-  if (p.raster === 'chart') return []
-  const n = nightPalette(p)
-  const day = layers(p)
-  const night = layers(n)
-  const out: NightPaint[] = []
-  day.forEach((l, i) => {
-    const hidden = (l.layout as { visibility?: string } | undefined)?.visibility === 'none' && !RUNTIME_VISIBILITY.has(l.id)
-    if (hidden || l.id === LAYER.halo || l.id === LAYER.haloOuter || l.id === LAYER.ping) return
-    const a = (l.paint ?? {}) as Record<string, unknown>
-    const b = (night[i].paint ?? {}) as Record<string, unknown>
-    for (const prop of Object.keys(a)) if (differs(a[prop], b[prop])) out.push({ layer: l.id, prop, day: a[prop], night: b[prop] })
-  })
-  // The grass colour is set per airport (`applyGroundCover`), not by the theme.
-  const grass = out.find((e) => e.layer === 'landcover-grass' && e.prop === 'fill-color')
-  if (grass) Object.assign(grass, { day: groundCover(p, arid), night: groundCover(n, arid) })
-  // Aerial photos are daylight pictures: darken and drain them instead.
-  if (p.raster === 'satellite') {
-    out.push({ layer: 'raster-satellite', prop: 'raster-brightness-max', day: 0.82, night: 0.42 })
-    out.push({ layer: 'raster-satellite', prop: 'raster-saturation', day: -0.15, night: -0.55 })
-  }
-  return out
-}
-
-/** Does this theme show airfield lights at night? (Not on the paper chart.) */
-export function themeHasLights(theme: MapTheme): boolean {
-  return PALETTES[theme].raster !== 'chart'
-}
-
-export const LIGHT_SRC = { runway: 'lights-runway', taxi: 'lights-taxi', apron: 'lights-apron' } as const
-
-export const LIGHT_LAYER = {
-  apronWash: 'lights-apron-wash',
-  apron: 'lights-apron-glow',
-  taxiBloom: 'lights-taxi-bloom',
-  taxiCore: 'lights-taxi-core',
-  runwayBloom: 'lights-runway-bloom',
-  runwayCore: 'lights-runway-core',
-} as const
-
-/**
- * Taxiway lights and floodlights fade in over 12.8–13.6 and are absent below.
- * Runway lights start a little further out, so the overview of the whole
- * airfield already shows its runways drawn in light.
- */
-export const LIGHT_MIN_ZOOM = 12.8
-const RUNWAY_LIGHT_MIN_ZOOM = 11.8
-
-/** Each light layer's zoom fade (none at the first zoom, full at the second) and opacity at full night. */
-const LIGHT_FADE: Record<string, [number, number, number]> = {
-  [LIGHT_LAYER.apronWash]: [LIGHT_MIN_ZOOM, 13.6, 0.04],
-  [LIGHT_LAYER.apron]: [LIGHT_MIN_ZOOM, 13.6, 0.2],
-  // Taxiway lights outline every taxiway, so they come up more slowly than the rest, keeping the wide view calm.
-  [LIGHT_LAYER.taxiBloom]: [LIGHT_MIN_ZOOM, 14.2, 0.4],
-  [LIGHT_LAYER.taxiCore]: [LIGHT_MIN_ZOOM, 14.2, 0.9],
-  [LIGHT_LAYER.runwayBloom]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 0.45],
-  [LIGHT_LAYER.runwayCore]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 1],
-}
-
-/** The opacity property of a light layer and its value at night factor `t` (0..1). */
-export function lightOpacity(layer: string, t: number): { prop: string; value: unknown[] } {
-  const [z0, z1, peak] = LIGHT_FADE[layer] ?? [LIGHT_MIN_ZOOM, 13.6, 1]
-  return { prop: layer === LIGHT_LAYER.apronWash ? 'fill-opacity' : 'circle-opacity', value: ['interpolate', ['linear'], ['zoom'], z0, 0, z1, peak * t] }
-}
-
-/** Screen size of a light by zoom (times its own size factor `s`): point sources, growing gently. */
-function lightRadius(stops: [number, number][]): unknown[] {
-  return ['interpolate', ['exponential', 1.6], ['zoom'], ...stops.flatMap(([z, r]) => [z, ['*', r, ['coalesce', ['get', 's'], 1]]])]
-}
-
-const CORE_RADIUS: [number, number][] = [
-  [12, 0.75],
-  [13, 0.9],
-  [15, 1.4],
-  [17, 2.5],
-  [19, 4.6],
-]
-const BLOOM_RADIUS: [number, number][] = [
-  [12, 2],
-  [13, 2.6],
-  [15, 4.4],
-  [17, 8.5],
-  [19, 16],
-]
-
-/**
- * The light layers, each with the layer it goes under. They start hidden and
- * transparent; `LightingLayer` adds them at runtime and fades them in. Each
- * light is a soft, wide disc under a small, whiter core, which reads as a
- * gentle bloom without any post-processing.
- */
-export function lightingLayers(): { layer: LayerSpecification; before: string }[] {
-  const hidden = { visibility: 'none' as const }
-  const bloom = (id: string, source: string) =>
-    ({ id, type: 'circle', source, minzoom: LIGHT_FADE[id][0], layout: hidden, paint: { 'circle-color': ['get', 'c'], 'circle-radius': lightRadius(BLOOM_RADIUS) as never, 'circle-blur': 1, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' } }) as LayerSpecification
-  const core = (id: string, source: string) =>
-    ({ id, type: 'circle', source, minzoom: LIGHT_FADE[id][0], layout: hidden, paint: { 'circle-color': ['get', 'k'], 'circle-radius': lightRadius(CORE_RADIUS) as never, 'circle-blur': 0.45, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' } }) as LayerSpecification
-  return [
-    // A faint warm cast over every apron, the spill of the floodlights, under the apron's own paint and buildings.
-    {
-      before: LAYER.buildings,
-      layer: {
-        id: LIGHT_LAYER.apronWash,
-        type: 'fill',
-        source: 'omt',
-        'source-layer': 'aeroway',
-        minzoom: LIGHT_MIN_ZOOM,
-        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']],
-        layout: hidden,
-        paint: { 'fill-color': '#FFD6A0', 'fill-opacity': 0 },
-      } as LayerSpecification,
-    },
-    // Floodlight pools by the gates, over the buildings (they light the terminal faces) and under the roads.
-    {
-      before: 'road-minor',
-      layer: {
-        id: LIGHT_LAYER.apron,
-        type: 'circle',
-        source: LIGHT_SRC.apron,
-        minzoom: LIGHT_MIN_ZOOM,
-        layout: hidden,
-        // `r` is the pool's radius in pixels at zoom 0; it doubles with every zoom level, like the ground.
-        paint: { 'circle-color': '#FFB45E', 'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 0, ['get', 'r'], 22, ['*', ['get', 'r'], 2 ** 22]], 'circle-blur': 1, 'circle-opacity': 0, 'circle-pitch-alignment': 'map' },
-      } as LayerSpecification,
-    },
-    // Taxiway and runway lights over all the paint, under the labels and aircraft.
-    { before: 'water-name', layer: bloom(LIGHT_LAYER.taxiBloom, LIGHT_SRC.taxi) },
-    { before: 'water-name', layer: core(LIGHT_LAYER.taxiCore, LIGHT_SRC.taxi) },
-    { before: 'water-name', layer: bloom(LIGHT_LAYER.runwayBloom, LIGHT_SRC.runway) },
-    { before: 'water-name', layer: core(LIGHT_LAYER.runwayCore, LIGHT_SRC.runway) },
-  ]
 }
 
 /**

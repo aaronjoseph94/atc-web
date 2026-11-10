@@ -33,8 +33,8 @@ function groupOf(phase: Phase, onFinal: boolean): Group {
   return 'Passing through'
 }
 
-/** `docked`: rendered in the desktop side panel instead of as a sheet. */
-export function TrafficPanel({ docked = false }: { docked?: boolean }) {
+/** `docked`: rendered in the desktop side panel instead of as a sheet; `search` is its query when the panel owns the search box. */
+export function TrafficPanel({ docked = false, search }: { docked?: boolean; search?: string }) {
   const open = usePlayhead((s) => s.panel === 'traffic') || docked
   const mode = usePlayhead((s) => s.mode)
   const airportIcao = usePlayhead((s) => s.airportIcao)
@@ -44,7 +44,8 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
   const setHover = usePlayhead((s) => s.setHover)
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
-  const [query, setQuery] = useState('')
+  const [ownQuery, setQuery] = useState('')
+  const query = search ?? ownQuery
   const [list, setList] = useState<Aircraft[]>([])
   const queryClient = useQueryClient()
   // Same busy state as the map's offline card, so a tap on "Try again" visibly does something.
@@ -99,18 +100,20 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
 
   return (
     <PanelFrame docked={docked} open={open} title={`Traffic at ${airport.icao}`} onClose={close}>
-      <label className="sticky top-0 z-10 flex items-center gap-2 rounded-xl bg-[#232c3b] px-3 shadow-[0_6px_12px_-6px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-transparent transition-shadow duration-[var(--duration-fast)] focus-within:ring-atc-yellow/70">
-        <Search className="size-4 shrink-0 text-atc-muted" />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Flight, airline, type or tail number"
-          aria-label="Search traffic"
-          className="h-10 min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-atc-muted"
-        />
-        <span className="shrink-0 text-caption tabular-nums text-atc-muted">{total}</span>
-      </label>
+      {search == null && (
+        <label className="sticky top-0 z-10 flex items-center gap-2 rounded-xl bg-[#232c3b] px-3 shadow-[0_6px_12px_-6px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-transparent transition-shadow duration-[var(--duration-fast)] focus-within:ring-atc-yellow/70">
+          <Search className="size-4 shrink-0 text-atc-muted" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Flight, airline, type, tail"
+            aria-label="Search traffic"
+            className="h-10 min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-atc-muted"
+          />
+          <span className="shrink-0 text-caption tabular-nums text-atc-muted">{total}</span>
+        </label>
+      )}
 
       {/* What the traffic has been doing: takeoffs, landings, go-arounds. Live only, and out of the way of a search. */}
       {mode === 'live' && !q && <ActivityList onPick={close} />}
@@ -119,7 +122,7 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
 
       {total === 0 ? (
         q ? (
-          <EmptyState title="No matches">Nothing in view matches “{query}”.</EmptyState>
+          <EmptyState title="No matches">Nothing matches “{query}”.</EmptyState>
         ) : mode === 'live' && liveStatus === 'error' ? (
           <EmptyState
             art={<OfflineArt />}
@@ -130,13 +133,13 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
               </StateAction>
             }
           >
-            The tracking feeds aren’t answering. It keeps retrying by itself.
+            Feeds not answering. Retrying.
           </EmptyState>
         ) : mode === 'live' && liveStatus !== 'ok' ? (
           <ListSkeleton />
         ) : (
           <EmptyState art={<QuietArt className="rounded-[22px] ring-1 ring-white/10" />} title={`All quiet at ${airport.icao}`}>
-            No aircraft in view right now. New ones appear here as they come within range.
+            No aircraft in range.
           </EmptyState>
         )
       ) : (

@@ -16,7 +16,7 @@ import { useWeather } from '../station/StationBar'
 import { runwayWinds } from '../weather/atis'
 import { CloseButton } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
-import { formatRunwaySize, liveRunwayStatus, runwayAt, type RunwayFacts } from './runwayInfo'
+import { formatRunwaySize, liveRunwayStatus, runwayAt, type RunwayFacts } from './runwayInfoModel'
 import { useMap } from './useMap'
 
 /** Finger-sized reach around a runway, in screen pixels. */

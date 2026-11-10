@@ -38,8 +38,8 @@ describe('profiles', () => {
 
 describe('mapPixelRatio', () => {
   it('caps a retina screen per tier but never goes above the screen or below 1', () => {
-    expect(mapPixelRatio(2, 'beautiful')).toBe(2)
-    expect(mapPixelRatio(3, 'beautiful')).toBe(2)
+    expect(mapPixelRatio(2, 'beautiful')).toBe(1.5)
+    expect(mapPixelRatio(3, 'beautiful')).toBe(1.5)
     expect(mapPixelRatio(2, 'balanced')).toBe(1.5)
     expect(mapPixelRatio(2, 'smooth')).toBe(1)
     expect(mapPixelRatio(1, 'beautiful')).toBe(1)

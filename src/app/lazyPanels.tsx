@@ -1,6 +1,5 @@
 /**
- * Sheets nobody needs for the first paint (Settings, Map style and labels,
- * Help), split out of the main bundle. Each is fetched when it is first
+ * Sheets nobody needs for the first paint (Settings, Help), split out of the main bundle. Each is fetched when it is first
  * opened, or quietly a few seconds after start-up so that first open is
  * still instant, and stays mounted after that so it can animate out.
  */
@@ -33,5 +32,4 @@ function lazyPanel(panel: Exclude<Panel, null>, load: () => Promise<ComponentTyp
 }
 
 export const SettingsView = lazyPanel('settings', () => import('../settings/SettingsView').then((m) => m.SettingsView))
-export const LayersPanel = lazyPanel('layers', () => import('./LayersPanel').then((m) => m.LayersPanel))
 export const HelpPanel = lazyPanel('help', () => import('./HelpPanel').then((m) => m.HelpPanel))

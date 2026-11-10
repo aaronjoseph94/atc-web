@@ -1,10 +1,10 @@
 /**
  * Settings: only what people change. Everyday choices up top (start airport,
- * automatic camera, units), a link to the map options, and the diagnostics
- * folded away at the bottom for when something seems wrong.
+ * automatic camera, units), the map toggles, and the diagnostics folded away
+ * at the bottom for when something seems wrong.
  */
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, MessageSquareText } from 'lucide-react'
+import { ChevronDown, MessageSquareText } from 'lucide-react'
 import { useState } from 'react'
 import { AIRPORTS } from '../api/airports'
 import { getAiStatus, getHealth } from '../api/client'
@@ -58,7 +58,7 @@ export function SettingsView() {
             ))}
           </select>
         </Row>
-        <Row label="Automatic camera" hint="Follows takeoffs, landings and radio calls">
+        <Row label="Automatic camera" hint="Follows the action">
           <Toggle
             checked={settings.autoCamera}
             label="Automatic camera"
@@ -73,7 +73,7 @@ export function SettingsView() {
         </Row>
         {/* Only phones with a vibration motor (or iPhone's switch tick) get the option. */}
         {hasHaptics && (
-          <Row label="Haptics" hint="Light taps on the dial, the card and radio calls">
+          <Row label="Haptics" hint="Taps on dial, card, radio">
             <Toggle checked={settings.haptics} onChange={set('haptics')} label="Haptics" />
           </Row>
         )}
@@ -106,16 +106,46 @@ export function SettingsView() {
         </Row>
       </Group>
 
+      <SectionLabel>Map</SectionLabel>
+      <Group>
+        <Row label="Callsigns">
+          <Segmented
+            label="Callsign labels"
+            value={settings.labels}
+            options={[
+              ['auto', 'Auto'],
+              ['always', 'All'],
+              ['never', 'Off'],
+            ]}
+            onChange={set('labels')}
+          />
+        </Row>
+        <Row label="Altitude and type">
+          <Toggle checked={settings.dataBlocks} onChange={set('dataBlocks')} label="Altitude and type under callsigns" />
+        </Row>
+        <Row label="Trails">
+          <Toggle checked={settings.trails} onChange={set('trails')} label="Trails" />
+        </Row>
+        <Row label="Approach paths">
+          <Toggle checked={settings.approachPaths} onChange={set('approachPaths')} label="Approach paths" />
+        </Row>
+        <Row label="Procedures" hint="US only">
+          <Toggle checked={settings.procedures} onChange={set('procedures')} label="Arrival, departure and approach procedures" />
+        </Row>
+        <Row label="Weather radar" hint="US only">
+          <Toggle checked={settings.weatherRadar} onChange={set('weatherRadar')} label="Weather radar" />
+        </Row>
+        <Row label="Hide ground traffic">
+          <Toggle checked={settings.hideGround} onChange={set('hideGround')} label="Hide aircraft on the ground" />
+        </Row>
+      </Group>
+
       <SpottingSettingsGroup />
       <InsightSettingsGroup />
 
       <AiSettingsGroup />
 
       <Group className="mt-6">
-        <button type="button" className="pressable-soft -mx-3.5 flex min-h-12 w-[calc(100%+1.75rem)] items-center justify-between rounded-2xl px-3.5 text-left text-subhead font-medium hover:bg-white/[0.04]" onClick={() => setPanel('layers')}>
-          Map style and labels
-          <ChevronRight className="size-4 text-white/40" />
-        </button>
         <button type="button" className="pressable-soft -mx-3.5 flex min-h-12 w-[calc(100%+1.75rem)] items-center justify-between rounded-2xl px-3.5 text-left text-subhead font-medium hover:bg-white/[0.04]" onClick={openFeedback}>
           Send feedback
           <MessageSquareText className="size-4 text-white/40" />
@@ -163,7 +193,7 @@ export function SettingsView() {
           <UnrecognisedDataGroup />
         </div>
       )}
-      <p className="mt-5 px-1 text-caption text-atc-muted">Settings, pinned airports and history stay in this browser.</p>
+      <p className="mt-5 px-1 text-caption text-atc-muted">Stored in this browser.</p>
     </Sheet>
   )
 }
@@ -183,9 +213,7 @@ function AiStatus() {
         <span className="text-subhead font-semibold">{status.isPending ? 'Checking…' : on ? 'AI radio summaries on' : 'Built-in radio phrasebook'}</span>
       </div>
       <p className="mt-1.5 text-footnote text-atc-muted">
-        {on
-          ? `In a replay, tapping a plane asks ${s.model} for a plain-English summary of its latest radio calls.`
-          : 'In a replay, tapping a plane explains its latest radio call in everyday words. Set AI_API_KEY on the server to have a model write it instead.'}
+        {on ? `Replay summaries by ${s.model}.` : 'Built-in phrasebook. Set AI_API_KEY for AI summaries.'}
       </p>
     </Group>
   )
@@ -203,7 +231,7 @@ function BackendStatus() {
     <Group className="py-3">
       <div className="flex items-center gap-2">
         <span className={`size-2 rounded-full ${ok ? 'bg-emerald-400' : health.isPending ? 'bg-atc-muted' : 'bg-atc-live'}`} />
-        <span className="text-subhead font-semibold">{health.isPending ? 'Checking the feed…' : ok ? 'Traffic feed is answering' : 'Traffic feed isn’t answering'}</span>
+        <span className="text-subhead font-semibold">{health.isPending ? 'Checking…' : ok ? 'Feed up' : 'Feed down'}</span>
       </div>
       <dl className="mt-2.5 grid grid-cols-3 gap-x-3 gap-y-2 text-footnote">
         <KV k="Source" v={h?.provider ?? '—'} />
@@ -225,7 +253,7 @@ function BackendStatus() {
           ))}
         </ul>
       )}
-      <p className="mt-2.5 text-caption text-atc-muted">Free community ADS-B feeds: adsb.fi and adsb.lol merged, OpenSky as a last resort; a failing feed is skipped automatically. No accounts or keys.</p>
+      <p className="mt-2.5 text-caption text-atc-muted">Community ADS-B and MLAT feeds, merged; a failing feed is skipped.</p>
     </Group>
   )
 }

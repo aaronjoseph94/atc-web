@@ -1,5 +1,5 @@
 /**
- * Which LiveATC stream carries which of our channels.
+ * Which radio stream carries which of our channels.
  *
  * The feed list (`liveatcFeeds.ts`) was built by probing LiveATC's stream
  * server for each airport and reading the name each stream announces
@@ -12,7 +12,7 @@ import { LIVEATC_FEEDS } from './liveatcFeeds'
 import type { Station, StationKind } from './types'
 
 export type RadioFeed = {
-  /** LiveATC mount point: the stream is `https://d.liveatc.net/<mount>`. */
+  /** LiveATC mount point (the stream is `https://d.liveatc.net/<mount>`), or a full `https://` stream URL (own receiver, any Icecast/SHOUTcast server). */
   mount: string
   /** Name the stream announces, e.g. `KJFK Tower 119.1`. */
   name: string
@@ -24,8 +24,9 @@ export type RadioFeed = {
   alt?: string[]
 }
 
-/** Where the browser connects for a mount. LiveATC redirects to whichever of its servers carries it. */
+/** Where the browser connects for a mount: a full URL as-is, else LiveATC (which redirects to whichever of its servers carries it). */
 export function streamUrl(mount: string): string {
+  if (/^https?:\/\//.test(mount)) return mount
   return `https://d.liveatc.net/${encodeURIComponent(mount)}`
 }
 

@@ -7,4 +7,5 @@
 export const TRAFFIC_ATTRIBUTION =
   'Traffic: <a href="https://adsb.fi" target="_blank" rel="noreferrer">adsb.fi</a>, ' +
   '<a href="https://adsb.lol" target="_blank" rel="noreferrer">adsb.lol</a> (<a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer">ODbL</a>), ' +
+  '<a href="https://adsb.one" target="_blank" rel="noreferrer">adsb.one</a>, ' +
   '<a href="https://opensky-network.org" target="_blank" rel="noreferrer">OpenSky</a>'

@@ -509,11 +509,11 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
           ))}
         </>
       )}
-      {playback && hits.length > 0 && <p className="py-6 text-center text-caption text-white/35">Tap a line to jump the replay there.</p>}
+      {playback && hits.length > 0 && <p className="py-6 text-center text-caption text-white/35">Tap a line to jump there.</p>}
       {!playback && radioCount > 0 && hits.length > 0 && (
         <p className="flex items-center justify-center gap-1.5 py-6 text-center text-caption text-white/35">
           <AudioLines className="size-3.5" />
-          Live audio from LiveATC.net. Transcripts are machine-made and can be wrong.
+          Transcripts are automatic and can be wrong.
         </p>
       )}
       <div ref={listEnd} />

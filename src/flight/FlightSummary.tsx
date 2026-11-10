@@ -11,6 +11,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { icaoCode } from '../api/airportData'
 import { getAirport } from '../api/airports'
 import type { FlightInfo, RouteAirport } from '../api/types'
+import { POSITION_SOURCE_LABEL } from '../api/types'
 import { airlineInfo, flightDesignator, parseCallsign } from '../airline/airlines'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '../settings/settingsStore'
@@ -174,6 +175,7 @@ export function FlightSummary({ flight, info, infoLoading }: { flight: FlightVie
             tone={squawkAlert || emergency ? 'alert' : undefined}
             hint={emergency ? `emergency: ${emergency}` : squawkAlert ? squawkAlert : d.squawk === '1200' ? 'flying visually (VFR)' : d.squawk ? 'assigned by ATC' : null}
           />
+          {d.source && <Cell label="Position" value={POSITION_SOURCE_LABEL[d.source]} hint={d.source === 'mlat' ? 'multilateration' : d.source === 'tisb' || d.source === 'adsr' ? 'rebroadcast' : null} />}
           {fromAirport && (
             <Cell
               label={`From ${airport.icao}`}

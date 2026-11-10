@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getRunways } from '../api/airportData'
 import { offset, type LngLat } from '../map/geo'
 import type { ActiveRunways, RunwayUse } from '../live/runwayUse'
-import { formatRunwaySize, liveRunwayStatus, runwayAt, surfaceName, type RunwayFacts } from './runwayInfo'
+import { formatRunwaySize, liveRunwayStatus, runwayAt, surfaceName, type RunwayFacts } from './runwayInfoModel'
 
 describe('surfaceName', () => {
   it('reads the common codes', () => {
