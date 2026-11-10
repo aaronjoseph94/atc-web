@@ -5,9 +5,9 @@
  * Several free, key-less ADS-B feeds give the same normalized output:
  *  - adsb.fi open data (readsb JSON, 1 req/s, cite + link required)
  *  - adsb.lol (readsb JSON, ODbL 1.0, dynamic rate limit)
- *  - airplanes.live (readsb JSON, 1 req/s, non-commercial) — off unless the
- *    owner has their permission: the API now answers "contact us" to
- *    unknown projects, see docs/data-sources.md
+ *  - airplanes.live (readsb JSON, 1 req/s, non-commercial): used with the
+ *    owner's permission from airplanes.live; set ATC_ENABLE_AIRPLANES_LIVE=0
+ *    to turn it off. See docs/data-sources.md
  *  - OpenSky Network (anonymous: 400 credits a day, 10 s resolution) as the
  *    last resort only, so its small daily allowance is there when the
  *    community feeds are all down
@@ -116,7 +116,7 @@ export const adsbLol: AircraftProvider = {
   },
 }
 
-/** airplanes.live — same readsb shape (1 req/s, non-commercial). Opt-in, see the file header. */
+/** airplanes.live — same readsb shape (1 req/s, non-commercial). Used with their permission, see the file header. */
 export const airplanesLive: AircraftProvider = {
   name: 'airplanes.live',
   credit: { label: 'airplanes.live', url: 'https://airplanes.live' },
@@ -147,7 +147,7 @@ export const ALL_PROVIDERS: AircraftProvider[] = [adsbFi, adsbLol, airplanesLive
 
 /** Settings read from the environment (Pages env bindings or `process.env` in dev). */
 export type SourceEnv = {
-  /** `1` once airplanes.live has agreed to this project using their API. */
+  /** `0` turns airplanes.live off (the owner has their permission, so it is on by default). */
   ATC_ENABLE_AIRPLANES_LIVE?: string
   /** Comma list of feed names to point at a dead URL, to rehearse failover. */
   ATC_FAIL_SOURCES?: string
@@ -155,7 +155,7 @@ export type SourceEnv = {
 
 /** The feeds in use for this environment (opt-ins added, rehearsal failures wired in). */
 export function providersFor(env: SourceEnv = {}): AircraftProvider[] {
-  const enabled = ALL_PROVIDERS.filter((p) => p !== airplanesLive || env.ATC_ENABLE_AIRPLANES_LIVE === '1')
+  const enabled = ALL_PROVIDERS.filter((p) => p !== airplanesLive || env.ATC_ENABLE_AIRPLANES_LIVE !== '0')
   const broken = new Set((env.ATC_FAIL_SOURCES ?? '').split(',').map((s) => s.trim()).filter(Boolean))
   return enabled.map((p) => (broken.has(p.name) ? rehearsedFailure(p) : p))
 }

@@ -8,7 +8,7 @@ Checked November 2026. Terms change; re-check before a public launch, and treat 
 "non-commercial" need a written OK or a paid plan first. Two things need the owner's action now:
 
 1. **LiveATC (radio):** get written permission before the app plays LiveATC streams for anyone other than you (see [Radio](#atc-radio)).
-2. **airplanes.live (traffic, optional):** email them if you want it as an extra feed; it stays off until you do (see [ADS-B](#ads-b-positions)).
+2. **airplanes.live (traffic):** the owner has airplanes.live's approval, so it is on by default; set `ATC_ENABLE_AIRPLANES_LIVE=0` to switch it off (see [ADS-B](#ads-b-positions)).
 
 ## How the app uses them
 
@@ -35,7 +35,7 @@ line credits them.
 | --- | --- | --- | --- | --- |
 | [adsb.fi](https://adsb.fi) open data | `opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{nm}` | Personal, **non-commercial** use; no reselling; as-is ([terms](https://github.com/adsbfi/opendata)) | 1 request/s per IP; 4xx answers count towards a temporary ban | Must cite adsb.fi with a link (map attribution + Help). Contact them for commercial use or higher rates. |
 | [adsb.lol](https://adsb.lol) | `api.adsb.lol/v2/point/{lat}/{lon}/{nm}` | Open data under **ODbL 1.0** | "Dynamic", load-based; no key today. They say a key (free, for feeders) will be required in future. | ODbL attribution (map attribution + Help say "adsb.lol (ODbL)"). If a key becomes mandatory: feed data to adsb.lol or request a key at adsb.lol, then add it as a Pages secret. |
-| [airplanes.live](https://airplanes.live) | `api.airplanes.live/v2/point/{lat}/{lon}/{nm}` | **Non-commercial**, no SLA | 1 request/s | **Off by default.** From our servers the API now answers 403 "Please contact us at contact@airplanes.live … include any links, a description of the project". Email them; once they agree, set `ATC_ENABLE_AIRPLANES_LIVE=1` in Pages env vars. |
+| [airplanes.live](https://airplanes.live) | `api.airplanes.live/v2/point/{lat}/{lon}/{nm}` | **Non-commercial**, no SLA | 1 request/s | **On** (the owner has their approval). Unapproved callers get 403 "Please contact us…"; if that appears, the failover skips it. `ATC_ENABLE_AIRPLANES_LIVE=0` switches it off. |
 | [OpenSky Network](https://opensky-network.org) | `opensky-network.org/api/states/all?lamin…` (anonymous) | Free for research and **non-commercial** use; commercial use needs a licence from OpenSky | Anonymous: 400 credits/day per IP (an airport-sized box costs 1), 10 s resolution | Credit "The OpenSky Network" (map attribution + Help). Used only when every other feed has errored. It has refused requests from Cloudflare's network before (HTTP 522), so don't count on it in production; a free OpenSky account (OAuth2 client credentials, 4,000 credits/day) is the upgrade path if needed. |
 
 Not used: ADS-B Exchange (its API is paid), FlightAware and Flightradar24 (paid, no redistribution).
