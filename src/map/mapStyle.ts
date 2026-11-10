@@ -263,12 +263,12 @@ const FONT_BOLD = ['Noto Sans Bold']
  * Line width that tracks a real-world width in metres (doubles every zoom
  * level), worked out at 40°N. `m` may be an expression, so generated features
  * can carry their own width and latitude factor (`k`, see `widthScale`).
- * `minPx` keeps small marks visible when zoomed out.
+ * `minPx` keeps small marks visible when zoomed out; `topZoom` is the last stop.
  */
-function metres(m: number | unknown[], minPx = 0): unknown[] {
+function metres(m: number | unknown[], minPx = 0, topZoom = 22): unknown[] {
   // Pixels at z10, then ×2 per zoom: with 512 px tiles one pixel is 76.44 m at the equator at z10.
   const px10 = 1 / (76.437 * Math.cos((40 * Math.PI) / 180))
-  const stops = [10, 13, 14, 15, 16, 22].flatMap((z) => {
+  const stops = [10, 13, 14, 15, 16, topZoom].flatMap((z) => {
     const f = px10 * 2 ** (z - 10)
     const v = typeof m === 'number' ? m * f : ['*', m, f]
     return [z, minPx ? (typeof v === 'number' ? Math.max(minPx, v) : ['max', minPx, v]) : v]
@@ -416,7 +416,9 @@ function layers(p: Palette): LayerSpecification[] {
         'symbol-placement': 'line',
         'symbol-spacing': metres(40, 1) as never,
         'icon-image': KEEPOUT_IMAGE,
-        'icon-size': metres(['/', ownWidth(45), KEEPOUT_PX], 0.1) as never,
+        // Topped out at z20 (past the map's deepest zoom): MapLibre evaluates icon sizes at the
+        // surrounding stops, and the z22 one would pass its 255 limit and fill the console with warnings.
+        'icon-size': metres(['/', ownWidth(45), KEEPOUT_PX], 0.1, 20) as never,
         'icon-rotation-alignment': 'map',
         'icon-allow-overlap': true,
         'icon-padding': 0,

@@ -18,6 +18,7 @@ import { ATC_COLORS, speakerColors, type SpeakerColors } from '../ui/speaker'
 import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
 import { AircraftFx, hideCoveredFins, LIVERY_MIN_ZOOM } from './fx/aircraftFx'
 import type { LiveAircraft, LivePositionBuffer } from './livePositions'
+import { addImageHandler } from './imageResolver'
 import { ensureMapImages, ICON_REACH_PX, ICON_SCALE, iconFor, iconImage } from './mapImages'
 import { iconZoomFactor, LAYER, SRC } from './mapStyle'
 import { ParkedHeadings } from './parkedHeading'
@@ -70,6 +71,7 @@ export function AircraftLayer(props: Props) {
     // Aircraft artwork is drawn per class when a feature first asks for it.
     const onMissing = (e: { id: string }) => ensureMapImages(map, e.id)
     map.on('styleimagemissing', onMissing)
+    const detachImages = addImageHandler(map, (m, id) => ensureMapImages(m, id))
     // Callsign tags are bitmaps drawn on demand.
     const detachTags = attachTagImages(map)
 
@@ -300,6 +302,7 @@ export function AircraftLayer(props: Props) {
       parkedHeadings.clear()
       detachTags()
       map.off('styleimagemissing', onMissing)
+      detachImages()
       map.off('click', LAYER.hit, click)
       map.off('click', mapClick)
       map.off('mousemove', LAYER.hit, move)

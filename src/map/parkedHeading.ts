@@ -19,12 +19,12 @@ import { distanceM, type LngLat } from './geo'
 const MOVED_M = 15
 /** How often missing guesses are looked for (tiles may have arrived since). */
 const LOOK_MS = 1500
-/** A failed guess is tried again after this long (the buildings may not have been loaded). */
+/** A failed guess is tried again after this long, or as soon as the view has changed (the buildings may not have been loaded). */
 const RETRY_MS = 5000
 /** Buildings are only in the tiles from about this zoom. */
 const MIN_ZOOM = 13
 
-type Guess = { pos: LngLat; heading: number | null; at: number }
+type Guess = { pos: LngLat; heading: number | null; at: number; view: string }
 
 /** An aircraft that would be drawn as a marker: on the ground, standing still, with no reported heading. */
 export function wantsGuess(a: { headingKnown?: boolean; onGround: boolean; speedKt: number | null; category?: string | null }): boolean {
@@ -53,6 +53,9 @@ export class ParkedHeadings {
    */
   update(map: MapLibreMap, list: { icao24: string; lon: number; lat: number; headingKnown?: boolean; onGround: boolean; speedKt: number | null; category?: string | null }[], now: number) {
     if (now - this.lookedAt < LOOK_MS) return
+    // Which tiles are loaded: a failed guess is worth another look once this changes.
+    const c = map.getCenter()
+    const view = `${Math.floor(map.getZoom() * 2)},${c.lng.toFixed(2)},${c.lat.toFixed(2)}`
     const todo: { id: string; pos: LngLat }[] = []
     const seen = new Set<string>()
     for (const a of list) {
@@ -60,19 +63,19 @@ export class ParkedHeadings {
       seen.add(a.icao24)
       const pos: LngLat = [a.lon, a.lat]
       const g = this.guesses.get(a.icao24)
-      if (g && distanceM(g.pos, pos) < MOVED_M && (g.heading != null || now - g.at < RETRY_MS)) continue
+      if (g && distanceM(g.pos, pos) < MOVED_M && (g.heading != null || (now - g.at < RETRY_MS && g.view === view))) continue
       todo.push({ id: a.icao24, pos })
     }
     for (const id of this.guesses.keys()) if (!seen.has(id)) this.guesses.delete(id)
     if (!todo.length) return
     this.lookedAt = now
     // Buildings aren't in the far tiles, and tiles still loading would give a wrong "no building here".
-    if (map.getZoom() < MIN_ZOOM || !map.isSourceLoaded('omt')) return
+    if (map.getZoom() < MIN_ZOOM || map.isMoving() || !map.isSourceLoaded('omt')) return
     const rings = buildingRings(map)
     for (const { id, pos } of todo) {
       // About 100 m in degrees: only buildings around this aircraft.
       const near = rings.filter(({ box }) => pos[0] > box[0] - 0.0015 && pos[0] < box[2] + 0.0015 && pos[1] > box[1] - 0.001 && pos[1] < box[3] + 0.001).map((r) => r.ring)
-      this.guesses.set(id, { pos, heading: near.length ? noseInHeading(pos, near) : null, at: now })
+      this.guesses.set(id, { pos, heading: near.length ? noseInHeading(pos, near) : null, at: now, view })
     }
   }
 

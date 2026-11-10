@@ -136,7 +136,7 @@ function attribute(text: string, job: CallMeta): Transmission {
   const airport = getAirport(job.airport)
   const mentions = findCallsigns(text)
   const traffic = liveBuffer.sample()
-  const matches = matchMentions(mentions, traffic, { stationKind: job.kind, elevationFt: airport.elevationFt })
+  const matches = matchMentions(mentions, traffic, { stationKind: job.kind, elevationFt: airport.elevationFt, field: { center: airport.center, elevationFt: airport.elevationFt } })
   const byMention = new Map(matches.map((m) => [m.mention, m]))
   return {
     id: `rx-${job.endedAt}-${seq++}`,

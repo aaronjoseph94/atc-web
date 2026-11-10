@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { easeInOutCubic, focusZoom } from './useRadioCamera'
+import type { LiveAircraft } from './livePositions'
+import { cameraTargets, easeInOutCubic, focusZoom } from './useRadioCamera'
 
 const airport = { zoom: 12.2, elevationFt: 13 }
 
@@ -23,5 +24,18 @@ describe('radio camera', () => {
     expect(easeInOutCubic(0.5)).toBeCloseTo(0.5)
     expect(easeInOutCubic(0.1)).toBeLessThan(0.1)
     expect(easeInOutCubic(0.9)).toBeGreaterThan(0.9)
+  })
+})
+
+describe('cameraTargets', () => {
+  const jfk = { center: [-73.7781, 40.6413] as [number, number], elevationFt: 13 }
+  const plane = (icao24: string, lon: number, lat: number, onGround: boolean) => ({ icao24, callsign: icao24, lon, lat, onGround, altitudeFt: onGround ? null : 3000, heading: 0, speedKt: 0, opacity: 1 }) as unknown as LiveAircraft
+  const list = [plane('jfk', -73.785, 40.645, true), plane('lga', -73.874, 40.7769, true), plane('air', -73.874, 40.7769, false)]
+
+  it('leaves out aircraft on the ground at another airport', () => {
+    expect(cameraTargets(list, ['jfk', 'lga'], jfk).map((a) => a.icao24)).toEqual(['jfk'])
+    expect(cameraTargets(list, ['lga'], jfk)).toEqual([])
+    // Overhead the other field but in the air: still worth a look.
+    expect(cameraTargets(list, ['air', 'gone'], jfk).map((a) => a.icao24)).toEqual(['air'])
   })
 })

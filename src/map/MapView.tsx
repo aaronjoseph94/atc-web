@@ -6,11 +6,13 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Map as MapLibreMap, RasterTileSource } from 'maplibre-gl'
+import type { MapRef } from 'react-map-gl/maplibre'
 import { getAirport } from '../api/airports'
 import { getAircraft } from '../api/client'
 import { TRAFFIC_ATTRIBUTION } from '../api/credits'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
+import { atOtherField } from '../live/radio/match'
 import { TaxiRouteLayer } from '../live/taxi/TaxiRouteLayer'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
@@ -20,13 +22,35 @@ import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
 import { AtmosphereLayer } from './atmosphere/AtmosphereLayer'
+import { surfaceImage } from './atmosphere/textures'
+import { installImageResolver, type ImageHandler } from './imageResolver'
+import { ensureMapImages } from './mapImages'
 import { LightingLayer } from './lighting/LightingLayer'
 import { RunwayGateLayer } from './RunwayGateLayer'
 import type { LiveAircraft } from './livePositions'
 import { ProceduresLayer } from './ProceduresLayer'
-import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
+import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, KEEPOUT_IMAGE, KEEPOUT_PX, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
 import { RippleLayer } from './RippleLayer'
 import { useRadioCamera } from './useRadioCamera'
+
+/**
+ * Images the style itself names, drawn the first time a tile asks for them:
+ * the aircraft artwork and effect sprites, the plates and gate chips, the
+ * pavement grain and water sheen, the runway keep-out block.
+ */
+const STYLE_IMAGES: ImageHandler[] = [
+  (map, id) => ensureMapImages(map, id),
+  surfaceImage,
+  (map, id) => {
+    if (id === KEEPOUT_IMAGE && !map.hasImage(id)) map.addImage(id, { width: KEEPOUT_PX, height: KEEPOUT_PX, data: new Uint8Array(KEEPOUT_PX * KEEPOUT_PX * 4) })
+  },
+]
+
+/** Called with the map as soon as it exists, before its first tiles are laid out. */
+function onMapRef(ref: MapRef | null) {
+  const map = ref?.getMap()
+  if (map) installImageResolver(map, STYLE_IMAGES)
+}
 
 /** Extra zoom applied when the camera closes in on a talking/selected aircraft. */
 const FOCUS_ZOOM_BOOST = 1.5
@@ -217,7 +241,9 @@ export function MapView() {
       // automatic mode, whoever is being talked about.
       const talking = (s.activeCallsign ?? (s.mode === 'live' ? s.caption?.icao24 : null))?.toLowerCase() ?? null
       const wanted = s.following && s.selectedIcao ? s.selectedIcao : s.cameraMode === 'auto' && !s.selectedIcao ? talking : null
-      const target = wanted ? list.find((a) => a.icao24 === wanted) : undefined
+      let target = wanted ? list.find((a) => a.icao24 === wanted) : undefined
+      // Whoever is talked about on the ground at another airport keeps the highlight; the automatic camera stays home.
+      if (target && !s.following && atOtherField(target, airport)) target = undefined
 
       if (target) {
         f.homeAt = 0
@@ -312,6 +338,7 @@ export function MapView() {
     <div className="absolute inset-0 bg-atc-map">
       <Suspense fallback={<MapSkeleton />}>
         <MapGL
+          ref={onMapRef}
           mapStyle={style}
           initialViewState={initialView}
           style={{ width: '100%', height: '100%' }}
