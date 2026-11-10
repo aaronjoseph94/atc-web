@@ -10,8 +10,8 @@
  * progress, every number, and the conversation so far (radio calls in a
  * replayed scene, logged events for live traffic).
  */
-import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Plane, Radio, Sparkles, X } from 'lucide-react'
-import type { FlightInfo, RouteAirport } from '../api/types'
+import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
+import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
 import { distanceM } from '../map/geo'
 import { FrequencyTuner } from '../station/FrequencyTuner'
 import { usePlayhead } from '../playback/playheadStore'
@@ -145,6 +145,49 @@ export function FlightCard() {
         <p className="px-4 pb-[max(0.9rem,var(--safe-bottom))] pt-2.5 text-center text-[13px] font-medium text-white/75 md:pb-3.5">{flight.stationLine}</p>
       )}
     </section>
+  )
+}
+
+/**
+ * One radio call in the conversation: grey for the controller, blue for the
+ * pilot. Tap to hear it again; the call on the air wears a pause button
+ * whose ring fills as it is spoken.
+ */
+function CallBubble({ cue }: { cue: TranscriptCue }) {
+  const pilot = /pilot/i.test(cue.speaker ?? '')
+  const playing = usePlayhead((s) => s.playing)
+  const progress = usePlayhead((s) => (s.tMs >= cue.startMs && s.tMs < cue.endMs ? (s.tMs - cue.startMs) / Math.max(1, cue.endMs - cue.startMs) : -1))
+  const setTMs = usePlayhead((s) => s.setTMs)
+  const setPlaying = usePlayhead((s) => s.setPlaying)
+  const onAir = progress >= 0
+  const R = 15
+  const C = 2 * Math.PI * R
+  return (
+    <li className={`relative max-w-[86%] animate-rise ${pilot ? 'self-end' : 'self-start'}`}>
+      <button
+        type="button"
+        data-no-drag
+        onClick={() => {
+          if (onAir && playing) return setPlaying(false)
+          if (!onAir) setTMs(cue.startMs)
+          setPlaying(true)
+        }}
+        aria-label={`${pilot ? 'Pilot' : 'Controller'}: ${cue.text}. ${onAir && playing ? 'Pause' : 'Play this call'}`}
+        className={`block w-full rounded-[1.35rem] px-4 py-3 text-left text-[15px] leading-snug transition active:scale-[0.98] ${
+          pilot ? 'bg-atc-blue text-white hover:brightness-110' : 'bg-white/[0.11] text-white/90 hover:bg-white/[0.15]'
+        }`}
+      >
+        {cue.text}
+      </button>
+      {onAir && (
+        <span aria-hidden className={`pointer-events-none absolute -top-4 flex size-9 animate-pop items-center justify-center rounded-full bg-atc-magenta shadow-lg ${pilot ? '-left-3' : '-right-3'}`}>
+          <svg viewBox="0 0 36 36" className="absolute inset-0 size-9 -rotate-90">
+            <circle cx="18" cy="18" r={R} fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - progress)} />
+          </svg>
+          {playing ? <Pause className="size-3.5 fill-white text-white" /> : <Play className="size-3.5 fill-white text-white" />}
+        </span>
+      )}
+    </li>
   )
 }
 
@@ -309,17 +352,11 @@ export function FlightDetail() {
                 {flight.stationLine.replace(`${flight.airportCode} `, '')}
               </h3>
               <ol className="flex flex-col gap-2.5">
-                {flight.calls.map((c) => {
-                  const pilot = /pilot/i.test(c.speaker ?? '')
-                  return (
-                    <li key={c.id} className={`max-w-[86%] animate-rise rounded-2xl px-3.5 py-2.5 text-[15px] leading-snug ${pilot ? 'self-end rounded-br-md bg-atc-blue text-white' : 'self-start rounded-bl-md bg-white/10 text-white/90'}`}>
-                      <span className="sr-only">{pilot ? 'Pilot: ' : 'Controller: '}</span>
-                      {c.text}
-                    </li>
-                  )
-                })}
+                {flight.calls.map((c) => (
+                  <CallBubble key={c.id} cue={c} />
+                ))}
               </ol>
-              <p className="mt-4 text-center text-xs text-white/40">New transmissions appear here as the replay plays.</p>
+              <p className="mt-4 text-center text-xs text-white/40">New transmissions will appear here</p>
             </section>
           ) : (
             <section className="mt-6" aria-label="Tower log">
