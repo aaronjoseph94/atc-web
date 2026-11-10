@@ -167,6 +167,8 @@ export type Weather = {
   icao: string
   metar: Metar | null
   atis: Atis[]
+  /** Raw terminal forecast (TAF), where one is issued. */
+  taf?: string | null
   fetchedAt: string
 }
 

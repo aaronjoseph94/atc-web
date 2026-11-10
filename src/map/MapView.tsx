@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Map as MapLibreMap, RasterTileSource } from 'maplibre-gl'
 import { getAirport } from '../api/airports'
 import { getAircraft } from '../api/client'
+import { TRAFFIC_ATTRIBUTION } from '../api/credits'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
 import { usePlayhead } from '../playback/playheadStore'
@@ -309,7 +310,7 @@ export function MapView() {
           mapStyle={style}
           initialViewState={initialView}
           style={{ width: '100%', height: '100%' }}
-          attributionControl={{ compact: true }}
+          attributionControl={{ compact: true, customAttribution: TRAFFIC_ATTRIBUTION }}
           maxPitch={70}
           minZoom={7}
           maxZoom={19}

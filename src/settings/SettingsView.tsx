@@ -223,9 +223,20 @@ function BackendStatus() {
         <KV k="Served from" v={h?.runtime ?? '—'} />
       </dl>
       {h?.error && <p className="mt-2 break-words text-xs text-atc-live">{h.error}</p>}
+      {h?.sources && (
+        <ul className="mt-3 space-y-1 text-xs">
+          {h.sources.filter((s) => s.enabled !== false).map((s) => (
+            <li key={s.name} className="flex items-center gap-2" title={s.error ?? s.note ?? ''}>
+              <span className={`size-1.5 shrink-0 rounded-full ${s.ok ? 'bg-emerald-400' : s.ok === false ? 'bg-atc-live' : 'bg-white/30'}`} />
+              <span className="font-medium">{s.name}</span>
+              <span className="truncate text-atc-muted">{s.ok === false ? (s.error ?? 'failing') : s.latencyMs != null ? `${s.latencyMs} ms` : 'standby'}{s.breaker === 'open' ? ' · paused' : ''}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="mt-3 text-[11px] text-atc-muted">
-        Traffic comes from free community ADS-B feeds, tried in this order: adsb.lol, adsb.fi, OpenSky. Answers are shared
-        at the edge for a few seconds. No accounts or API keys are used.
+        Traffic comes from free community ADS-B feeds: adsb.fi and adsb.lol are merged, with OpenSky as a last resort, and a
+        failing feed is skipped automatically. Answers are shared at the edge for a few seconds. No accounts or API keys are used.
       </p>
     </div>
   )
