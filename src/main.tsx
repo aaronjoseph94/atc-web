@@ -16,3 +16,10 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     void navigator.serviceWorker.register('/sw.js').catch(() => {})
   })
 }
+
+// Handles for poking at the app from the console and from browser tests (development only).
+if (import.meta.env.DEV) {
+  void Promise.all([import('./playback/playheadStore'), import('./live/session'), import('./settings/settingsStore')]).then(([p, l, s]) => {
+    Object.assign(window, { __atc: { playhead: p.usePlayhead, settings: s.useSettings, ...l } })
+  })
+}

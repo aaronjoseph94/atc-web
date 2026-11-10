@@ -4,7 +4,7 @@
  * middleware in development.
  */
 import type { AiStatus, SummarizeRequest, SummarizeResponse } from './summarizeHandler'
-import type { Aircraft, ClipPack, Station } from './types'
+import type { Aircraft, AircraftSnapshot, ClipPack, ClipSummary, FlightInfo, Station, Weather } from './types'
 
 /** Diagnostics payload returned by `/api/health`. */
 export type Health = {
@@ -24,8 +24,37 @@ async function getJson<T>(url: string, what: string): Promise<T> {
   return (await res.json()) as T
 }
 
-export function getAircraft(airport = 'ORD'): Promise<Aircraft[]> {
-  return getJson(`/api/aircraft?airport=${encodeURIComponent(airport)}`, 'aircraft')
+/**
+ * Live traffic near an airport. The body is the aircraft list; which feed
+ * answered (or why none did) travels in response headers so an empty sky can
+ * be told apart from a broken feed.
+ */
+export async function getAircraft(airport = 'ORD'): Promise<AircraftSnapshot> {
+  const res = await fetch(`/api/aircraft?airport=${encodeURIComponent(airport)}`)
+  if (!res.ok) throw new Error(`aircraft fetch failed (${res.status})`)
+  const error = res.headers.get('X-Upstream-Error')
+  const aircraft = (await res.json()) as Aircraft[]
+  if (error && aircraft.length === 0) throw new Error(error)
+  return { aircraft, provider: res.headers.get('X-Provider'), error }
+}
+
+/** Current METAR and, where published, the digital ATIS for an airport. */
+export function getWeather(airport = 'ORD'): Promise<Weather> {
+  return getJson(`/api/weather?airport=${encodeURIComponent(airport)}`, 'weather')
+}
+
+/** Scheduled route, airframe details and a credited photo for one flight. */
+export function getFlightInfo(hex: string | null, callsign: string | null): Promise<FlightInfo> {
+  const q = new URLSearchParams()
+  if (hex) q.set('hex', hex)
+  if (callsign) q.set('callsign', callsign)
+  return getJson(`/api/flight?${q.toString()}`, 'flight info')
+}
+
+/** Catalog of bundled playback clips (static JSON, cached by the service worker). */
+export async function getClipIndex(): Promise<ClipSummary[]> {
+  const data = await getJson<{ clips?: ClipSummary[] }>('/clips/index.json', 'clip index')
+  return data.clips ?? []
 }
 
 export function getStations(): Promise<Station[]> {

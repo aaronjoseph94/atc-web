@@ -11,7 +11,7 @@ import { DEFAULT_AIRPORT } from '../api/airports'
 export type AltitudeUnit = 'ft' | 'm'
 export type SpeedUnit = 'kt' | 'kmh' | 'mph'
 export type LabelMode = 'auto' | 'always' | 'never'
-export type MapTheme = 'navy' | 'graphite'
+export type MapTheme = 'navy' | 'graphite' | 'satellite' | 'chart'
 
 export type Settings = {
   /** Airport shown on launch. */
@@ -29,10 +29,32 @@ export type Settings = {
   /** Disable pulse/camera easing for motion-sensitive users. */
   reduceMotion: boolean
   mapTheme: MapTheme
+  /** Second label line with altitude, trend and type, like a controller's data block. */
+  dataBlocks: boolean
+  /** Faint wake behind every airborne aircraft. */
+  trails: boolean
+  /** Drop shadows that grow with height above the field. */
+  shadows: boolean
+  /** Dashed extended centrelines with mile ticks. */
+  approachPaths: boolean
+  /** Precipitation radar overlay (US). */
+  weatherRadar: boolean
+  /** Let the camera move to whoever is in the news unless the user takes over. */
+  autoCamera: boolean
+  /** Pinned airports, shown first in the picker. */
+  favourites: string[]
+  /** Most recently opened airports, newest first. */
+  recents: string[]
+  /** The "tap a plane" hint has been dismissed. */
+  hintSeen: boolean
 }
 
 type SettingsState = Settings & {
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => void
+  /** Pin or unpin an airport. */
+  toggleFavourite: (icao: string) => void
+  /** Record that an airport was opened (keeps the five most recent). */
+  noteRecent: (icao: string) => void
   reset: () => void
 }
 
@@ -46,6 +68,15 @@ export const DEFAULT_SETTINGS: Settings = {
   trailLength: 48,
   reduceMotion: false,
   mapTheme: 'navy',
+  dataBlocks: true,
+  trails: true,
+  shadows: true,
+  approachPaths: true,
+  weatherRadar: false,
+  autoCamera: true,
+  favourites: [],
+  recents: [],
+  hintSeen: false,
 }
 
 export const SETTINGS_STORAGE_KEY = 'atc-web.settings.v1'
@@ -55,7 +86,11 @@ export const useSettings = create<SettingsState>()(
     (set) => ({
       ...DEFAULT_SETTINGS,
       update: (key, value) => set({ [key]: value } as Partial<Settings>),
-      reset: () => set(DEFAULT_SETTINGS),
+      toggleFavourite: (icao) =>
+        set((s) => ({ favourites: s.favourites.includes(icao) ? s.favourites.filter((c) => c !== icao) : [...s.favourites, icao] })),
+      noteRecent: (icao) => set((s) => ({ recents: [icao, ...s.recents.filter((c) => c !== icao)].slice(0, 5) })),
+      // Pins and history are the user's data, not preferences: a reset keeps them.
+      reset: () => set((s) => ({ ...DEFAULT_SETTINGS, favourites: s.favourites, recents: s.recents, hintSeen: s.hintSeen })),
     }),
     {
       name: SETTINGS_STORAGE_KEY,

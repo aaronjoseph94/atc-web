@@ -32,6 +32,15 @@ export type ReadsbAircraft = {
   gs?: number
   /** True track in degrees. */
   track?: number
+  /** Nose heading, sent by some aircraft on the ground when track is absent. */
+  true_heading?: number
+  mag_heading?: number
+  /** ADS-B emitter category, e.g. `A3`. */
+  category?: string
+  squawk?: string
+  emergency?: string
+  /** Altitude selected on the autopilot panel, feet. */
+  nav_altitude_mcp?: number
   /** Vertical rate in ft/min. */
   baro_rate?: number
   geom_rate?: number
@@ -56,20 +65,31 @@ export function normalizeReadsb(list: ReadsbAircraft[] | null | undefined): Airc
     const onGround = a.alt_baro === 'ground'
     const alt = onGround ? 0 : (num(a.alt_baro) ?? num(a.alt_geom))
     const callsign = (a.flight ?? '').trim().toUpperCase()
+    // Parked aircraft often send no track; fall back to the nose heading.
+    const heading = num(a.track) ?? num(a.true_heading) ?? num(a.mag_heading)
+    const emergency = a.emergency && a.emergency !== 'none' ? a.emergency : null
 
-    out.push({
+    const ac: Aircraft = {
       icao24,
       callsign: callsign || icao24.toUpperCase(),
       lat,
       lon,
-      heading: num(a.track) ?? 0,
+      heading: heading ?? 0,
       altitudeFt: alt == null ? null : Math.round(alt),
       speedKt: a.gs == null ? null : Math.round(a.gs),
       onGround,
       type: a.t?.trim() || null,
       registration: a.r?.trim() || null,
       verticalRateFpm: num(a.baro_rate) ?? num(a.geom_rate) ?? null,
-    })
+    }
+    // Optional extras are only attached when present, keeping payloads small.
+    if (heading == null) ac.headingKnown = false
+    if (a.category) ac.category = a.category.trim().toUpperCase()
+    if (a.squawk) ac.squawk = a.squawk
+    if (emergency) ac.emergency = emergency
+    const sel = num(a.nav_altitude_mcp)
+    if (sel != null) ac.selectedAltitudeFt = Math.round(sel)
+    out.push(ac)
   }
   return out
 }
@@ -118,6 +138,7 @@ export function normalizeOpenSkyStates(states: OpenSkyState[] | null | undefined
       lat,
       lon,
       heading: num(s[IDX.trueTrack]) ?? 0,
+      ...(num(s[IDX.trueTrack]) == null ? { headingKnown: false } : {}),
       altitudeFt: altM == null ? null : Math.round(altM * M_TO_FT),
       speedKt: vel == null ? null : Math.round(vel * MS_TO_KT),
       onGround: Boolean(s[IDX.onGround]),

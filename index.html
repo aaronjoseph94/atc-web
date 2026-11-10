@@ -4,17 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ATC Web — live airport traffic</title>
-    <meta name="description" content="Live airport traffic on a dark aviation map with synced tower audio playback." />
-    <meta name="theme-color" content="#0a0e14" />
+    <meta name="description" content="Live airport traffic on a painted airfield map: real runway markings, a tower log of takeoffs and landings, weather and ATIS, and tower-radio replays." />
+    <meta name="theme-color" content="#0b1322" />
     <meta name="color-scheme" content="dark" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/pwa-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <!-- Map-coloured first paint, before any script runs -->
+    <style>
+      html,
+      body {
+        background: #0b1322;
+      }
+    </style>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   </head>
   <body>

@@ -1,12 +1,12 @@
 /*
  * Service worker: makes the app installable and caches the heavy, immutable
- * assets (map tiles, glyphs, sprites, demo clips) so revisits are fast and
+ * assets (map tiles, glyphs, imagery, replay clips) so revisits are fast and
  * work with a flaky connection.
  *
  * Deliberately NOT cached: the app shell (Vite emits hashed URLs; the HTML
  * must stay fresh) and `/api/*` (live data).
  */
-const VERSION = 'v2'
+const VERSION = 'v3'
 const TILES = `atc-tiles-${VERSION}`
 const CLIPS = `atc-clips-${VERSION}`
 const KNOWN = new Set([TILES, CLIPS])
@@ -29,14 +29,19 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
 
   if (url.hostname.endsWith('openfreemap.org')) {
-    // Style JSON is unversioned → network first so recolouring/layout changes land.
-    // Tiles, glyphs and sprites carry version paths → cache first.
-    const isStyle = url.pathname.startsWith('/styles/') || url.pathname === '/planet'
-    event.respondWith(isStyle ? networkFirst(TILES, request) : cacheFirst(TILES, request))
+    // The tile index is unversioned → network first so new tile sets are picked up.
+    // Tiles and glyphs carry version paths → cache first.
+    event.respondWith(url.pathname === '/planet' ? networkFirst(TILES, request) : cacheFirst(TILES, request))
+    return
+  }
+  // Aerial imagery and chart tiles change rarely; radar and anything else stays live.
+  if (url.hostname === 'basemap.nationalmap.gov' || url.hostname === 'tiles.arcgis.com') {
+    event.respondWith(cacheFirst(TILES, request))
     return
   }
   if (url.origin === self.location.origin && url.pathname.startsWith('/clips/')) {
-    event.respondWith(cacheFirst(CLIPS, request))
+    // The clip catalogue can change between deploys; audio and manifests are replaced wholesale.
+    event.respondWith(url.pathname.endsWith('/index.json') ? networkFirst(CLIPS, request) : cacheFirst(CLIPS, request))
   }
 })
 

@@ -2,8 +2,9 @@
  * Server-side aircraft fetching, shared by the Cloudflare Pages Function
  * (`functions/api/aircraft.ts`) and the Vite dev middleware.
  *
- * Free ADS-B providers are tried in order until one succeeds. OpenSky is last
- * because it rejects requests from Cloudflare's egress (HTTP 522).
+ * Free ADS-B providers are tried in order until one succeeds; a slow provider
+ * is hedged with the next one. OpenSky is last because it rejects requests
+ * from Cloudflare's egress (HTTP 522).
  */
 import { getAirport, type AirportConfig } from './airports'
 import {
@@ -17,7 +18,7 @@ import type { Aircraft } from './types'
 /** Per-provider timeout; keeps the whole request well under the client poll interval. */
 const PROVIDER_TIMEOUT_MS = 6000
 
-const USER_AGENT = 'atc-web/0.1 (+https://github.com/aaronjoseph94/atc-web)'
+export const USER_AGENT = 'atc-web/0.2 (+https://github.com/aaronjoseph94/atc-web)'
 
 export type AircraftProvider = {
   name: string
@@ -30,7 +31,8 @@ export type AircraftResult = {
   provider: string
 }
 
-async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
+/** GET JSON from an upstream API with our identifying User-Agent. */
+export async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
   const res = await fetch(url, {
     signal,
     headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
@@ -52,13 +54,16 @@ export const adsbLol: AircraftProvider = {
   },
 }
 
-/** adsb.fi — community feed, same readsb shape (1 req/s limit). */
+/**
+ * adsb.fi — community feed, same readsb shape (1 req/s limit). The area query
+ * lives under `/v3/`; the old `/v2/lat/…` path is deprecated upstream.
+ */
 export const adsbFi: AircraftProvider = {
   name: 'adsb.fi',
   async fetch(apt, signal) {
     const [lon, lat] = apt.center
     const data = await getJson<{ ac?: ReadsbAircraft[] }>(
-      `https://opendata.adsb.fi/api/v2/lat/${lat}/lon/${lon}/dist/${apt.radiusNm}`,
+      `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${apt.radiusNm}`,
       signal,
     )
     return normalizeReadsb(data.ac)
@@ -81,27 +86,74 @@ export const openSky: AircraftProvider = {
 export const DEFAULT_PROVIDERS: AircraftProvider[] = [adsbLol, adsbFi, openSky]
 
 /**
- * Fetch aircraft near an airport, falling through providers on failure.
- * Throws only when every provider fails; the error message lists each cause.
+ * How long a provider gets before the next one is started alongside it. A
+ * healthy feed answers in a few hundred ms, so this only costs an extra
+ * upstream request when the preferred feed is having a bad moment.
+ */
+const HEDGE_MS = 1500
+
+/**
+ * Fetch aircraft near an airport.
+ *
+ * Providers are tried in order, but a slow one doesn't hold the request
+ * hostage: after `hedgeMs` (or immediately on failure) the next provider is
+ * started too, and the first success wins. Throws only when every provider
+ * fails; the error message lists each cause in provider order.
  */
 export async function fetchAircraftForAirport(
   icao: string,
   providers: AircraftProvider[] = DEFAULT_PROVIDERS,
+  hedgeMs = HEDGE_MS,
 ): Promise<AircraftResult> {
   const airport = getAirport(icao)
-  const failures: string[] = []
+  const failures: (string | undefined)[] = providers.map(() => undefined)
+  const controllers: AbortController[] = []
 
-  for (const p of providers) {
-    try {
-      // Sequential on purpose: we only hit the next provider if this one fails.
-      // oxlint-disable-next-line no-await-in-loop
-      const aircraft = await p.fetch(airport, AbortSignal.timeout(PROVIDER_TIMEOUT_MS))
-      return { aircraft, provider: p.name }
-    } catch (err) {
-      failures.push(`${p.name}: ${err instanceof Error ? err.message : String(err)}`)
+  return new Promise<AircraftResult>((resolve, reject) => {
+    let next = 0
+    let pending = 0
+    let done = false
+    let hedge: ReturnType<typeof setTimeout> | null = null
+    const cancelHedge = () => {
+      if (hedge != null) clearTimeout(hedge)
+      hedge = null
     }
-  }
-  throw new Error(`All providers failed — ${failures.join('; ')}`)
+
+    const finish = (result?: AircraftResult) => {
+      if (done) return
+      done = true
+      cancelHedge()
+      // Stop whichever requests lost the race.
+      for (const c of controllers) c.abort()
+      if (result) resolve(result)
+      else reject(new Error(`All providers failed — ${failures.filter(Boolean).join('; ')}`))
+    }
+
+    const launch = () => {
+      cancelHedge()
+      if (done || next >= providers.length) return
+      const i = next++
+      const p = providers[i]
+      const ctrl = new AbortController()
+      controllers.push(ctrl)
+      const signal = AbortSignal.any([ctrl.signal, AbortSignal.timeout(PROVIDER_TIMEOUT_MS)])
+      pending++
+      if (next < providers.length) hedge = setTimeout(launch, hedgeMs)
+
+      p.fetch(airport, signal).then(
+        (aircraft) => finish({ aircraft, provider: p.name }),
+        (err: unknown) => {
+          failures[i] = `${p.name}: ${err instanceof Error ? err.message : String(err)}`
+          pending--
+          if (next < providers.length) launch()
+          else if (pending === 0) finish()
+        },
+      )
+    }
+
+    if (providers.length === 0) finish()
+    else launch()
+  })
 }
 
 /** JSON `Response` helper with permissive CORS (the API is public, read-only). */

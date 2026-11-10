@@ -25,7 +25,43 @@ describe('LivePositionBuffer', () => {
     const b = new LivePositionBuffer()
     expect(b.sample(0)).toEqual([])
     b.push([ac('a', 1, 1)], 1000)
-    expect(b.sample(1500)).toEqual([ac('a', 1, 1)])
+    expect(b.sample(1500)).toMatchObject([ac('a', 1, 1)])
+  })
+
+  it('fades aircraft in on arrival and out once they leave the feed', () => {
+    const b = new LivePositionBuffer()
+    b.push([ac('a', 1, 1)], 0)
+    expect(b.sample(0)[0].opacity).toBeCloseTo(0.25)
+    expect(b.sample(2000)[0].opacity).toBe(1)
+    b.push([], 3000)
+    b.push([], 4000) // second miss: starts fading
+    expect(b.sample(4450)[0].opacity).toBeCloseTo(0.5)
+    expect(b.sample(5000)).toEqual([])
+  })
+
+  it('keeps a trail that ends at the drawn position', () => {
+    const b = new LivePositionBuffer()
+    b.push([ac('a', 41, -87, 90, 300)], 0)
+    b.push([ac('a', 41, -86.99, 90, 300)], 5000)
+    b.push([ac('a', 41, -86.98, 90, 300)], 10_000)
+    const trail = b.trail('a', 50, 10_000)
+    expect(trail).toHaveLength(3)
+    expect(trail[0]).toEqual([-87, 41])
+    expect(trail[2][0]).toBeCloseTo(b.get('a', 10_000)!.lon, 6)
+    expect(b.trail('missing')).toEqual([])
+  })
+
+  it('points a headingless aircraft the way it actually moved', () => {
+    const b = new LivePositionBuffer()
+    const still = { ...ac('a', 41, -87, 0, null, true), headingKnown: false }
+    b.push([still], 0)
+    expect(b.sample(100)[0].headingKnown).toBe(false)
+    // Moves due east with no reported track or speed.
+    b.push([{ ...still, lon: -86.999 }], 5000)
+    const moved = b.sample(9000)[0]
+    expect(moved.headingKnown).toBe(true)
+    expect(moved.heading).toBeGreaterThan(80)
+    expect(moved.heading).toBeLessThan(100)
   })
 
   it('coasts forward on speed and heading between fixes', () => {
@@ -70,7 +106,8 @@ describe('LivePositionBuffer', () => {
     expect(ids).toEqual(['new', 'old'])
 
     b.push([ac('new', 2, 2)], 2000)
-    expect(b.sample(2500).map((a) => a.icao24)).toEqual(['new'])
+    // 'old' has now missed two polls and is gone once its fade-out finishes.
+    expect(b.sample(3500).map((a) => a.icao24)).toEqual(['new'])
   })
 
   it('clear() forgets everything', () => {

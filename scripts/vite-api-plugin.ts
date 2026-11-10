@@ -9,8 +9,10 @@ import path from 'node:path'
 import type { Plugin } from 'vite'
 import { fetchAircraftForAirport, jsonResponse } from '../src/api/aircraftHandler'
 import { allStations } from '../src/api/airports'
+import { fetchFlightInfo, parseFlightQuery } from '../src/api/flightInfoHandler'
 import { buildHealth } from '../src/api/healthHandler'
 import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
+import { fetchWeather } from '../src/api/weatherHandler'
 
 /** AI config comes from the shell environment in dev (never from files in the repo). */
 const aiEnv = () => ({
@@ -69,6 +71,16 @@ export function apiDevPlugin(): Plugin {
 
           if (url.pathname === '/api/health') {
             return await send(res, jsonResponse(await buildHealth(airport, 'vite-dev'), 200, 'no-store'))
+          }
+
+          if (url.pathname === '/api/weather') {
+            return await send(res, jsonResponse(await fetchWeather(airport), 200, 'public, max-age=60'))
+          }
+
+          if (url.pathname === '/api/flight') {
+            const q = parseFlightQuery(url.searchParams.get('hex'), url.searchParams.get('callsign'))
+            if (!q.hex && !q.callsign) return await send(res, jsonResponse({ error: 'hex or callsign required' }, 400, 'no-store'))
+            return await send(res, jsonResponse(await fetchFlightInfo(q.hex, q.callsign), 200, 'public, max-age=600'))
           }
 
           if (url.pathname === '/api/summarize') {

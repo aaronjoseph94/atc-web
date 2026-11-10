@@ -1,130 +1,235 @@
 /**
- * Draws aircraft, the selected aircraft's trail and a pulsing halo on the
- * MapLibre map.
+ * Draws aircraft, their shadows and trails, and the highlight rings.
  *
  * Performance model: this component renders nothing and never causes React
  * re-renders per frame. It owns a single `requestAnimationFrame` loop that
- * samples the `LivePositionBuffer` (live mode) or uses the `playback` prop
- * (playback mode) and writes straight into GeoJSON sources.
+ * samples the `LivePositionBuffer` (live mode) or the clip (playback) and
+ * writes straight into GeoJSON sources. The layers themselves are declared
+ * in `mapStyle.ts`.
  */
 import { useEffect, useRef } from 'react'
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
 import type { GeoJSONSource, Map as MapLibreMap, MapLayerMouseEvent } from 'maplibre-gl'
-import type { Aircraft } from '../api/types'
-import { positionsAt } from '../playback/interpolate'
+import type { ClipPack } from '../api/types'
+import { positionsAt, trackKeyFor, trailAt } from '../playback/interpolate'
 import { playbackInstant, usePlayhead } from '../playback/playheadStore'
 import type { LabelMode } from '../settings/settingsStore'
-import { TOKENS } from '../theme/tokens'
-import type { LivePositionBuffer } from './livePositions'
-import { ensurePlaneIcon } from './planeIcon'
+import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
+import type { LiveAircraft, LivePositionBuffer } from './livePositions'
+import { ensureMapImages, ICON_SCALE, iconFor } from './mapImages'
+import { LAYER, SRC } from './mapStyle'
 
 type Props = {
-  /** The loaded MapLibre instance (null until the base style has loaded). */
+  /** The loaded MapLibre instance (null until the style has loaded). */
   map: MapLibreMap | null
-  mode: 'live' | 'playback'
   liveBuffer: LivePositionBuffer
-  /** Pre-computed positions for the current playhead (playback mode only). */
-  playback: { aircraft: Aircraft[]; trail: [number, number][] }
-  selectedIcao: string | null
-  activeCallsign: string | null
   labels: LabelMode
+  dataBlocks: boolean
   hideGround: boolean
   trailLength: number
+  trails: boolean
+  shadows: boolean
   reduceMotion: boolean
-  onSelect: (icao: string) => void
+  /** Field elevation, so shadows and data blocks can reason about height above ground. */
+  elevationFt: number
+  onSelect: (icao: string | null) => void
+  /** Called every frame with what was drawn (camera follow reads it). */
+  onFrame?: (aircraft: LiveAircraft[], dtMs: number) => void
 }
 
-const SRC = 'aircraft-src'
-const TRAIL_SRC = 'trail-src'
-const LAYER = 'aircraft-layer'
-const LABEL = 'aircraft-label'
-const TRAIL_LAYER = 'trail-layer'
-const TRAIL_GLOW = 'trail-glow'
-const HALO = 'aircraft-halo'
-const HIT = 'aircraft-hit'
+/** Zoom at or above which moving aircraft are labelled in `auto` mode; parked ones need to be closer. */
+const LABEL_MOVING_ZOOM = 12.4
+const LABEL_PARKED_ZOOM = 15.2
+/** Background wakes are rebuilt at this interval; they don't need 60 fps. */
+const WAKE_INTERVAL_MS = 220
+/** Points kept in the faint wake behind non-selected aircraft. */
+const WAKE_POINTS = 7
 
-/** Zoom at or above which every callsign is labelled in `auto` mode. */
-const LABEL_ALL_ZOOM = 13.5
+const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
-/** Minimum move (degrees) before a new trail point is recorded. */
-const TRAIL_MIN_DELTA = 0.00005
-
-export function AircraftLayer({
-  map,
-  mode,
-  liveBuffer,
-  playback,
-  selectedIcao,
-  activeCallsign,
-  labels,
-  hideGround,
-  trailLength,
-  reduceMotion,
-  onSelect,
-}: Props) {
+export function AircraftLayer(props: Props) {
+  const { map, liveBuffer } = props
   // Latest props, readable from the rAF loop without re-subscribing.
-  // Written in an effect (not during render) per React's ref rules.
-  const latest = useRef({ mode, playback, selectedIcao, activeCallsign, labels, hideGround, trailLength, reduceMotion, onSelect })
+  const latest = useRef(props)
   useEffect(() => {
-    latest.current = { mode, playback, selectedIcao, activeCallsign, labels, hideGround, trailLength, reduceMotion, onSelect }
+    latest.current = props
   })
 
-  /** Live trail history for the selected aircraft (reset on selection/mode change). */
-  const trailRef = useRef<TrailState>({ icao: null, mode: 'live', pts: [] })
-
-  // ---- one-time setup: icon, sources, layers, click handler, rAF loop ----
   useEffect(() => {
     if (!map) return
+    ensureMapImages(map)
+    // A lost WebGL context drops images; MapLibre asks for them again by id.
+    const onMissing = () => ensureMapImages(map)
+    map.on('styleimagemissing', onMissing)
 
-    ensurePlaneIcon(map)
-    if (!map.getSource(SRC)) addSourcesAndLayers(map)
-
-    const click = (e: MapLayerMouseEvent) => {
+    const pick = (e: MapLayerMouseEvent) => {
       const icao = e.features?.[0]?.properties?.icao24
-      if (typeof icao === 'string') latest.current.onSelect(icao)
+      return typeof icao === 'string' ? icao : null
     }
-    const enter = () => (map.getCanvas().style.cursor = 'pointer')
-    const leave = () => (map.getCanvas().style.cursor = '')
-    map.on('click', HIT, click)
-    map.on('mouseenter', HIT, enter)
-    map.on('mouseleave', HIT, leave)
+    // Aircraft sit above everything else, so a hit here must not also count as a map click.
+    let handled = false
+    const click = (e: MapLayerMouseEvent) => {
+      const icao = pick(e)
+      if (!icao) return
+      handled = true
+      latest.current.onSelect(icao)
+    }
+    const mapClick = () => {
+      if (handled) {
+        handled = false
+        return
+      }
+      // Tapping empty map dismisses the selection, like tapping away from a card.
+      if (usePlayhead.getState().selectedIcao) latest.current.onSelect(null)
+    }
+    const move = (e: MapLayerMouseEvent) => {
+      map.getCanvas().style.cursor = 'pointer'
+      const icao = pick(e)
+      if (icao !== usePlayhead.getState().hoverIcao) usePlayhead.getState().setHover(icao)
+    }
+    const leave = () => {
+      map.getCanvas().style.cursor = ''
+      usePlayhead.getState().setHover(null)
+    }
+    map.on('click', LAYER.hit, click)
+    map.on('click', mapClick)
+    map.on('mousemove', LAYER.hit, move)
+    map.on('mouseleave', LAYER.hit, leave)
 
+    const wakes = new Map<string, Feature<LineString>>()
+    let wakesAt = 0
+    let last = performance.now()
     let raf = 0
+
     const frame = (t: number) => {
+      raf = requestAnimationFrame(frame)
       const L = latest.current
-      const aircraftSrc = map.getSource(SRC) as GeoJSONSource | undefined
-      const trailSrc = map.getSource(TRAIL_SRC) as GeoJSONSource | undefined
-      if (aircraftSrc && trailSrc) {
-        // Playback reads the store directly and advances between the audio
-        // element's coarse time updates, so icons glide instead of stepping.
-        const play = L.mode === 'playback' ? usePlayhead.getState() : null
-        const played = play?.clip ? positionsAt(play.clip, playbackInstant(play), play.activeCallsign, play.selectedIcao) : null
-        const list = played ? played.aircraft : liveBuffer.sample()
-        const visible = L.hideGround ? list.filter((a) => !a.onGround) : list
-        aircraftSrc.setData(toFeatureCollection(visible, L.selectedIcao, L.activeCallsign, L.labels, map.getZoom()))
+      const acSrc = map.getSource(SRC.aircraft) as GeoJSONSource | undefined
+      const trailSrc = map.getSource(SRC.trails) as GeoJSONSource | undefined
+      const shadowSrc = map.getSource(SRC.shadows) as GeoJSONSource | undefined
+      if (!acSrc || !trailSrc || !shadowSrc) return
+      const dt = Math.min(100, t - last)
+      last = t
 
-        const trail = played
-          ? played.trail
-          : updateLiveTrail(trailRef.current, visible, L.selectedIcao, L.trailLength)
-        if (L.mode !== trailRef.current.mode) trailRef.current = { icao: null, mode: L.mode, pts: [] }
-        trailSrc.setData(toLine(trail))
+      const st = usePlayhead.getState()
+      const playing = st.mode === 'playback' && st.clip ? st.clip : null
+      const tMs = playing ? playbackInstant(st) : 0
+      const all: LiveAircraft[] = playing ? replayed(playing, tMs) : liveBuffer.sample(t)
 
-        // Halo breathes gently; skipped under reduce-motion.
-        if (map.getLayer(HALO)) {
-          const wave = L.reduceMotion ? 0 : Math.sin(t / 700)
-          map.setPaintProperty(HALO, 'circle-opacity', 0.3 + 0.12 * wave)
-          map.setPaintProperty(HALO, 'circle-radius', 14 + 4 * wave)
+      // Whoever is being talked about: the active cue in playback, the caption's aircraft in live.
+      const active = (st.activeCallsign ?? (st.mode === 'live' ? st.caption?.icao24 : null))?.toLowerCase() ?? null
+      const selected = st.selectedIcao
+      const hover = st.hoverIcao
+      const list = L.hideGround ? all.filter((a) => !a.onGround || a.icao24 === selected || a.icao24 === active) : all
+
+      const zoom = map.getZoom()
+      const features: Feature<Point>[] = []
+      const shadows: Feature<Point>[] = []
+      // Shadow falls down-screen and to the right, whatever way the map is turned.
+      const mpp = metersPerPixel(map.getCenter().lat, zoom)
+      const br = (map.getBearing() * Math.PI) / 180
+      const sx = Math.cos(br) * 0.55 + Math.sin(br) * 0.83
+      const sy = Math.sin(br) * 0.55 - Math.cos(br) * 0.83
+
+      for (const a of list) {
+        const isSelected = a.icao24 === selected
+        const transmitting = a.icao24 === active
+        const hi = isSelected || transmitting
+        const icon = iconFor(a)
+        const parked = a.onGround && (a.speedKt ?? 0) < 5
+        const state = a.onGround ? (parked ? 0 : 1) : 2
+        const agl = a.onGround || a.altitudeFt == null ? 0 : Math.max(0, a.altitudeFt - L.elevationFt)
+        const wantLabel =
+          L.labels !== 'never' &&
+          icon !== 'ac-vehicle' &&
+          (hi || a.icao24 === hover || L.labels === 'always' || zoom >= (parked ? LABEL_PARKED_ZOOM : LABEL_MOVING_ZOOM))
+        const alert = a.emergency || a.squawk === '7700' || a.squawk === '7600' || a.squawk === '7500'
+
+        features.push({
+          type: 'Feature',
+          properties: {
+            icao24: a.icao24,
+            callsign: a.callsign,
+            sub: wantLabel && L.dataBlocks && (hi || zoom >= 13.4) ? dataBlock(a, agl) : '',
+            icon,
+            scale: ICON_SCALE[icon],
+            heading: icon === 'ac-dot' ? 0 : a.heading,
+            hi: hi ? 1 : 0,
+            tx: transmitting ? 1 : 0,
+            state,
+            lbl: wantLabel ? 1 : 0,
+            alert: alert ? 1 : 0,
+            o: a.opacity,
+            // Higher aircraft draw on top; the highlighted one above all.
+            z: hi ? 1e6 : agl,
+          },
+          geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
+        })
+
+        if (L.shadows && agl > 40 && icon !== 'ac-dot') {
+          // Offset grows with height and is capped, in screen pixels.
+          const px = Math.min(26, 3 + agl / 260)
+          const east = sx * px * mpp
+          const north = sy * px * mpp
+          shadows.push({
+            type: 'Feature',
+            properties: { icon, scale: ICON_SCALE[icon] * (1 + Math.min(0.25, agl / 40000)), heading: a.heading, o: a.opacity * Math.max(0.35, 1 - agl / 14000) },
+            geometry: { type: 'Point', coordinates: [a.lon + east / metersPerDegLon(a.lat), a.lat + north / metersPerDegLat(a.lat)] },
+          })
         }
       }
-      raf = requestAnimationFrame(frame)
+      acSrc.setData({ type: 'FeatureCollection', features })
+      shadowSrc.setData(L.shadows ? { type: 'FeatureCollection', features: shadows } : EMPTY)
+
+      // ---- trails ----------------------------------------------------------
+      // Faint wakes behind everything airborne are rebuilt a few times a
+      // second; the highlighted aircraft's trail is rebuilt every frame so it
+      // stays glued to the icon.
+      if (t - wakesAt > WAKE_INTERVAL_MS) {
+        wakesAt = t
+        wakes.clear()
+        if (L.trails) {
+          for (const a of list) {
+            if (a.onGround) continue
+            const coords = playing ? trailAt(playing.tracks[trackKeyFor(playing, a.icao24) ?? ''] ?? [], tMs, WAKE_POINTS) : liveBuffer.trail(a.icao24, WAKE_POINTS, t)
+            if (coords.length >= 2) wakes.set(a.icao24, line(coords, 0))
+          }
+        }
+      }
+      const lines: Feature<LineString>[] = []
+      const focus = selected ?? active
+      for (const [id, f] of wakes) if (id !== focus) lines.push(f)
+      if (focus) {
+        const coords = playing ? trailAt(playing.tracks[trackKeyFor(playing, focus) ?? ''] ?? [], tMs, L.trailLength * 4) : liveBuffer.trail(focus, L.trailLength, t)
+        if (coords.length >= 2) lines.push(line(coords, 1))
+      }
+      trailSrc.setData({ type: 'FeatureCollection', features: lines })
+
+      // ---- highlight rings ---------------------------------------------------
+      // Purple when a pilot (or nobody in particular) has the aircraft's
+      // attention, blue while the controller is talking to it.
+      const wave = L.reduceMotion ? 0 : Math.sin(t / 620)
+      const color = st.activeSpeaker === 'controller' ? '#3B9BFF' : '#7C5CFC'
+      map.setPaintProperty(LAYER.halo, 'circle-color', color)
+      map.setPaintProperty(LAYER.halo, 'circle-opacity', 0.34 + 0.1 * wave)
+      map.setPaintProperty(LAYER.halo, 'circle-radius', 19 + 4 * wave)
+      // Radar-style ping expanding from whoever is transmitting.
+      const phase = L.reduceMotion ? 0.4 : (t % 1500) / 1500
+      map.setPaintProperty(LAYER.ping, 'circle-radius', 12 + 34 * phase)
+      map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6)
+      map.setPaintProperty(LAYER.ping, 'circle-stroke-color', st.activeSpeaker === 'controller' ? '#7DBDFF' : '#F5C518')
+
+      L.onFrame?.(list, dt)
     }
     raf = requestAnimationFrame(frame)
 
     return () => {
       cancelAnimationFrame(raf)
-      map.off('click', HIT, click)
-      map.off('mouseenter', HIT, enter)
-      map.off('mouseleave', HIT, leave)
+      map.off('styleimagemissing', onMissing)
+      map.off('click', LAYER.hit, click)
+      map.off('click', mapClick)
+      map.off('mousemove', LAYER.hit, move)
+      map.off('mouseleave', LAYER.hit, leave)
     }
   }, [map, liveBuffer])
 
@@ -135,180 +240,31 @@ export function AircraftLayer({
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-function toFeatureCollection(
-  aircraft: Aircraft[],
-  selectedIcao: string | null,
-  activeCallsign: string | null,
-  labels: LabelMode,
-  zoom: number,
-): FeatureCollection<Point> {
-  const active = activeCallsign?.replace(/\s/g, '')
-  const labelAll = labels === 'always' || (labels === 'auto' && zoom >= LABEL_ALL_ZOOM)
-  return {
-    type: 'FeatureCollection',
-    features: aircraft.map((a) => {
-      const selected = a.icao24 === selectedIcao
-      const transmitting = !!active && a.callsign.replace(/\s/g, '') === active
-      const highlight = selected || transmitting
-      // 0 = parked (ground, not moving), 1 = moving on the ground, 2 = airborne.
-      const state = a.onGround ? ((a.speedKt ?? 0) < 5 ? 0 : 1) : 2
-      return {
-        type: 'Feature',
-        properties: {
-          icao24: a.icao24,
-          callsign: a.callsign,
-          heading: a.heading,
-          selected: highlight ? 1 : 0,
-          showLabel: labels !== 'never' && (highlight || labelAll) ? 1 : 0,
-          ground: a.onGround ? 1 : 0,
-          state,
-        },
-        geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
-      }
-    }),
-  }
+/** Clip aircraft at `tMs`, fully opaque (replays don't fade). */
+function replayed(clip: ClipPack, tMs: number): LiveAircraft[] {
+  const list = positionsAt(clip, tMs) as LiveAircraft[]
+  for (const a of list) a.opacity = 1
+  return list
 }
 
-type TrailState = { icao: string | null; mode: 'live' | 'playback'; pts: [number, number][] }
-
-/** Append the selected aircraft's current position to its trail (bounded length). */
-function updateLiveTrail(
-  state: TrailState,
-  aircraft: Aircraft[],
-  selectedIcao: string | null,
-  maxLen: number,
-): [number, number][] {
-  if (!selectedIcao) {
-    state.icao = null
-    state.pts = []
-    return state.pts
-  }
-  if (state.icao !== selectedIcao) {
-    state.icao = selectedIcao
-    state.pts = []
-  }
-  const ac = aircraft.find((a) => a.icao24 === selectedIcao)
-  if (!ac) return state.pts
-  const last = state.pts[state.pts.length - 1]
-  if (!last || Math.abs(last[0] - ac.lon) > TRAIL_MIN_DELTA || Math.abs(last[1] - ac.lat) > TRAIL_MIN_DELTA) {
-    state.pts.push([ac.lon, ac.lat])
-    if (state.pts.length > maxLen) state.pts.splice(0, state.pts.length - maxLen)
-  }
-  return state.pts
+function line(coordinates: [number, number][], sel: 0 | 1): Feature<LineString> {
+  return { type: 'Feature', properties: { sel }, geometry: { type: 'LineString', coordinates } }
 }
 
-function toLine(coords: [number, number][]): Feature<LineString> {
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'LineString', coordinates: coords.length >= 2 ? coords : [] },
-  }
-}
-
-/** Adds the GeoJSON sources and the five layers, bottom to top. */
-function addSourcesAndLayers(map: MapLibreMap) {
-  map.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-  map.addSource(TRAIL_SRC, { type: 'geojson', data: toLine([]), lineMetrics: true })
-
-  // Trail: soft glow underneath, gradient core on top (fades toward the tail).
-  map.addLayer({
-    id: TRAIL_GLOW,
-    type: 'line',
-    source: TRAIL_SRC,
-    paint: { 'line-color': TOKENS.trail, 'line-width': 9, 'line-opacity': 0.2, 'line-blur': 5 },
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
-  })
-  map.addLayer({
-    id: TRAIL_LAYER,
-    type: 'line',
-    source: TRAIL_SRC,
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: {
-      'line-width': 2.5,
-      'line-gradient': [
-        'interpolate',
-        ['linear'],
-        ['line-progress'],
-        0,
-        'rgba(124,92,252,0.05)',
-        0.55,
-        'rgba(124,92,252,0.45)',
-        1,
-        'rgba(124,92,252,0.95)',
-      ],
-    },
-  })
-
-  // Halo under the selected / transmitting aircraft (animated in the rAF loop).
-  map.addLayer({
-    id: HALO,
-    type: 'circle',
-    source: SRC,
-    filter: ['==', ['get', 'selected'], 1],
-    paint: { 'circle-radius': 15, 'circle-color': TOKENS.purple, 'circle-opacity': 0.26, 'circle-blur': 0.85 },
-  })
-
-  // Invisible, generous hit target so small icons are easy to tap.
-  map.addLayer({
-    id: HIT,
-    type: 'circle',
-    source: SRC,
-    paint: { 'circle-radius': 16, 'circle-opacity': 0 },
-  })
-
-  // Aircraft silhouettes: SDF icon tinted yellow when highlighted, dimmer on the ground.
-  map.addLayer({
-    id: LAYER,
-    type: 'symbol',
-    source: SRC,
-    layout: {
-      'icon-image': 'plane-icon',
-      // Zoom-scaled base × activity factor: parked aircraft are small and quiet,
-      // taxiing ones medium, airborne ones full size; the highlighted one is larger still.
-      'icon-size': [
-        '*',
-        ['interpolate', ['linear'], ['zoom'], 10, 0.28, 12, 0.42, 14, 0.62, 16, 0.8],
-        ['match', ['get', 'state'], 0, 0.55, 1, 0.75, 1],
-        ['case', ['==', ['get', 'selected'], 1], 1.35, 1],
-      ],
-      'icon-rotate': ['get', 'heading'],
-      'icon-rotation-alignment': 'map',
-      'icon-allow-overlap': true,
-      'icon-ignore-placement': true,
-    },
-    paint: {
-      'icon-color': ['case', ['==', ['get', 'selected'], 1], TOKENS.planeSelected, TOKENS.plane],
-      'icon-opacity': [
-        'case',
-        ['==', ['get', 'selected'], 1],
-        1,
-        ['match', ['get', 'state'], 0, 0.45, 1, 0.72, 0.96],
-      ],
-      'icon-halo-color': ['case', ['==', ['get', 'selected'], 1], TOKENS.purple, 'rgba(0,0,0,0.4)'],
-      'icon-halo-width': ['case', ['==', ['get', 'selected'], 1], 2.2, 0.6],
-      'icon-halo-blur': ['case', ['==', ['get', 'selected'], 1], 0.8, 0.2],
-    },
-  })
-
-  map.addLayer({
-    id: LABEL,
-    type: 'symbol',
-    source: SRC,
-    filter: ['==', ['get', 'showLabel'], 1],
-    layout: {
-      'text-field': ['get', 'callsign'],
-      'text-font': ['Noto Sans Bold'],
-      'text-size': 11,
-      'text-offset': [0, -1.7],
-      'text-anchor': 'bottom',
-      'text-allow-overlap': true,
-      'text-letter-spacing': 0.04,
-    },
-    // Thick halo reads as a dark chip behind the callsign; purple for the highlighted aircraft.
-    paint: {
-      'text-color': '#fff',
-      'text-halo-color': ['case', ['==', ['get', 'selected'], 1], 'rgba(92,61,245,0.95)', TOKENS.labelBg],
-      'text-halo-width': 3,
-    },
-  })
+/**
+ * Second label line, in the style of a controller's data block: altitude in
+ * hundreds of feet with a climb/descent arrow, then the type.
+ * `045↑ B738` = 4,500 ft and climbing.
+ */
+export function dataBlock(a: { onGround: boolean; altitudeFt: number | null; verticalRateFpm?: number | null; type?: string | null; speedKt: number | null }, aglFt: number): string {
+  const parts: string[] = []
+  if (a.onGround) {
+    if ((a.speedKt ?? 0) >= 5) parts.push(`${Math.round(a.speedKt ?? 0)}kt`)
+  } else if (a.altitudeFt != null) {
+    const vr = a.verticalRateFpm ?? 0
+    const trend = vr > 300 ? '↑' : vr < -300 ? '↓' : ''
+    parts.push(`${String(Math.max(0, Math.round(a.altitudeFt / 100))).padStart(3, '0')}${trend}`)
+  } else if (aglFt > 0) parts.push('air')
+  if (a.type) parts.push(a.type)
+  return parts.length ? `\n${parts.join(' ')}` : ''
 }

@@ -3,7 +3,7 @@
  * the traffic query area (radius for readsb providers, bbox for OpenSky)
  * and the list of controller stations shown in the station bar.
  */
-import { getFrequency } from './airportData'
+import { FREQUENCY_LABEL, FREQUENCY_ORDER, getElevationFt, getFrequencies, getReferencePoint, getRunwayBounds, type Frequency } from './airportData'
 import type { Station, StationKind } from './types'
 
 export type AirportGroup = 'US' | 'Canada'
@@ -27,39 +27,49 @@ export type AirportConfig = {
   bbox: AirportBbox
   /** Query radius in nautical miles for point-based providers. */
   radiusNm: number
+  /** Field elevation, feet above sea level. */
+  elevationFt: number
+  /** `[[west, south], [east, north]]` framing every runway. */
+  bounds: [[number, number], [number, number]]
   stations: Station[]
 }
 
 /** Optional per-airport sizing for busy or sprawling fields. */
 type AirportPad = { dLat?: number; dLon?: number; radiusNm?: number }
 
-/** Build a station; the published frequency is looked up from OurAirports data. */
-function station(airport: string, name: string, suffix: string, label: string, kind?: StationKind): Station {
-  // Ground positions are the only hand-listed ones that aren't towers.
-  const resolved: StationKind = kind ?? (suffix.startsWith('ground') ? 'GND' : 'TWR')
-  return {
-    id: `${airport.toLowerCase()}-${suffix}`,
-    airport,
-    name,
-    label,
-    kind: resolved,
-    frequencyMhz: getFrequency(airport, resolved)?.mhz,
-  }
+/** Placeholder used only to carry an airport's short name into `apt()`. */
+function station(airport: string, name: string, _suffix?: string, _label?: string): Station {
+  return { id: '', airport, name, label: '', position: '', kind: 'TWR' }
+}
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+/** `Tower (Rwy 10L-28R)`, `Ground (Center Inbound)`, or just `Tower` when the position has no name of its own. */
+function stationLabel(f: Frequency): string {
+  const group = FREQUENCY_LABEL[f.type]
+  const generic = /^(tower|ground|approach|arrival|departure|clearance delivery|airport information)$/i.test(f.description)
+  if (f.type === 'ATIS') return f.description === 'Airport information' ? 'ATIS' : `ATIS (${f.description.replace(/ information$/, '')})`
+  if (f.type === 'OTH') return f.description
+  return generic ? group : `${group} (${f.description})`
 }
 
 /**
- * Approach / Departure / ATIS positions exist at every airport in the
- * catalog but aren't worth hand-listing; add them when a frequency is known.
+ * Every published controller position at an airport, in channel-switcher
+ * order. US airports list the FAA's per-runway and per-sector positions;
+ * elsewhere there is one entry per type.
  */
-function autoStations(airport: string, name: string): Station[] {
-  const extra: [StationKind, string, string][] = [
-    ['APP', 'approach', 'Approach'],
-    ['DEP', 'departure', 'Departure'],
-    ['ATIS', 'atis', 'ATIS (weather)'],
-  ]
-  return extra
-    .filter(([kind]) => getFrequency(airport, kind))
-    .map(([kind, suffix, label]) => station(airport, name, suffix, label, kind))
+function buildStations(airport: string, name: string): Station[] {
+  return getFrequencies(airport)
+    .map((f) => ({
+      id: `${airport.toLowerCase()}-${f.type.toLowerCase()}-${slug(f.description)}-${Math.round(f.mhz * 1000)}`,
+      airport,
+      name,
+      label: stationLabel(f),
+      position: f.description,
+      kind: f.type as StationKind,
+      frequencyMhz: f.mhz,
+    }))
+    .sort((x, y) => FREQUENCY_ORDER.indexOf(x.kind) - FREQUENCY_ORDER.indexOf(y.kind))
 }
 
 function bboxAround(lat: number, lon: number, dLat = 0.06, dLon = 0.08): AirportBbox {
@@ -89,8 +99,34 @@ function apt(
     zoom,
     bbox: bboxAround(lat, lon, pad?.dLat, pad?.dLon),
     radiusNm: pad?.radiusNm ?? 12,
-    stations: [...stations, ...autoStations(icao, stations[0]?.name ?? name)],
+    elevationFt: getElevationFt(icao),
+    bounds: getRunwayBounds(icao) ?? [
+      [lon - 0.03, lat - 0.02],
+      [lon + 0.03, lat + 0.02],
+    ],
+    stations: buildStations(icao, stations[0]?.name ?? name),
   }
+}
+
+/**
+ * Catalog entry positioned from the OurAirports snapshot (centre of the
+ * runway complex), with the standard Tower + Ground pair.
+ */
+function std(icao: string, name: string, short: string, group: AirportGroup, zoom = 12.2, pad?: AirportPad): AirportConfig {
+  const b = getRunwayBounds(icao)
+  const ref = getReferencePoint(icao) ?? [0, 0]
+  const lon = b ? (b[0][0] + b[1][0]) / 2 : ref[0]
+  const lat = b ? (b[0][1] + b[1][1]) / 2 : ref[1]
+  return apt(
+    icao,
+    name,
+    group,
+    Math.round(lat * 1e4) / 1e4,
+    Math.round(lon * 1e4) / 1e4,
+    zoom,
+    [station(icao, short, 'tower', 'Tower'), station(icao, short, 'ground', 'Ground')],
+    pad,
+  )
 }
 
 /** All supported airports, in display order (US first, then Canada). */
@@ -159,6 +195,19 @@ export const AIRPORTS: AirportConfig[] = [
     station('LGA', 'LaGuardia New York', 'tower', 'Tower'),
     station('LGA', 'LaGuardia New York', 'ground', 'Ground'),
   ]),
+  std('BOS', 'Boston Logan International', 'Boston', 'US', 12.4),
+  std('MSP', 'Minneapolis–Saint Paul International', 'Minneapolis', 'US'),
+  std('DTW', 'Detroit Metropolitan Wayne County', 'Detroit', 'US', 12.0),
+  std('PHL', 'Philadelphia International', 'Philadelphia', 'US'),
+  std('SLC', 'Salt Lake City International', 'Salt Lake City', 'US'),
+  std('DCA', 'Ronald Reagan Washington National', 'Washington National', 'US', 13.0),
+  std('IAD', 'Washington Dulles International', 'Dulles', 'US', 11.8, { dLat: 0.08, dLon: 0.1, radiusNm: 15 }),
+  std('SAN', 'San Diego International', 'San Diego', 'US', 13.0),
+  std('FLL', 'Fort Lauderdale–Hollywood International', 'Fort Lauderdale', 'US', 12.6),
+  std('MDW', 'Chicago Midway International', 'Chicago Midway', 'US', 13.2),
+  std('PDX', 'Portland International', 'Portland', 'US'),
+  std('AUS', 'Austin–Bergstrom International', 'Austin', 'US'),
+  std('BNA', 'Nashville International', 'Nashville', 'US'),
   apt('YYZ', 'Toronto Pearson International', 'Canada', 43.6777, -79.6248, 12.2, [
     station('YYZ', 'Toronto Pearson', 'tower', 'Tower'),
     station('YYZ', 'Toronto Pearson', 'ground', 'Ground'),
@@ -179,6 +228,9 @@ export const AIRPORTS: AirportConfig[] = [
     station('YEG', 'Edmonton', 'tower', 'Tower'),
     station('YEG', 'Edmonton', 'ground', 'Ground'),
   ]),
+  std('YOW', 'Ottawa Macdonald–Cartier International', 'Ottawa', 'Canada'),
+  std('YWG', 'Winnipeg Richardson International', 'Winnipeg', 'Canada'),
+  std('YHZ', 'Halifax Stanfield International', 'Halifax', 'Canada'),
 ]
 
 export const DEFAULT_AIRPORT = 'ORD'
@@ -205,7 +257,37 @@ export function allStations(): Station[] {
   return AIRPORTS.flatMap((a) => a.stations)
 }
 
-/** Find the airport that owns a station id (e.g. `ord-tower-28r` → ORD). */
+/** Find the airport that owns a station id (e.g. `ord-tower-28r` → ORD). Ids always start with the airport code. */
 export function airportForStation(stationId: string): AirportConfig | undefined {
-  return AIRPORTS.find((a) => a.stations.some((s) => s.id === stationId))
+  return byIcao.get(stationId.split('-')[0]?.toUpperCase() ?? '')
+}
+
+const KIND_WORDS: [RegExp, StationKind][] = [
+  [/-(twr|tower)/, 'TWR'],
+  [/-(gnd|ground)/, 'GND'],
+  [/-(app|approach)/, 'APP'],
+  [/-(dep|departure)/, 'DEP'],
+  [/-atis/, 'ATIS'],
+  [/-(cld|clearance)/, 'CLD'],
+]
+
+/**
+ * Resolve a station id to a station at this airport. Exact ids win; older,
+ * hand-written ids such as `ord-tower-28r` (still used by clip packs) match
+ * on kind plus the runway they mention; anything else gets the main tower.
+ */
+export function resolveStation(airport: AirportConfig, stationId: string | null | undefined): Station | undefined {
+  const exact = airport.stations.find((s) => s.id === stationId)
+  if (exact) return exact
+  const id = (stationId ?? '').toLowerCase()
+  const kind = KIND_WORDS.find(([re]) => re.test(id))?.[1] ?? 'TWR'
+  const ofKind = airport.stations.filter((s) => s.kind === kind)
+  const hint = /-(\d{1,2}[lcr]?)$/.exec(id)?.[1]
+  const byRunway = hint ? ofKind.find((s) => new RegExp(`\\b0?${hint}\\b`, 'i').test(s.position)) : undefined
+  return byRunway ?? ofKind[0] ?? airport.stations[0]
+}
+
+/** Station shown when an airport is first opened: its (first) tower. */
+export function defaultStation(airport: AirportConfig): Station | undefined {
+  return airport.stations.find((s) => s.kind === 'TWR') ?? airport.stations[0]
 }

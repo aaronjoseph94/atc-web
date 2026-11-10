@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adsbLol, fetchAircraftForAirport, jsonResponse, openSky, type AircraftProvider } from './aircraftHandler'
+import { adsbFi, adsbLol, fetchAircraftForAirport, jsonResponse, openSky, type AircraftProvider } from './aircraftHandler'
 
 const ok = (name: string, n = 1): AircraftProvider => ({
   name,
@@ -39,6 +39,40 @@ describe('fetchAircraftForAirport', () => {
 
   it('throws with every cause when all providers fail', async () => {
     await expect(fetchAircraftForAirport('ORD', [fail('a'), fail('b')])).rejects.toThrow(/a: HTTP 522; b: HTTP 522/)
+  })
+
+  it('starts the next provider when the first is slow, and the first answer wins', async () => {
+    let aborted = false
+    const slow: AircraftProvider = {
+      name: 'slow',
+      fetch: (_apt, signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            aborted = true
+            reject(new Error('aborted'))
+          })
+        }),
+    }
+    const r = await fetchAircraftForAirport('ORD', [slow, ok('fast', 2)], 5)
+    expect(r.provider).toBe('fast')
+    expect(aborted).toBe(true)
+  })
+
+  it('prefers the first provider when it answers inside the hedge window', async () => {
+    const second = vi.fn(ok('b').fetch)
+    const r = await fetchAircraftForAirport('ORD', [ok('a'), { name: 'b', fetch: second }], 50)
+    expect(r.provider).toBe('a')
+    expect(second).not.toHaveBeenCalled()
+  })
+
+  it('adsb.fi uses the current v3 area endpoint', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe('https://opendata.adsb.fi/api/v3/lat/41.9742/lon/-87.9073/dist/12')
+      return new Response(JSON.stringify({ ac: [] }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await fetchAircraftForAirport('ORD', [adsbFi])
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('adsb.lol builds a point/radius URL from the airport and parses `ac`', async () => {
