@@ -5,7 +5,7 @@
  * plays the channel live (LiveATC). In playback the bar turns into the
  * replay timeline.
  */
-import { ChevronRight, Wind } from 'lucide-react'
+import { ChevronRight, ChevronsUpDown, Wind } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatMhz } from '../api/airportData'
@@ -130,8 +130,16 @@ export function StationBar() {
         </button>
 
         <div className="flex min-w-0 flex-1 flex-col items-start justify-center gap-1">
-          <button type="button" className="max-w-full truncate rounded text-left text-[17px] font-bold leading-tight" onClick={() => setPanel('airports')} tabIndex={-1}>
-            {airport.stations[0]?.name ?? airport.name}
+          {/* The airport name doubles as the airport switcher: the up-down chevron says "pick another". */}
+          <button
+            type="button"
+            className="-ml-1.5 flex max-w-full items-center gap-1 rounded-lg px-1.5 py-0.5 text-left text-[17px] font-bold leading-tight transition hover:bg-black/10 active:scale-[0.97]"
+            onClick={() => setPanel('airports')}
+            aria-label="Pick another airport"
+            title="Pick another airport"
+          >
+            <span className="truncate">{airport.stations[0]?.name ?? airport.name}</span>
+            <ChevronsUpDown className="size-4 shrink-0 text-black/55" strokeWidth={2.5} aria-hidden />
           </button>
           <button
             type="button"
