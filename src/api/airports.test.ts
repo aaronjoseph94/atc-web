@@ -89,3 +89,13 @@ describe('airports catalog', () => {
     expect(b.lamax).toBeGreaterThan(40.77)
   })
 })
+
+describe('Calgary positions', () => {
+  it('names the west and east tower and ground channels', () => {
+    const labels = getAirport('YYC').stations.map((s) => `${s.label} ${s.frequencyMhz}`)
+    expect(labels).toContain('Tower (West) 118.4')
+    expect(labels).toContain('Tower (East) 118.875')
+    expect(labels).toContain('Ground (West) 121.9')
+    expect(labels).toContain('Ground (East) 125.35')
+  })
+})

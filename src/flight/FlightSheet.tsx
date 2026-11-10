@@ -14,6 +14,7 @@ import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause
 import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
 import { distanceM } from '../map/geo'
 import { FrequencyTuner } from '../station/FrequencyTuner'
+import { Waveform } from '../station/Waveform'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '../settings/settingsStore'
 import { Grabber, useDialog } from '../ui/Panel'
@@ -60,6 +61,8 @@ export function FlightCard() {
   const select = usePlayhead((s) => s.select)
   const setSheet = usePlayhead((s) => s.setSheet)
   const live = usePlayhead((s) => s.mode === 'live')
+  const playing = usePlayhead((s) => s.playing)
+  const hasAudio = usePlayhead((s) => !!s.clip?.audioUrl)
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
   const flight = useFlight()
@@ -110,7 +113,7 @@ export function FlightCard() {
         </span>
         <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
           <Sparkline values={flight.series.altitudeFt} className="h-4 w-10 text-white/70" />
-          {d?.onGround ? 'Ground' : formatAltitude(d?.altitudeFt, altitudeUnit)}
+          {d?.onGround ? 'GND' : formatAltitude(d?.altitudeFt, altitudeUnit)}
         </span>
       </div>
 
@@ -142,8 +145,12 @@ export function FlightCard() {
       {live ? (
         <FrequencyTuner />
       ) : (
-        <p className="px-4 pb-[max(0.9rem,var(--safe-bottom))] pt-2.5 text-center text-[13px] font-medium text-white/75 md:pb-3.5">{flight.stationLine}</p>
+        <p className="px-4 pb-2 pt-2.5 text-center text-[13px] font-medium text-white/75">{flight.stationLine}</p>
       )}
+      {/* The channel's audio, as on the station bar. */}
+      <div className="pb-[var(--safe-bottom)] md:pb-1">
+        <Waveform active={!live && playing && hasAudio} color="rgba(255,255,255,0.5)" />
+      </div>
     </section>
   )
 }

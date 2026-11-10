@@ -83,7 +83,7 @@ export function FrequencyTuner() {
   const label = current ? `${current.label}${current.frequencyMhz != null ? ` ${formatMhz(current.frequencyMhz)}` : ''}` : 'Channel'
 
   return (
-    <div className="pb-[max(0.6rem,var(--safe-bottom))] pt-1 md:pb-2.5">
+    <div className="pb-1 pt-1">
       <div
         data-no-drag
         role="slider"
