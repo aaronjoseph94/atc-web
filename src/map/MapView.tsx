@@ -13,9 +13,12 @@ import { TRAFFIC_ATTRIBUTION } from '../api/credits'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
 import { atOtherField } from '../live/radio/match'
+import { InstructionBadgeLayer } from '../live/radio/understand/InstructionBadgeLayer'
 import { TaxiRouteLayer } from '../live/taxi/TaxiRouteLayer'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
+import { attachPerfMap, setPerformanceMode, usePerf } from '../perf/governor'
+import { mapPixelRatio } from '../perf/quality'
 import { DOCK_EVENT, readDockReserve } from '../ui/layout'
 import { CAMERA_EASE, useReducedMotion } from '../ui/motion'
 import { AircraftLayer } from './AircraftLayer'
@@ -113,6 +116,14 @@ export function MapView() {
   const weatherRadar = useSettings((s) => s.weatherRadar)
   const reduceMotion = useReducedMotion()
   const mapTheme = useSettings((s) => s.mapTheme)
+  const performanceMode = useSettings((s) => s.performance)
+
+  // Rendering quality: Settings' choice (or the governor's, in auto), and the map's pixel ratio under it.
+  useEffect(() => setPerformanceMode(performanceMode), [performanceMode])
+  useEffect(() => {
+    attachPerfMap(map)
+    return () => attachPerfMap(null)
+  }, [map])
 
   const airport = useMemo(() => getAirport(airportIcao), [airportIcao])
   const isUs = airport.group === 'US'
@@ -302,6 +313,7 @@ export function MapView() {
     show(LAYER.approachTick, approachPaths)
     show(LAYER.trails, trails)
     show(LAYER.shadow, shadows)
+    show(LAYER.parkedShadow, shadows)
     show(LAYER.radar, weatherRadar)
   }, [map, theme, approachPaths, trails, shadows, weatherRadar])
 
@@ -324,6 +336,8 @@ export function MapView() {
   }, [map, goHome])
 
   // Initial camera only; later moves are animated above.
+  // The canvas starts at the tier's pixel ratio rather than resizing once it exists.
+  const [pixelRatio] = useState(() => mapPixelRatio(window.devicePixelRatio || 1, usePerf.getState().tier))
   const [initialView] = useState(() => ({ longitude: airport.center[0], latitude: airport.center[1], zoom: airport.zoom - 0.6, pitch: 0, bearing: 0 }))
 
   if (failed) {
@@ -352,6 +366,7 @@ export function MapView() {
           touchPitch={false}
           minZoom={7}
           maxZoom={19}
+          pixelRatio={pixelRatio}
           onLoad={(e) => {
             // The compact attribution starts expanded; begin collapsed so it doesn't sit on the map.
             const attrib = e.target.getContainer().querySelector('.maplibregl-ctrl-attrib')
@@ -371,6 +386,7 @@ export function MapView() {
           <RunwayGateLayer map={map} airportIcao={airportIcao} />
           <TaxiRouteLayer map={map} />
           <RippleLayer map={map} airport={airport} reduceMotion={reduceMotion} />
+          <InstructionBadgeLayer map={map} />
           <AircraftLayer
             map={map}
             liveBuffer={liveBuffer}

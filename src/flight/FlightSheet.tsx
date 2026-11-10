@@ -19,6 +19,7 @@ import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
 import { airlineInfo, parseCallsign } from '../airline/airlines'
 import { aircraftProfile } from '../aircraft/types'
 import { callsFor, useRadio, type Transmission } from '../live/radio/radioStore'
+import { CallExtras, CallText, ThreadStory } from '../live/radio/understand/CallExtras'
 import { FrequencyTuner } from '../station/FrequencyTuner'
 import { EventBadge } from '../ui/EventBadge'
 import { Waveform } from '../station/Waveform'
@@ -32,6 +33,8 @@ import { useSheetDrag } from '../ui/useSheetDrag'
 import { AircraftPanel } from '../aircraft/AircraftPanel'
 import { aircraftTypeName, PHASE_LABEL } from './describe'
 import { FlightSummary } from './FlightSummary'
+import { FlightInsights } from '../insights/FlightInsights'
+import { Terms } from '../learn/Terms'
 import { FlightTimeline } from './FlightTimeline'
 import { formatDistance, routeProgress } from './route'
 import { Sparkline } from './Sparkline'
@@ -188,7 +191,9 @@ export function FlightCard() {
             Now
           </span>
           {flight.now ? (
-            <span className="mt-0.5 line-clamp-2 block text-[15px] font-medium leading-snug">{flight.now}</span>
+            <span className="mt-0.5 line-clamp-2 block text-[15px] font-medium leading-snug">
+              <Terms text={flight.now} />
+            </span>
           ) : (
             <span className="mt-1.5 block space-y-1.5" aria-label="Loading">
               <span className="skeleton block h-3.5 w-11/12" />
@@ -268,8 +273,9 @@ function LiveCallBubble({ call }: { call: Transmission }) {
       <p
         className={`rounded-[1.35rem] px-4 py-3 text-[15px] leading-snug ${pilot ? 'bg-atc-blue text-white' : 'bg-white/[0.11] text-white/90'}`}
       >
-        {call.text}
+        <CallText call={call} />
       </p>
+      <CallExtras id={call.id} align={pilot ? 'end' : 'start'} />
       <p className={`mt-1 px-2 text-[11px] tabular-nums text-white/40 ${pilot ? 'text-right' : ''}`}>
         {pilot ? 'Pilot' : call.speaker === 'controller' ? 'Controller' : 'Radio'} · {time}
       </p>
@@ -342,6 +348,9 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
           {/* The flight: number, route and progress, its live numbers */}
           <FlightSummary flight={flight} info={info} infoLoading={infoQuery.isLoading} />
 
+          {/* Its story so far, and a few facts about the route and aircraft */}
+          <FlightInsights flight={flight} info={info} />
+
           {/* The aircraft: its type from the side, with what it is */}
           <AircraftPanel
             type={d?.type}
@@ -364,6 +373,7 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
                 <span className="rounded bg-atc-yellow px-1.5 py-0.5 font-display text-xs tracking-wide text-black">{flight.airportCode}</span>
                 Live radio
               </h3>
+              <ThreadStory calls={liveCalls} icao24={flight.icao24} />
               <ol className="flex flex-col gap-2.5">
                 {liveCalls.map((c) => (
                   <LiveCallBubble key={c.id} call={c} />

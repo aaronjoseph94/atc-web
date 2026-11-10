@@ -198,6 +198,11 @@ export class Stubs {
       const last = body.transmissions?.at(-1)?.text ?? ''
       return send({ summary: last ? `Last call: ${last}` : 'No calls yet.', source: 'rules' })
     }
+    // No AI key in the tests: the status says so and every task answers as the server would without one.
+    if (p === '/api/ai') {
+      if (req.method() === 'GET') return send({ configured: false, provider: null, model: null, keySource: null, server: { anthropic: false, openrouter: false } })
+      return send({ ok: false, task: '', error: 'No AI key set. Add a Claude or OpenRouter key in Settings > AI.', status: 401 }, 401)
+    }
     if (p === '/api/transcribe') {
       const next = this.transcribeQueue.shift()
       if (!next) return send({ text: '', segments: [] })

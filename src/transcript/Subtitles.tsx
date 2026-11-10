@@ -9,9 +9,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { TranscriptCue } from '../api/types'
 import { useRadio, type Transmission } from '../live/radio/radioStore'
+import { FadeSwap } from '../live/radio/understand/CallExtras'
+import { useCallText } from '../live/radio/understand/store'
 import { cueProgress, getActiveCue } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
 import { useReducedMotion } from '../ui/motion'
+import { Terms } from '../learn/Terms'
 
 /**
  * How many words of a cue have been spoken. Words are weighted by length, so
@@ -97,23 +100,35 @@ function RadioCaption() {
   })
   const setPanel = usePlayhead((s) => s.setPanel)
   const progress = useSweep(call)
+  // The AI's cleaned words replace the raw ones when they arrive (faded in).
+  const shown = useCallText(call?.id ?? '', call?.text ?? '')
+  const shownBefore = useCallText(previous?.id ?? '', previous?.text ?? '')
   const canTranscribe = transcripts !== 'unavailable'
   // Someone on the air is worth showing even where nothing will be written out.
   const busy = speaking || (canTranscribe && pending > 0)
   if (!call && !busy) return null
-  const words = call ? call.text.split(/\s+/) : []
+  const words = call ? shown.text.split(/\s+/) : []
   const spoken = spokenWordCount(words, progress)
 
   return (
     <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the radio transcript">
-      {previous && <p className={`line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 ${GLOW_SOFT}`}>{previous.text}</p>}
+      {previous && <p className={`line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 ${GLOW_SOFT}`}>{shownBefore.text}</p>}
       {call && (
         <p key={call.id} className={`animate-caption line-clamp-4 text-[21px] font-semibold leading-snug ${GLOW}`}>
-          {words.map((w, i) => (
-            <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
-              {w}{' '}
-            </span>
-          ))}
+          <FadeSwap swapKey={shown.cleaned ? 'cleaned' : 'raw'}>
+            {/* Once every word is lit, Learn mode can underline its terms. */}
+            {spoken >= words.length ? (
+              <span className="text-white">
+                <Terms text={words.join(' ')} />
+              </span>
+            ) : (
+              words.map((w, i) => (
+                <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
+                  {w}{' '}
+                </span>
+              ))
+            )}
+          </FadeSwap>
         </p>
       )}
       {busy && <Receiving label={speaking ? 'On the air' : 'Transcribing'} />}
@@ -145,7 +160,7 @@ export function Subtitles() {
       <button type="button" className={SCRIM} onClick={() => setPanel('traffic')} aria-label="Open recent activity">
         {previousEvent && <p className={`line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 ${GLOW_SOFT}`}>{previousEvent.text}</p>}
         <p key={caption.id} className={`animate-caption text-[21px] font-semibold leading-snug text-white ${GLOW}`}>
-          {caption.text}
+          <Terms text={caption.text} />
         </p>
       </button>
     )
@@ -169,11 +184,17 @@ export function Subtitles() {
       ))}
       {active && (
         <p key={active.id} className={`animate-caption text-[21px] font-semibold leading-snug ${GLOW}`} aria-live="off">
-          {words.map((w, i) => (
-            <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
-              {w}{' '}
+          {spoken >= words.length ? (
+            <span className="text-white">
+              <Terms text={active.text} />
             </span>
-          ))}
+          ) : (
+            words.map((w, i) => (
+              <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
+                {w}{' '}
+              </span>
+            ))
+          )}
         </p>
       )}
     </button>

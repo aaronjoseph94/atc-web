@@ -4,13 +4,18 @@
  * folded away at the bottom for when something seems wrong.
  */
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, MessageSquareText } from 'lucide-react'
 import { useState } from 'react'
 import { AIRPORTS } from '../api/airports'
 import { getAiStatus, getHealth } from '../api/client'
+import { SpottingSettingsGroup, UnrecognisedDataGroup } from '../discovery/SpottingSettingsGroup'
+import { openFeedback } from '../feedback/store'
 import { usePlayhead } from '../playback/playheadStore'
 import { supportsHaptics } from '../ui/haptics'
 import { Group, Row, SectionLabel, Segmented, Sheet, Toggle } from '../ui/Panel'
+import { InsightSettingsGroup } from '../insights/InsightSettingsGroup'
+import { AiSettingsGroup } from './AiSettingsGroup'
+import { PerformanceSettings } from '../perf/PerformanceSettings'
 import { DEFAULT_SETTINGS, useSettings, type Settings } from './settingsStore'
 
 export function SettingsView() {
@@ -101,10 +106,19 @@ export function SettingsView() {
         </Row>
       </Group>
 
+      <SpottingSettingsGroup />
+      <InsightSettingsGroup />
+
+      <AiSettingsGroup />
+
       <Group className="mt-6">
         <button type="button" className="pressable-soft -mx-3.5 flex min-h-12 w-[calc(100%+1.75rem)] items-center justify-between rounded-2xl px-3.5 text-left text-subhead font-medium hover:bg-white/[0.04]" onClick={() => setPanel('layers')}>
           Map style and labels
           <ChevronRight className="size-4 text-white/40" />
+        </button>
+        <button type="button" className="pressable-soft -mx-3.5 flex min-h-12 w-[calc(100%+1.75rem)] items-center justify-between rounded-2xl px-3.5 text-left text-subhead font-medium hover:bg-white/[0.04]" onClick={openFeedback}>
+          Send feedback
+          <MessageSquareText className="size-4 text-white/40" />
         </button>
       </Group>
 
@@ -143,8 +157,10 @@ export function SettingsView() {
               </button>
             </Row>
           </Group>
+          <PerformanceSettings />
           <BackendStatus />
           <AiStatus />
+          <UnrecognisedDataGroup />
         </div>
       )}
       <p className="mt-5 px-1 text-caption text-atc-muted">Settings, pinned airports and history stay in this browser.</p>

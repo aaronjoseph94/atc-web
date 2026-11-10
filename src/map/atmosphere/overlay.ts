@@ -18,7 +18,6 @@ import { blobSprite, mulberry32 } from './textures'
 import { CALM, downwindScreenAngle, gustiness, sockExtension, type WeatherFx } from './weatherFx'
 import { drawWindsock } from './windsocks'
 
-const FRAME_MS = 1000 / 30
 /** Cloud shadows: the repeating field they are scattered over (metres), and how many there are in it. */
 const CLOUD_FIELD_M = 26_000
 const CLOUDS = 26
@@ -39,6 +38,10 @@ export type OverlayState = {
   /** The airport the cloud field and windsocks belong to. */
   center: LngLat
   sites: LngLat[]
+  /** Share of the full particle count to draw (the quality tier's; 1 when left out). */
+  particles?: number
+  /** Most redraws a second (the quality tier's; 30 when left out). */
+  fps?: number
 }
 
 type Cloud = { x: number; y: number; blobs: { dx: number; dy: number; r: number; a: number }[] }
@@ -133,7 +136,7 @@ export class AtmosphereOverlay {
   /** Particle pools sized to the screen and the weather. */
   private seedParticles() {
     const { fx, streamlines } = this.state
-    const area = this.w * this.h
+    const area = this.w * this.h * Math.max(0, Math.min(1, this.state.particles ?? 1))
     const rand = this.rand
     const nDrops = Math.round((area / 2600) * fx.rain)
     this.drops = Array.from({ length: nDrops }, () => ({ x: rand() * this.w, y: rand() * this.h, len: 9 + rand() * 14, speed: 0.75 + rand() * 0.5, jitter: (rand() - 0.5) * 0.12 }))
@@ -178,7 +181,7 @@ export class AtmosphereOverlay {
     this.raf = 0
     const zoom = this.map.getZoom()
     const live = this.animating(zoom)
-    if (forced || now - this.lastDraw >= FRAME_MS - 2) {
+    if (forced || now - this.lastDraw >= 1000 / Math.min(30, this.state.fps ?? 30) - 2) {
       const dt = this.lastDraw ? Math.min(0.1, (now - this.lastDraw) / 1000) : 0
       this.lastDraw = now
       if (live) this.t += dt

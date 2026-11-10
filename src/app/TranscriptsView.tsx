@@ -24,10 +24,14 @@ import { getAirport, resolveStation } from '../api/airports'
 import { formatMhz } from '../api/airportData'
 import { useNow } from '../hooks/useNow'
 import { findClip, loadClipIndex, playClip, startClipCapture, stopClip, useClips } from '../live/history/clips'
-import { callsignSuggestions, groupByTime, highlight, NO_FILTERS, PHRASES, search, type Filters, type Hit, type Range, type SearchItem } from '../live/history/search'
+import { callsignSuggestions, groupByTime, highlight, NO_FILTERS, PHRASES, type Filters, type Hit, type Range, type SearchItem } from '../live/history/search'
 import { startHistory, useHistory, type HistoryEntry } from '../live/history/store'
+import { Terms } from '../learn/Terms'
 import { useRadio } from '../live/radio/radioStore'
 import { releaseFocus } from '../live/radio/transcriber'
+import { AiHint, CallExtras, ExplainToggle, FadeSwap } from '../live/radio/understand/CallExtras'
+import { searchWithRaw, withUnderstanding } from '../live/radio/understand/search'
+import { useUnderstanding } from '../live/radio/understand/store'
 import { liveBuffer } from '../live/session'
 import { parseTaxi } from '../live/taxi/parse'
 import { showTaxiRoute } from '../live/taxi/watch'
@@ -46,7 +50,7 @@ const PAGE = 120
 const STICK_PX = 140
 
 type CueItem = SearchItem & { source: 'cue'; startMs: number; endMs: number; label: string; key: string | null }
-type Item = HistoryEntry | CueItem
+type Item = (HistoryEntry & { raw?: string }) | CueItem
 
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
@@ -170,7 +174,7 @@ function Chip({ active, onClick, children, label, tone = 'plain', disabled }: { 
 }
 
 function Marked({ text, ranges }: { text: string; ranges: Range[] }) {
-  if (!ranges.length) return <>{text}</>
+  if (!ranges.length) return <Terms text={text} />
   return (
     <>
       {highlight(text, ranges).map((r, i) =>
@@ -179,7 +183,9 @@ function Marked({ text, ranges }: { text: string; ranges: Range[] }) {
             {r.text}
           </mark>
         ) : (
-          <span key={i}>{r.text}</span>
+          <span key={i}>
+            <Terms text={r.text} />
+          </span>
         ),
       )}
     </>
@@ -214,6 +220,7 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   const playingId = useClips((s) => s.playing)
   const transcripts = useRadio((s) => s.transcripts)
   const radioOn = useRadio((s) => s.on && s.status !== 'off' && s.status !== 'nofeed')
+  const understood = useUnderstanding((s) => s.results)
   const now = useNow(20_000)
 
   const playback = mode === 'playback' && !!clip
@@ -233,15 +240,16 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   const cues = playback ? clip.cues : null
   const items: Item[] = useMemo(() => {
     // Radio only: the tower-log events in the history (and in rewind clips) belong to Recent activity.
-    if (!cues || !clip) return entries.filter((e) => e.source === 'radio')
+    // Cleaned words, speaker and aircraft from the AI pass where there are any; the raw words stay searchable.
+    if (!cues || !clip) return withUnderstanding(entries.filter((e) => e.source === 'radio'), understood)
     return cues.filter((c) => c.speaker !== TOWER_LOG_SPEAKER).map((c): CueItem => {
       const label = c.callsign ? (clip.aircraft?.[c.callsign]?.callsign ?? c.callsign).toUpperCase() : (c.speaker ?? '')
       return { id: c.id, source: 'cue', at: c.startMs, startMs: c.startMs, endMs: c.endMs, text: c.text, stationId: '', callsigns: label ? [label] : [], ids: c.callsign ? [trackId(c.callsign)] : [], label, key: c.callsign ?? null }
     })
-  }, [cues, clip, entries])
+  }, [cues, clip, entries, understood])
 
   const active = useMemo((): Filters => ({ ...filters, query, stationId: filters.stationId ? stationId : null, icao24: filters.icao24 ? myFlight : null }), [filters, query, stationId, myFlight])
-  const hits = useMemo(() => search(items, active), [items, active])
+  const hits = useMemo(() => searchWithRaw(items, active), [items, active])
   const shown = hits.slice(-limit)
   const groups = useMemo(() => (playback ? [{ label: clip?.title ?? 'Replay', key: 'replay', hits: shown }] : groupByTime(shown, now)), [playback, clip, shown, now])
   const suggestions = useMemo(() => (filters.callsign ? [] : callsignSuggestions(items, query)), [items, query, filters.callsign])
@@ -322,7 +330,11 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
     <div className="relative">
       <style>{'@keyframes tt-eq { from { transform: scaleY(0.25) } to { transform: scaleY(1) } }'}</style>
       <div ref={head} className={`sticky top-0 z-20 pb-2.5 ${gutter} ${docked ? 'bg-atc-panel' : 'bg-black'}`}>
-        <p className="mb-2.5 truncate text-footnote text-white/55">{subtitle}</p>
+        <div className="mb-2.5 flex min-h-7 items-center justify-between gap-3">
+          <p className="min-w-0 truncate text-footnote text-white/55">{subtitle}</p>
+          {!playback && <ExplainToggle />}
+        </div>
+        {!playback && radioCount > 0 && <AiHint />}
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-white/45" strokeWidth={2.25} />
           <input
@@ -469,7 +481,9 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
                             <span className="tabular-nums">{clock(it.at)}</span>
                           </span>
                           <span className="mt-0.5 block text-[21px] font-semibold leading-snug text-white/90">
-                            <Marked text={it.text} ranges={h.ranges} />
+                            <FadeSwap swapKey={it.raw != null && it.text !== it.raw ? 'cleaned' : 'raw'}>
+                              <Marked text={it.text} ranges={h.ranges} />
+                            </FadeSwap>
                           </span>
                           {taxi && (
                             <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-atc-card/30 px-2 py-0.5 text-caption font-semibold text-[#C9BCFF]">
@@ -484,6 +498,9 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
                           </span>
                         )}
                       </button>
+                      <div className="px-3 empty:hidden">
+                        <CallExtras id={it.id} />
+                      </div>
                     </li>
                   )
                 })}

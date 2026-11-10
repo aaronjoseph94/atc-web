@@ -5,11 +5,12 @@
  */
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { airlineInfo, brandFor } from '../airline/airlines'
 import { getAirport } from '../api/airports'
 import type { Aircraft } from '../api/types'
+import { SpottedList } from '../discovery/SpottedList'
 import { aircraftTypeName, flightPhase, friendlyFlightName, PHASE_LABEL, type Phase } from '../flight/describe'
 import { runwayRelation } from '../live/events'
 import { liveBuffer } from '../live/session'
@@ -40,7 +41,6 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
   const selectedIcao = usePlayhead((s) => s.selectedIcao)
   const liveStatus = usePlayhead((s) => s.liveStatus)
   const setPanel = usePlayhead((s) => s.setPanel)
-  const select = usePlayhead((s) => s.select)
   const setHover = usePlayhead((s) => s.setHover)
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
@@ -90,6 +90,12 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
     setHover(null)
     setPanel(null)
   }
+  // Stable, so the rows (memoised) only re-render when what they show changes, not on every once-a-second refresh.
+  const [pick] = useState(() => (icao24: string) => {
+    usePlayhead.getState().select(icao24)
+    usePlayhead.getState().setHover(null)
+    usePlayhead.getState().setPanel(null)
+  })
 
   return (
     <PanelFrame docked={docked} open={open} title={`Traffic at ${airport.icao}`} onClose={close}>
@@ -108,6 +114,8 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
 
       {/* What the traffic has been doing: takeoffs, landings, go-arounds. Live only, and out of the way of a search. */}
       {mode === 'live' && !q && <ActivityList onPick={close} />}
+      {/* Unusual visitors this session (src/discovery). */}
+      {mode === 'live' && !q && <SpottedList onPick={close} />}
 
       {total === 0 ? (
         q ? (
@@ -142,33 +150,16 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
               </SectionLabel>
               <ul className="grid grid-cols-1 gap-1.5 @xl:grid-cols-2">
                 {rows.map(({ a, phase, note }) => (
-                  <li key={a.icao24}>
-                    <button
-                      type="button"
-                      aria-current={a.icao24 === selectedIcao || undefined}
-                      className={`pressable-soft flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2 text-left ${a.icao24 === selectedIcao ? 'bg-atc-card' : 'bg-white/[0.05] hover:bg-white/[0.09]'}`}
-                      onPointerEnter={() => setHover(a.icao24)}
-                      onPointerLeave={() => setHover(null)}
-                      onFocus={() => setHover(a.icao24)}
-                      onClick={() => {
-                        select(a.icao24)
-                        close()
-                      }}
-                    >
-                      {/* Fixed slot, so callsigns line up whether or not the airline has a logo. */}
-                      <span className="grid h-6 w-9 shrink-0 place-items-center">
-                        <AirlineLogo callsign={a.callsign} icao24={a.icao24} height={22} maxWidth={34} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="display-tight block truncate font-display text-[22px] leading-tight">{a.callsign}</span>
-                        <span className="block truncate text-caption text-white/60">{note ?? aircraftTypeName(a.type) ?? PHASE_LABEL[phase]}</span>
-                      </span>
-                      <span className="shrink-0 text-right text-caption tabular-nums text-white/65">
-                        <span className="block text-footnote font-semibold text-white">{a.onGround ? 'Ground' : formatAltitude(a.altitudeFt, altitudeUnit)}</span>
-                        <span className="block">{formatSpeed(a.speedKt, speedUnit)}</span>
-                      </span>
-                    </button>
-                  </li>
+                  <TrafficRow
+                    key={a.icao24}
+                    icao24={a.icao24}
+                    callsign={a.callsign}
+                    detail={note ?? aircraftTypeName(a.type) ?? PHASE_LABEL[phase]}
+                    altitude={a.onGround ? 'Ground' : formatAltitude(a.altitudeFt, altitudeUnit)}
+                    speed={formatSpeed(a.speedKt, speedUnit)}
+                    selected={a.icao24 === selectedIcao}
+                    onPick={pick}
+                  />
                 ))}
               </ul>
             </section>
@@ -178,3 +169,40 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
     </PanelFrame>
   )
 }
+
+type RowProps = { icao24: string; callsign: string; detail: string; altitude: string; speed: string; selected: boolean; onPick: (icao24: string) => void }
+
+/**
+ * One aircraft in the list. Memoised on what it shows: the list refreshes once
+ * a second and a busy airport has well over a hundred rows, most unchanged.
+ * Rows scrolled out of view skip layout and paint (`content-visibility`).
+ */
+const TrafficRow = memo(function TrafficRow({ icao24, callsign, detail, altitude, speed, selected, onPick }: RowProps) {
+  const setHover = usePlayhead((s) => s.setHover)
+  return (
+    <li className="[contain-intrinsic-size:auto_3.5rem] [content-visibility:auto]">
+      <button
+        type="button"
+        aria-current={selected || undefined}
+        className={`pressable-soft flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2 text-left ${selected ? 'bg-atc-card' : 'bg-white/[0.05] hover:bg-white/[0.09]'}`}
+        onPointerEnter={() => setHover(icao24)}
+        onPointerLeave={() => setHover(null)}
+        onFocus={() => setHover(icao24)}
+        onClick={() => onPick(icao24)}
+      >
+        {/* Fixed slot, so callsigns line up whether or not the airline has a logo. */}
+        <span className="grid h-6 w-9 shrink-0 place-items-center">
+          <AirlineLogo callsign={callsign} icao24={icao24} height={22} maxWidth={34} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="display-tight block truncate font-display text-[22px] leading-tight">{callsign}</span>
+          <span className="block truncate text-caption text-white/60">{detail}</span>
+        </span>
+        <span className="shrink-0 text-right text-caption tabular-nums text-white/65">
+          <span className="block text-footnote font-semibold text-white">{altitude}</span>
+          <span className="block">{speed}</span>
+        </span>
+      </button>
+    </li>
+  )
+})

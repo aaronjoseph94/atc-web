@@ -27,6 +27,15 @@ export const SRC = {
   aircraft: 'aircraft',
   shadows: 'aircraft-shadows',
   trails: 'aircraft-trails',
+  /** Blinking lights and exhaust shimmer, apart from the aircraft so a strobe flash doesn't re-send every tag and airframe. */
+  fx: 'aircraft-fx',
+  /**
+   * Parked aircraft (not highlighted): their artwork, fins and tags. They don't move, so this source
+   * is re-sent only when one of them changes, not every time something taxies past; the aircraft
+   * source still carries a bare point for each of them for the tap target.
+   */
+  parked: 'aircraft-parked',
+  parkedShadows: 'aircraft-shadows-parked',
   events: 'aircraft-events',
   procAll: 'proc-all',
   procNet: 'proc-net',
@@ -67,6 +76,10 @@ export const LAYER = {
   exhaust: 'ac-exhaust',
   livery: 'ac-livery',
   lights: 'ac-lights',
+  // The parked aircraft's copies of the airframe, fin and shadow layers.
+  parkedShadow: 'ac-shadow-parked',
+  parkedAircraft: 'ac-icon-parked',
+  parkedLivery: 'ac-livery-parked',
 } as const
 
 type Palette = {
@@ -291,6 +304,8 @@ function layers(p: Palette): LayerSpecification[] {
   // The reference map shows no streets at all, only the airfield; roads are kept for
   // satellite imagery, where they help to read the photo.
   const roads = sat
+  // An aircraft's crisp distance-field shadow (the moving aircraft's, or the parked ones' on their own source).
+  const sharpShadow = (id: string, source: string) => ({ id, type: 'symbol', source, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': p.softShadows?.color ?? '#000000', 'icon-opacity': ['*', p.softShadows?.opacity ?? (chart ? 0.22 : 0.42), ['get', 'o'], ['-', 1, ['coalesce', ['get', 'bl'], 0]]], 'icon-halo-color': p.softShadows ? tone(p.softShadows.color, 'rgba(0,0,0,0)', 0.6) : 'rgba(0,0,0,0.4)', 'icon-halo-width': p.softShadows ? 2.2 : 1.6, 'icon-halo-blur': p.softShadows ? 2.4 : 1.6 } })
 
   const list: unknown[] = [
     // Zoomed out the land is a light slate with darker forest, like a dimmed relief map; closer in it settles to navy.
@@ -499,11 +514,13 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#6A4CF8', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
     { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(98,68,246,0.02)', 0.5, 'rgba(98,68,246,0.52)', 1, 'rgba(146,122,255,1)'] } },
     // The shadow sharpens on the ground and softens with height: a crisp distance-field silhouette cross-fades into a pre-blurred one (`bl`).
-    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': p.softShadows?.color ?? '#000000', 'icon-opacity': ['*', p.softShadows?.opacity ?? (chart ? 0.22 : 0.42), ['get', 'o'], ['-', 1, ['coalesce', ['get', 'bl'], 0]]], 'icon-halo-color': p.softShadows ? tone(p.softShadows.color, 'rgba(0,0,0,0)', 0.6) : 'rgba(0,0,0,0.4)', 'icon-halo-width': p.softShadows ? 2.2 : 1.6, 'icon-halo-blur': p.softShadows ? 2.4 : 1.6 } },
+    sharpShadow(LAYER.shadow, SRC.shadows),
     { id: LAYER.shadowSoft, type: 'symbol', source: SRC.shadows, filter: ['>', ['coalesce', ['get', 'bl'], 0], 0], layout: { 'icon-image': ['concat', 'fx-blur-', ['get', 'sh']], 'icon-size': iconScale(['*', ['get', 'scale'], 1.06]), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['*', chart ? 0.24 : 0.46, ['get', 'o'], ['get', 'bl']] } },
+    // Parked aircraft's shadows, from their own source (see SRC.parked); on the ground they are never soft.
+    sharpShadow(LAYER.parkedShadow, SRC.parkedShadows),
     // Landing lights thrown ahead of the nose, and heat shimmer behind the engines on the takeoff roll.
     { id: LAYER.landing, type: 'symbol', source: SRC.aircraft, filter: ['>', ['coalesce', ['get', 'll'], 0], 0], layout: { 'icon-image': ['concat', 'fx-land-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 10, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.35], 14, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.85]] } },
-    { id: LAYER.exhaust, type: 'symbol', source: SRC.aircraft, filter: ['!=', ['coalesce', ['get', 'ex'], ''], ''], layout: { 'icon-image': ['get', 'ex'], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['*', ['get', 'o'], ['get', 'exo']] } },
+    { id: LAYER.exhaust, type: 'symbol', source: SRC.fx, filter: ['!=', ['coalesce', ['get', 'ex'], ''], ''], layout: { 'icon-image': ['get', 'ex'], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['*', ['get', 'o'], ['get', 'exo']] } },
     // Radio ripple between tower and aircraft, under the aircraft and their halos.
     ...rippleLayers(),
     { id: LAYER.event, type: 'circle', source: SRC.events, paint: { 'circle-radius': ['get', 'r'], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2, 'circle-stroke-opacity': ['get', 'o'], 'circle-pitch-alignment': 'map' } },
@@ -513,41 +530,17 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.halo, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'hi'], 1], paint: { 'circle-radius': 19, 'circle-color': '#7C5CFC', 'circle-opacity': 0.34, 'circle-pitch-alignment': 'map' } },
     // Invisible, generous hit target so small icons are easy to tap.
     { id: LAYER.hit, type: 'circle', source: SRC.aircraft, paint: { 'circle-radius': 18, 'circle-opacity': 0 } },
-    {
-      id: LAYER.aircraft,
-      type: 'symbol',
-      source: SRC.aircraft,
-      layout: {
-        'icon-image': artImage(['case', ['==', ['get', 'hi'], 1], ['concat', ['get', 'icon'], '-hi'], ['get', 'icon']]),
-        'icon-size': iconScale(acSize),
-        'icon-rotate': ['get', 'heading'],
-        'icon-rotation-alignment': 'map',
-        'icon-pitch-alignment': 'map',
-        'icon-allow-overlap': true,
-        'icon-ignore-placement': true,
-        'symbol-sort-key': ['get', 'z'],
-      },
-      // The silhouettes are shaded artwork (white, and yellow when highlighted), not tinted masks.
-      paint: {
-        // Parked aircraft use a greyer drawing (`-pk`), so they need less fading to sit back.
-        'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.8, 1]]],
-      },
-    },
-    // The airline's colour on the fin: a distance-field patch tinted per aircraft, over the white artwork.
-    {
-      id: LAYER.livery,
-      type: 'symbol',
-      source: SRC.aircraft,
-      minzoom: 12,
-      filter: ['!=', ['coalesce', ['get', 'lv'], ''], ''],
-      layout: { 'icon-image': ['concat', 'fx-fin-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'symbol-sort-key': ['get', 'z'] },
-      paint: { 'icon-color': ['get', 'lv'], 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13, ['*', ['get', 'o'], ['match', ['get', 'state'], 0, 0.4, 0.66]]] },
-    },
+    // Parked aircraft first, from their own source, so taxiing and airborne traffic draws over them.
+    aircraftLayer(LAYER.parkedAircraft, SRC.parked),
+    liveryLayer(LAYER.parkedLivery, SRC.parked),
+    // The aircraft source's parked points are only tap targets; their artwork is the layer above.
+    aircraftLayer(LAYER.aircraft, SRC.aircraft, ['!=', ['coalesce', ['get', 'ps'], 0], 1]),
+    liveryLayer(LAYER.livery, SRC.aircraft),
     // Navigation lights, strobes and beacon: `lt` names the sprite lit this instant; the glow size steps with zoom.
     {
       id: LAYER.lights,
       type: 'symbol',
-      source: SRC.aircraft,
+      source: SRC.fx,
       filter: ['!=', ['coalesce', ['get', 'lt'], ''], ''],
       layout: {
         'icon-image': ['step', ['zoom'], ['concat', ['get', 'lt'], '0'], LIGHT_BAND_ZOOMS[0], ['concat', ['get', 'lt'], '1'], LIGHT_BAND_ZOOMS[1], ['concat', ['get', 'lt'], '2']],
@@ -569,7 +562,7 @@ function layers(p: Palette): LayerSpecification[] {
     // layer first: moving and highlighted aircraft (always shown, never pushed around,
     // as their positions change every frame) claim their space, then parked aircraft's
     // tags, which give way to those and to each other rather than piling up along a pier.
-    tagLayer('ac-label-parked', ['all', ['==', ['get', 'lbl'], 1], ['==', ['get', 'state'], 0], ['==', ['get', 'hi'], 0]], false),
+    tagLayer('ac-label-parked', ['all', ['==', ['get', 'lbl'], 1], ['==', ['get', 'state'], 0], ['==', ['get', 'hi'], 0]], false, SRC.parked),
     tagLayer(LAYER.label, ['all', ['==', ['get', 'lbl'], 1], ['any', ['!=', ['get', 'state'], 0], ['==', ['get', 'hi'], 1]]], true),
   ]
   return withAtmosphere(list as LayerSpecification[], p)
@@ -626,12 +619,50 @@ export function artImage(id: unknown): unknown {
   return out
 }
 
-/** A callsign tag layer; `overlap` lets its tags draw over anything already placed (but still keep later layers' symbols off them). */
-function tagLayer(id: string, filter: unknown[], overlap: boolean): LayerSpecification {
+/** The aircraft artwork layer (for the moving aircraft, or the parked ones on their own source). */
+function aircraftLayer(id: string, source: string, filter?: unknown[]): LayerSpecification {
   return {
     id,
     type: 'symbol',
-    source: SRC.aircraft,
+    source,
+    ...(filter ? { filter } : {}),
+    layout: {
+      'icon-image': artImage(['case', ['==', ['get', 'hi'], 1], ['concat', ['get', 'icon'], '-hi'], ['get', 'icon']]),
+      'icon-size': iconScale(acSize),
+      'icon-rotate': ['get', 'heading'],
+      'icon-rotation-alignment': 'map',
+      'icon-pitch-alignment': 'map',
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
+      'symbol-sort-key': ['get', 'z'],
+    },
+    // The silhouettes are shaded artwork (white, and yellow when highlighted), not tinted masks.
+    paint: {
+      // Parked aircraft use a greyer drawing (`-pk`), so they need less fading to sit back.
+      'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.8, 1]]],
+    },
+  } as unknown as LayerSpecification
+}
+
+/** The airline's colour on the fin: a distance-field patch tinted per aircraft, over the white artwork. */
+function liveryLayer(id: string, source: string): LayerSpecification {
+  return {
+    id,
+    type: 'symbol',
+    source,
+    minzoom: 12,
+    filter: ['!=', ['coalesce', ['get', 'lv'], ''], ''],
+    layout: { 'icon-image': ['concat', 'fx-fin-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'symbol-sort-key': ['get', 'z'] },
+    paint: { 'icon-color': ['get', 'lv'], 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13, ['*', ['get', 'o'], ['match', ['get', 'state'], 0, 0.4, 0.66]]] },
+  } as unknown as LayerSpecification
+}
+
+/** A callsign tag layer; `overlap` lets its tags draw over anything already placed (but still keep later layers' symbols off them). */
+function tagLayer(id: string, filter: unknown[], overlap: boolean, source: string = SRC.aircraft): LayerSpecification {
+  return {
+    id,
+    type: 'symbol',
+    source,
     filter,
     layout: {
       'icon-image': ['get', 'tag'],
@@ -832,6 +863,9 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.pads]: { type: 'geojson', data: empty },
       [SRC.aircraft]: { type: 'geojson', data: empty },
       [SRC.shadows]: { type: 'geojson', data: empty },
+      [SRC.fx]: { type: 'geojson', data: empty },
+      [SRC.parked]: { type: 'geojson', data: empty },
+      [SRC.parkedShadows]: { type: 'geojson', data: empty },
       [SRC.trails]: { type: 'geojson', data: empty, lineMetrics: true },
       [SRC.events]: { type: 'geojson', data: empty },
       [SRC.procAll]: { type: 'geojson', data: empty },
@@ -848,7 +882,7 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
 }
 
 /** Layer properties the app toggles at runtime; a theme change must not undo them. */
-const RUNTIME_VISIBILITY = new Set<string>([LAYER.buildings, LAYER.approach, LAYER.approachTick, LAYER.trails, LAYER.shadow, LAYER.radar])
+const RUNTIME_VISIBILITY = new Set<string>([LAYER.buildings, LAYER.approach, LAYER.approachTick, LAYER.trails, LAYER.shadow, LAYER.parkedShadow, LAYER.radar])
 
 /** Re-colour the live map for a theme by pushing each layer's paint and visibility. */
 export function applyTheme(map: MapLibreMap, theme: MapTheme) {
@@ -1286,4 +1320,33 @@ function withAtmosphere(list: LayerSpecification[], p: Palette): LayerSpecificat
     out.splice(i < 0 ? out.length : i, 0, layer as LayerSpecification)
   }
   return out
+}
+
+// ---------------------------------------------------------------------------
+// Instruction badges: the latest assignment a controller gave an aircraft
+// ("↑5,000", "HDG 270", "→124.75"), as a small chip under it. The chips are
+// bitmaps drawn in the UI font by `InstructionBadgeLayer`; `img` is the
+// image id, `o` the fade.
+// ---------------------------------------------------------------------------
+
+export const INSTR_SRC = 'instruction-badges'
+export const INSTR_LAYER = 'instruction-badge'
+
+export function instructionBadgeLayers(): LayerSpecification[] {
+  return [
+    {
+      id: INSTR_LAYER,
+      type: 'symbol',
+      source: INSTR_SRC,
+      layout: {
+        'icon-image': ['get', 'img'],
+        // Under the aircraft, mirroring the callsign tag above it.
+        'icon-anchor': 'top',
+        'icon-offset': ['interpolate', ['linear'], ['zoom'], 9, ['literal', [0, 9]], 14, ['literal', [0, 13]], 16, ['literal', [0, 20]], 18, ['literal', [0, 40]]],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+      paint: { 'icon-opacity': ['coalesce', ['get', 'o'], 1] },
+    },
+  ] as LayerSpecification[]
 }

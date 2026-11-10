@@ -20,6 +20,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 - **Channel switcher.** Every published position at the airport: one tower per runway, each ground sector, approach, departure, clearance, ATIS.
 - **Weather.** Decoded METAR, a wind rose against the runways, head- and cross-wind per runway, and the real digital ATIS, which can be read aloud.
 - **Traffic list** with search by flight, airline, type or tail number.
+- **Spotting.** Unusual visitors are scored as they arrive (outsize freighters like the An-124 or Dreamlifter, classic trijets, A380s and 747s away from the big gateways, military and government VIP flights) and listed under *Spotted* in the traffic list, with a small star on their map tag and an occasional toast ("Rare: Antonov An-124 Ruslan inbound to ORD"). The scoring is built-in rules (`src/discovery/rarity.ts`); with an AI key, one line on why it's notable is written per type and airport. Private aircraft are judged by type only; owners are never looked up. Toasts and stars can be switched off in Settings > Spotting.
 
 **Replay**
 - **Rewind.** The app records the traffic it shows; scrub back through the last 45 minutes at up to 8×, with logged events as markers on the timeline.
@@ -27,6 +28,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 - **Radio explanations.** A built-in phrasebook translates calls ("hold short 27C" → "stop before runway 27C"). Set `AI_API_KEY` and a model writes the summary instead.
 
 **Everywhere**
+- **Send feedback** (menu or Settings): a few words, optionally a picture of the map, and the app's context (airport, channel, selected flight, version, screen size, recent errors) go to `/api/feedback`, which triages them and can open a GitHub issue (see below).
 - Keyboard shortcuts (`?` lists them), sheets you can drag or pull down to close, tap a runway for its details, press and hold (or right-click) to centre the map, deep links per airport (`/#/JFK`), pinned and recent airports, "near me", units, reduced motion.
 
 ## Stack
@@ -48,10 +50,12 @@ No paid APIs, fonts, icon packs or tile services are used, and no accounts or ke
 functions/api/        Cloudflare Pages Functions: aircraft, weather, flight, health, stations, clips/[id], summarize
 public/clips/         Replay scenes: audio + manifest per clip, and index.json
 public/sw.js          Service worker: caches tiles/glyphs/imagery/clips, never the shell or API
-scripts/              Vite dev middleware mirroring the Functions; airport data fetcher
+scripts/              Vite dev middleware mirroring the Functions; airport data fetcher; AI data cleanup
 scripts/clips/        Clip generator: scenarios, flight kinematics, speech synthesis, radio effect, verifier
 src/api/              Types, airport catalog, providers + normalizers, browser client
 src/app/              Shell, top bar, map controls, menu and panels
+src/discovery/        Spotting: rarity scoring of live traffic, the Spotted list, map-tag stars
+src/feedback/         The Send feedback sheet, its context and error ring
 src/flight/           Flight card and full view, plain-language phrasebook
 src/live/             Tower-log event detection, session recorder
 src/map/              Map style, airport diagram generator, aircraft layer, camera, position smoothing
@@ -140,3 +144,29 @@ Everything here is shown for interest. It is not for navigation or flight planni
 | `AI_MODEL` | `anthropic/claude-haiku-5.5` (default) or `claude-haiku-5-5` |
 
 The key never reaches the browser. Identical requests are cached at the edge.
+
+## Feedback (optional set-up)
+
+`POST /api/feedback` always answers: it sorts the report into bug / idea / data / question with a severity, a one-line summary and the likely part of the code, using the `triageFeedback` AI task when the server has a key and keyword rules otherwise, and shows that back to the sender. It keeps a few reports per person per ten minutes. To have reports filed as GitHub issues (labelled `feedback`, the category, `severity: …` and `area: …`), set these Pages environment variables (or export them before `npm run dev`):
+
+| Variable | What |
+| --- | --- |
+| `GITHUB_FEEDBACK_TOKEN` | Fine-grained token for the repo with *Issues: read and write* (and *Contents: read and write* for screenshots) |
+| `GITHUB_FEEDBACK_REPO` | `owner/repo` that receives the issues |
+| `GITHUB_FEEDBACK_SCREENSHOT_BRANCH` | Optional: an existing branch where map screenshots are stored and linked from the issue; without it screenshots are dropped |
+| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` | Optional: the server's own key, for AI triage (keys typed into Settings on a device are never sent to this endpoint) |
+
+Without the GitHub variables the triage goes back to the sender and into the Functions log.
+
+## AI data cleanup (offline)
+
+`scripts/ai-cleanup.mjs` reviews the hand-kept tables in bulk and proposes fixes; it never edits a file on its own. It checks the airline table (`src/airline/airlines.ts`: ICAO/IATA codes, names, regional brands), the radio names (`src/live/radio/telephony.ts`), the aircraft facts (`src/aircraft/types.ts`: suspicious numbers), aircraft types seen in traffic with no facts entry, and airline-style callsign prefixes seen in traffic that match nothing.
+
+```bash
+node scripts/ai-cleanup.mjs --dry-run                       # what would be sent; no key needed, writes nothing
+ANTHROPIC_API_KEY=… node scripts/ai-cleanup.mjs --seen seen.json   # seen.json: Settings > Data and diagnostics > Not recognised yet > Copy
+node scripts/ai-cleanup.mjs --sample ORD,JFK,YYZ            # also sample live traffic from the deployed site
+node scripts/ai-cleanup.mjs --apply reports/ai-cleanup-2026-11-10.patch.json   # after review; --ids a,b for a subset
+```
+
+It writes `reports/ai-cleanup-<date>.md` (local checks, every proposed change as a diff with its reason and confidence, the findings a person has to decide) and `reports/ai-cleanup-<date>.patch.json`; delete any op you disagree with before `--apply`. Claude is called through the official SDK with `ANTHROPIC_API_KEY` (as one Message Batch, at half price, when there are more than three requests; `--resume-batch <id>` collects one later) or OpenRouter with `OPENROUTER_API_KEY`. Answers are structured JSON. The model defaults to the app's default (`DEFAULT_CLAUDE_MODEL` in `src/api/ai/run.ts`); `--model` overrides it. `--help` lists every flag.

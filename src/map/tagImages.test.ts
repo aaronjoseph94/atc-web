@@ -9,6 +9,14 @@ describe('tag ids', () => {
     expect(decodeTag(encodeTag(bare))).toEqual(bare)
   })
 
+  it('carries the rare-aircraft star only when there is one', () => {
+    const star = { active: false, logo: 'GTI', callsign: 'GTI8401', sub: '', star: true }
+    expect(encodeTag(star)).toBe('tag|n*|GTI|GTI8401|')
+    expect(decodeTag(encodeTag(star))).toEqual(star)
+    expect(decodeTag(encodeTag({ ...star, active: true }))).toEqual({ ...star, active: true })
+    expect(encodeTag({ ...star, star: false })).toBe('tag|n|GTI|GTI8401|')
+  })
+
   it('ignores other images', () => {
     expect(decodeTag('ac-jet')).toBeNull()
     expect(decodeTag('tag-active')).toBeNull()
@@ -16,6 +24,16 @@ describe('tag ids', () => {
 })
 
 describe('tagLayout', () => {
+  it('makes room for the star after the callsign', () => {
+    const plain = tagLayout({ textW: 40, capH: 8.4 })
+    const L = tagLayout({ textW: 40, capH: 8.4, star: true })
+    expect(plain.star).toBeNull()
+    expect(Math.abs(L.width - plain.width - (TAG.starGap + TAG.starR * 2))).toBeLessThan(1)
+    expect(L.star!.x).toBeCloseTo(L.textX + 40 + TAG.starGap + TAG.starR)
+    expect(L.star!.x + TAG.starR).toBeLessThanOrEqual(L.width - TAG.padText + 1)
+  })
+
+
   it('is a 26 px plate with the text padded both sides when there is no logo', () => {
     const L = tagLayout({ textW: 40, capH: 8.4 })
     expect(L.height).toBe(TAG.height)

@@ -18,6 +18,8 @@ import { getAirport } from '../../api/airports'
 import { usePlayhead } from '../../playback/playheadStore'
 import { useSettings } from '../../settings/settingsStore'
 import { useReducedMotion } from '../../ui/motion'
+import { usePerf } from '../../perf/governor'
+import { profileFor } from '../../perf/quality'
 import { useWeather } from '../../station/StationBar'
 import { runwayEnds, standMarkings, tyreMarks } from '../airportDiagram'
 import type { LngLat } from '../geo'
@@ -69,6 +71,7 @@ export function AtmosphereLayer({ map, airportIcao }: { map: MapLibreMap | null;
   const fx = useMemo(() => weatherFx(data?.metar), [data?.metar])
   const night = useNight(airport.center)
   const sites = useMemo(() => windsockSites(runwayEnds(airportIcao)), [airportIcao])
+  const quality = profileFor(usePerf((s) => s.tier))
 
   const cloudRef = useRef<HTMLCanvasElement>(null)
   const fxRef = useRef<HTMLCanvasElement>(null)
@@ -90,18 +93,18 @@ export function AtmosphereLayer({ map, airportIcao }: { map: MapLibreMap | null;
     if (!s || !map) return
     s.strength = Math.max(0.12, (1 - 0.7 * fx.cloud) * (1 - 0.6 * fx.fog) * (1 - 0.65 * night))
     const sync = () => {
-      s.animate = !reduceMotion && !document.hidden
+      s.animate = !reduceMotion && !document.hidden && quality.waterSheen
     }
     sync()
     map.triggerRepaint()
     document.addEventListener('visibilitychange', sync)
     return () => document.removeEventListener('visibilitychange', sync)
-  }, [map, fx, night, reduceMotion])
+  }, [map, fx, night, reduceMotion, quality])
 
   // ---- canvas overlay ---------------------------------------------------------
   const overlayState = useMemo<OverlayState>(
-    () => ({ fx, night, streamlines, reduceMotion, shadows: theme !== 'chart', center: airport.center, sites }),
-    [fx, night, streamlines, reduceMotion, theme, airport.center, sites],
+    () => ({ fx, night, streamlines, reduceMotion, shadows: theme !== 'chart', center: airport.center, sites, particles: quality.particles, fps: quality.overlayFps }),
+    [fx, night, streamlines, reduceMotion, theme, airport.center, sites, quality],
   )
   // Read when the overlay is created, so a new map starts from the current state.
   const latest = useRef(overlayState)

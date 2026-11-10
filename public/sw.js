@@ -72,3 +72,16 @@ async function networkFirst(name, request) {
     throw err
   }
 }
+
+// Alert notifications (src/insights/notify.ts): a tap brings the app forward, or opens it at the airport.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = event.notification.data?.url || '/'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const open = list.find((c) => new URL(c.url).origin === self.location.origin)
+      if (open) return open.focus()
+      return self.clients.openWindow(url)
+    }),
+  )
+})

@@ -12,6 +12,8 @@
  * a box that stops where the panel starts, so nothing hides behind it.
  */
 import { memo, useEffect, useRef, useState } from 'react'
+import { useSpotter } from '../discovery/useSpotter'
+import { FeedbackSheet } from '../feedback/FeedbackSheet'
 import { FlightCard, FlightDetail } from '../flight/FlightSheet'
 import { useLiveCaptions } from '../hooks/useLiveCaptions'
 import { useShortcuts } from '../hooks/useShortcuts'
@@ -21,12 +23,14 @@ import { MapView } from '../map/MapView'
 import { AudioEngine } from '../playback/AudioEngine'
 import { getActiveCue } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
-import { SettingsView } from '../settings/SettingsView'
+import { HelpPanel, LayersPanel, SettingsView } from './lazyPanels'
 import { useSettings } from '../settings/settingsStore'
 import { StationBar } from '../station/StationBar'
 import { StationSheet } from '../station/StationSheet'
 import { Subtitles } from '../transcript/Subtitles'
 import { useHapticFeedback } from '../ui/useHapticFeedback'
+import { BriefingCard } from '../insights/Briefing'
+import { InsightsModals, InsightsOverlay } from '../insights/Insights'
 import { DURATION } from '../ui/motion'
 import { installGlass, watchMapFrames } from '../ui/glass'
 import { useDockActive, useIsWide } from '../ui/layout'
@@ -35,8 +39,6 @@ import { installScrollFades } from '../ui/scrollFade'
 import { usePresence } from '../ui/usePresence'
 import { WeatherPanel } from '../weather/WeatherPanel'
 import { AirportPicker } from './AirportPicker'
-import { HelpPanel } from './HelpPanel'
-import { LayersPanel } from './LayersPanel'
 import { DesktopPanel } from './DesktopPanel'
 import { AutoMapPill, MapControls } from './MapControls'
 import { MapGestures } from './MapGestures'
@@ -69,6 +71,7 @@ export function AppShell() {
   useUrlSync()
   useLiveCaptions()
   useHapticFeedback()
+  useSpotter()
 
   // Publish the bottom stack's height so the map attribution can sit above it.
   useEffect(() => {
@@ -114,6 +117,7 @@ export function AppShell() {
         <div ref={stack} id="bottom-stack" className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center *:max-w-full md:bottom-6 md:px-6">
           <Hint />
           <AutoMapPill />
+          <BriefingCard />
           <Subtitles />
           <WaitingStrip />
           {/* The flight card slides up over the station bar and back down to reveal it, as one stack. */}
@@ -168,6 +172,7 @@ const MapOverlays = memo(function MapOverlays() {
     <>
       <RunwayInfo />
       <MapGestures />
+      <InsightsOverlay />
       {/* The chrome box lets clicks through to the map; the menu's own backdrop needs them back. */}
       <div className="pointer-events-auto contents">
         <Menu />
@@ -191,6 +196,8 @@ const Modals = memo(function Modals() {
       <LayersPanel />
       <SettingsView />
       <HelpPanel />
+      <FeedbackSheet />
+      <InsightsModals />
     </>
   )
 })

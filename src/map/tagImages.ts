@@ -14,6 +14,7 @@
  */
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { loadedPicture, logoFor, logoPicture, logosVersion, type Logo } from '../airline/logos'
+import { isStarred } from '../discovery/marks'
 import { addImageHandler } from './imageResolver'
 
 const PREFIX = 'tag|'
@@ -44,24 +45,29 @@ export const TAG = {
   logoMaxW: 24,
   logoMinH: 4,
   fill: 'rgba(72,78,88,0.76)',
+  /** Small star after the callsign on rare aircraft (src/discovery). */
+  starR: 4.6,
+  starGap: 5,
 } as const
 
 /** How long an unused tag bitmap is kept before it is removed from the map. */
 const KEEP_MS = 12_000
 const SWEEP_MS = 4_000
 
-export type TagSpec = { active: boolean; logo: string | null; callsign: string; sub: string }
+export type TagSpec = { active: boolean; logo: string | null; callsign: string; sub: string; star?: boolean }
 
 /** Image id for a tag. Everything drawn is in it, so a change of any of it is a new image. */
 export function encodeTag(spec: TagSpec): string {
-  return `${PREFIX}${spec.active ? 'a' : 'n'}|${spec.logo ?? '-'}|${spec.callsign}|${spec.sub}`
+  return `${PREFIX}${spec.active ? 'a' : 'n'}${spec.star ? '*' : ''}|${spec.logo ?? '-'}|${spec.callsign}|${spec.sub}`
 }
 
 export function decodeTag(id: string): TagSpec | null {
   if (!id.startsWith(PREFIX)) return null
   const parts = id.slice(PREFIX.length).split('|')
   if (parts.length < 4) return null
-  return { active: parts[0] === 'a', logo: parts[1] === '-' ? null : parts[1], callsign: parts[2], sub: parts.slice(3).join('|') }
+  const spec: TagSpec = { active: parts[0].startsWith('a'), logo: parts[1] === '-' ? null : parts[1], callsign: parts[2], sub: parts.slice(3).join('|') }
+  if (parts[0].endsWith('*')) spec.star = true
+  return spec
 }
 
 export type TagLayout = {
@@ -71,13 +77,15 @@ export type TagLayout = {
   textX: number
   baseline: number
   subBaseline: number
+  /** Centre of the rare-aircraft star, when there is one. */
+  star: { x: number; y: number } | null
 }
 
 /**
  * Where everything goes, from measured text widths and cap heights and the
  * logo's pixel size. Pure, so it can be tested without a canvas.
  */
-export function tagLayout(m: { textW: number; capH: number; subW?: number; subCapH?: number; logo?: { w: number; h: number } | null }): TagLayout {
+export function tagLayout(m: { textW: number; capH: number; subW?: number; subCapH?: number; logo?: { w: number; h: number } | null; star?: boolean }): TagLayout {
   const sub = (m.subW ?? 0) > 0
   const height = sub ? TAG.height + TAG.subLine : TAG.height
   // With a data block the callsign row moves up a little so both lines sit evenly.
@@ -94,7 +102,8 @@ export function tagLayout(m: { textW: number; capH: number; subW?: number; subCa
     logo = { x: TAG.padLogo + (slot - w) / 2, y: row - h / 2, w, h }
     textX = TAG.padLogo + slot + TAG.gap
   }
-  const lineW = textX + m.textW + TAG.padText
+  const starW = m.star ? TAG.starGap + TAG.starR * 2 : 0
+  const lineW = textX + m.textW + starW + TAG.padText
   const subLineW = sub ? textX + (m.subW ?? 0) + TAG.padText : 0
   return {
     width: Math.ceil(Math.max(lineW, subLineW)),
@@ -103,6 +112,7 @@ export function tagLayout(m: { textW: number; capH: number; subW?: number; subCa
     textX,
     baseline: row + m.capH / 2,
     subBaseline: height - 6.5,
+    star: m.star ? { x: textX + m.textW + TAG.starGap + TAG.starR, y: row } : null,
   }
 }
 
@@ -129,7 +139,7 @@ function memoLogo(callsign: string, icao24: string): Logo | null | undefined {
 export function tagKey(callsign: string, icao24: string, active: boolean, sub: string, now = performance.now()): string {
   const logo = memoLogo(callsign, icao24)
   const ready = logo ? logoPicture(logo) : null
-  const key = encodeTag({ active, logo: ready ? logo!.code : null, callsign, sub: sub.replace(/^\n/, '') })
+  const key = encodeTag({ active, logo: ready ? logo!.code : null, callsign, sub: sub.replace(/^\n/, ''), star: isStarred(icao24) })
   used.set(key, now)
   return key
 }
@@ -139,7 +149,7 @@ export function tagKey(callsign: string, icao24: string, active: boolean, sub: s
 // ---------------------------------------------------------------------------
 
 let canvas: HTMLCanvasElement | null = null
-const style = { family: '', card: '', readAt: -Infinity }
+const style = { family: '', card: '', star: '', readAt: -Infinity }
 
 /** The UI font and the card purple, read from the page so tags follow the app's styling. */
 function readStyle() {
@@ -148,6 +158,7 @@ function readStyle() {
   style.readAt = now
   style.family = getComputedStyle(document.body).fontFamily || 'system-ui, sans-serif'
   style.card = getComputedStyle(document.documentElement).getPropertyValue('--color-atc-card').trim() || '#5b3df5'
+  style.star = getComputedStyle(document.documentElement).getPropertyValue('--color-atc-yellow').trim() || '#f5b93d'
   return style
 }
 
@@ -164,7 +175,7 @@ function drawTag(spec: TagSpec, dpr: number): ImageData | null {
   canvas ??= document.createElement('canvas')
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return null
-  const { family, card } = readStyle()
+  const { family, card, star } = readStyle()
   const font = `${TAG.weight} ${TAG.font}px ${family}`
   const subFont = `${TAG.subWeight} ${TAG.subFont}px ${family}`
 
@@ -181,7 +192,7 @@ function drawTag(spec: TagSpec, dpr: number): ImageData | null {
     subCapH = ctx.measureText('H').actualBoundingBoxAscent || TAG.subFont * 0.7
   }
   const img = spec.logo ? loadedPicture(spec.logo) : null
-  const L = tagLayout({ textW, capH, subW, subCapH, logo: img ? { w: img.naturalWidth, h: img.naturalHeight } : null })
+  const L = tagLayout({ textW, capH, subW, subCapH, logo: img ? { w: img.naturalWidth, h: img.naturalHeight } : null, star: spec.star })
 
   const w = Math.ceil(L.width * dpr)
   const h = Math.ceil(L.height * dpr)
@@ -206,6 +217,7 @@ function drawTag(spec: TagSpec, dpr: number): ImageData | null {
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = '#FFFFFF'
   ctx.fillText(spec.callsign, L.textX, L.baseline)
+  if (L.star) drawStar(ctx, L.star.x, L.star.y, TAG.starR, star)
   if (spec.sub) {
     ctx.font = subFont
     setTracking(ctx, 0)
@@ -213,6 +225,19 @@ function drawTag(spec: TagSpec, dpr: number): ImageData | null {
     ctx.fillText(spec.sub, L.textX, L.subBaseline)
   }
   return ctx.getImageData(0, 0, w, h)
+}
+
+/** A five-pointed star, filled: the rare-aircraft mark. */
+function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string) {
+  ctx.beginPath()
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 ? r * 0.45 : r
+    const a = -Math.PI / 2 + (i * Math.PI) / 5
+    ctx.lineTo(cx + rad * Math.cos(a), cy + rad * Math.sin(a))
+  }
+  ctx.closePath()
+  ctx.fillStyle = color
+  ctx.fill()
 }
 
 /**
