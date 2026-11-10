@@ -211,8 +211,11 @@ export function AircraftLayer(props: Props) {
       const wave = L.reduceMotion ? 0 : Math.sin(t / 620)
       const color = st.activeSpeaker === 'controller' ? '#3B9BFF' : '#7C5CFC'
       map.setPaintProperty(LAYER.halo, 'circle-color', color)
-      map.setPaintProperty(LAYER.halo, 'circle-opacity', 0.34 + 0.1 * wave)
-      map.setPaintProperty(LAYER.halo, 'circle-radius', 19 + 4 * wave)
+      map.setPaintProperty(LAYER.halo, 'circle-opacity', 0.36 + 0.06 * wave)
+      map.setPaintProperty(LAYER.halo, 'circle-radius', 20 + 2 * wave)
+      map.setPaintProperty(LAYER.haloOuter, 'circle-color', color)
+      map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', 0.2 + 0.05 * wave)
+      map.setPaintProperty(LAYER.haloOuter, 'circle-radius', 36 + 5 * wave)
       // Radar-style ping expanding from whoever is transmitting.
       const phase = L.reduceMotion ? 0.4 : (t % 1500) / 1500
       map.setPaintProperty(LAYER.ping, 'circle-radius', 12 + 34 * phase)

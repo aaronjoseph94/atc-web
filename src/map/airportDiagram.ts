@@ -18,13 +18,24 @@ export type AirportDiagram = {
   surface: FeatureCollection<Polygon>
   /** Every white paint mark, as polygons (`kind` says which marking). */
   paint: FeatureCollection<Polygon>
-  /** Painted numbers and letters: point + rotation + real-world em size. */
-  designators: FeatureCollection<Point>
+  /** Painted numbers and letters, as the centre-lines of their stencil strokes. */
+  designators: FeatureCollection<LineString>
   /** One point just outside each runway end, for the sign-style labels. */
   ends: FeatureCollection<Point>
   /** Extended centrelines with a tick every nautical mile. */
   approach: FeatureCollection<LineString>
+  /**
+   * Candidate blast pads, one per runway end: the paved overrun and its
+   * chevrons, plus a point at its outer edge. The data doesn't say which ends
+   * really have one, so the map only draws those that fall on airfield ground.
+   */
+  pads: BlastPad[]
 }
+
+export type BlastPad = { ident: string; probe: LngLat; features: Feature<Polygon | LineString>[] }
+
+/** Length of a standard blast pad. */
+const PAD_LENGTH_M = 250 * M_PER_FT
 
 const ft = (n: number) => n * M_PER_FT
 
@@ -67,13 +78,45 @@ function quad(end: End, s0: number, s1: number, t0: number, t1: number, properti
   return { type: 'Feature', properties, geometry: { type: 'Polygon', coordinates: [ring] } }
 }
 
-/** Threshold stripes ("piano keys") by runway width, per AC 150/5340-1 table 2-1. */
-function thresholdStripeCount(widthFt: number): number {
-  if (widthFt >= 200) return 16
-  if (widthFt >= 150) return 12
-  if (widthFt >= 100) return 8
-  if (widthFt >= 75) return 6
-  return 4
+/**
+ * Stencil numerals and side letters, as strokes on a unit square (x across,
+ * y up). Runway numbers are painted in a plain block style: straight strokes
+ * with clipped corners, which is what these are.
+ */
+const GLYPHS: Record<string, [number, number][][]> = {
+  '0': [[[0.2, 0], [0.8, 0], [1, 0.18], [1, 0.82], [0.8, 1], [0.2, 1], [0, 0.82], [0, 0.18], [0.2, 0]]],
+  '1': [[[0.15, 0.72], [0.55, 1], [0.55, 0]]],
+  '2': [[[0, 0.8], [0.2, 1], [0.8, 1], [1, 0.8], [1, 0.58], [0, 0], [1, 0]]],
+  '3': [[[0, 0.84], [0.18, 1], [0.82, 1], [1, 0.84], [1, 0.64], [0.84, 0.52], [0.4, 0.52]], [[0.84, 0.52], [1, 0.4], [1, 0.16], [0.82, 0], [0.18, 0], [0, 0.16]]],
+  '4': [[[0.74, 0], [0.74, 1], [0, 0.3], [1, 0.3]]],
+  '5': [[[1, 1], [0, 1], [0, 0.56], [0.8, 0.56], [1, 0.4], [1, 0.16], [0.82, 0], [0.18, 0], [0, 0.16]]],
+  '6': [[[0.9, 1], [0.3, 1], [0, 0.72], [0, 0.16], [0.18, 0], [0.82, 0], [1, 0.16], [1, 0.4], [0.82, 0.56], [0, 0.56]]],
+  '7': [[[0, 1], [1, 1], [0.36, 0]]],
+  '8': [[[0.18, 0.52], [0, 0.64], [0, 0.84], [0.18, 1], [0.82, 1], [1, 0.84], [1, 0.64], [0.82, 0.52], [0.18, 0.52], [0, 0.4], [0, 0.16], [0.18, 0], [0.82, 0], [1, 0.16], [1, 0.4], [0.82, 0.52]]],
+  '9': [[[0.1, 0], [0.7, 0], [1, 0.28], [1, 0.84], [0.82, 1], [0.18, 1], [0, 0.84], [0, 0.6], [0.18, 0.44], [1, 0.44]]],
+  L: [[[0, 1], [0, 0], [1, 0]]],
+  C: [[[1, 0.82], [0.8, 1], [0.2, 1], [0, 0.82], [0, 0.18], [0.2, 0], [0.8, 0], [1, 0.18]]],
+  R: [[[0, 0], [0, 1], [0.78, 1], [1, 0.84], [1, 0.6], [0.78, 0.46], [0, 0.46]], [[0.5, 0.46], [1, 0]]],
+}
+
+/**
+ * Lay a string of glyphs across the runway, centred on the centreline, with
+ * its baseline `s` metres past the threshold and its top further down the
+ * runway (so it reads the right way up to a landing pilot).
+ */
+function stencil(end: End, text: string, s: number, height: number, glyphWidth: number, gap: number, out: Feature<LineString>[]) {
+  const total = text.length * glyphWidth + (text.length - 1) * gap
+  let x = -total / 2
+  for (const ch of text) {
+    for (const stroke of GLYPHS[ch] ?? []) {
+      out.push({
+        type: 'Feature',
+        properties: { kind: 'numeral' },
+        geometry: { type: 'LineString', coordinates: stroke.map(([gx, gy]) => end.at(s + gy * height, x + gx * glyphWidth)) },
+      })
+    }
+    x += glyphWidth + gap
+  }
 }
 
 const isConcrete = (surface: string | null | undefined) => /^(con|pem)/i.test(surface ?? '')
@@ -85,7 +128,7 @@ function endMarkings(
   widthM: number,
   painted: string,
   paint: Feature<Polygon>[],
-  designators: Feature<Point>[],
+  designators: Feature<LineString>[],
 ): number {
   const d = end.displacedM
   const half = widthM / 2
@@ -113,38 +156,31 @@ function endMarkings(
     }
   }
 
-  // Threshold stripes: 150 ft long, starting 20 ft past the threshold.
-  const stripes = thresholdStripeCount(widthM / M_PER_FT)
-  const s0 = d + ft(20)
+  // Threshold: a solid bar across the end of the pavement, then a block of
+  // fine stripes the full width of the runway, 150 ft long.
+  if (d <= 30) paint.push(quad(end, 0.6, 2.4, -half + 0.6, half - 0.6, { kind: 'threshold-bar' }))
+  const s0 = d + 4
   const s1 = s0 + ft(150)
-  for (let i = 0; i < stripes / 2; i++) {
-    const c = ft(8.625 + 11.5 * i)
-    const w = ft(5.75) / 2
-    paint.push(quad(end, s0, s1, c - w, c + w, { kind: 'threshold' }))
-    paint.push(quad(end, s0, s1, -c - w, -c + w, { kind: 'threshold' }))
+  const inset = 1.6
+  const stripes = Math.max(6, Math.round((widthM - 2 * inset) / 3.3))
+  const pitch = (widthM - 2 * inset) / stripes
+  for (let i = 0; i < stripes; i++) {
+    const c = -half + inset + pitch * (i + 0.5)
+    paint.push(quad(end, s0, s1, c - pitch * 0.28, c + pitch * 0.28, { kind: 'threshold' }))
   }
 
-  // Designator: letter first (nearest the threshold), then the number beyond it.
-  // The em is sized so a two-digit number spans about 60 % of the runway width,
-  // which puts the cap height at the standard 60 ft on a 150 ft runway.
-  const em = Math.max(12, Math.min(34, widthM * 0.52))
-  const cap = em * 0.72
+  // Designator: the side letter nearest the threshold, then the number beyond
+  // it, in thin stencil strokes about a third of the runway width tall.
   const m = /^(\d+)([LCR])?$/.exec(painted)
   const number = m?.[1] ?? painted
   const letter = m?.[2]
-  let s = s1 + ft(40)
-  const mark = (text: string) => {
-    const [lon, lat] = end.at(s + cap / 2, 0)
-    designators.push({
-      type: 'Feature',
-      properties: { text, rot: end.bearing, em, lat },
-      geometry: { type: 'Point', coordinates: [lon, lat] },
-    })
-    s += cap + ft(20)
+  let s = s1 + widthM * 0.2
+  if (letter) {
+    stencil(end, letter, s, widthM * 0.26, widthM * 0.15, 0, designators)
+    s += widthM * 0.26 + widthM * 0.12
   }
-  if (letter) mark(letter)
-  mark(number)
-  const designatorEnd = s + ft(20)
+  stencil(end, number, s, widthM * 0.3, widthM * 0.13, widthM * 0.07, designators)
+  const designatorEnd = s + widthM * 0.3 + widthM * 0.22
 
   // Aiming point: two broad blocks about 1,000 ft in.
   if (lengthM >= ft(4200)) {
@@ -199,11 +235,27 @@ function approachPath(end: End, features: Feature<LineString>[]) {
   }
 }
 
+/** The paved pad before a runway end, with chevrons pointing at the runway. */
+function blastPad(end: End, widthM: number): BlastPad {
+  const half = widthM * 0.72
+  const features: Feature<Polygon | LineString>[] = [quad(end, -PAD_LENGTH_M, 0, -half, half, { kind: 'pad' })]
+  const depth = half * 0.5
+  for (let i = 0; i < 4; i++) {
+    const tip = -5 - i * (PAD_LENGTH_M / 4.6)
+    features.push({
+      type: 'Feature',
+      properties: { kind: 'chevron' },
+      geometry: { type: 'LineString', coordinates: [end.at(tip - depth, -half * 0.86), end.at(tip, 0), end.at(tip - depth, half * 0.86)] },
+    })
+  }
+  return { ident: end.ident, probe: end.at(-PAD_LENGTH_M, 0), features }
+}
+
 const empty = <G extends Polygon | Point | LineString>(): FeatureCollection<G> => ({ type: 'FeatureCollection', features: [] })
 
 /** Diagram with no features, for airports without runway data. */
 export function emptyDiagram(): AirportDiagram {
-  return { surface: empty(), paint: empty(), designators: empty(), ends: empty(), approach: empty() }
+  return { surface: empty(), paint: empty(), designators: empty(), ends: empty(), approach: empty(), pads: [] }
 }
 
 /** Build the full painted diagram for a catalog airport (e.g. `ORD`). */
@@ -249,6 +301,7 @@ export function buildAirportDiagram(airport: string): AirportDiagram {
         geometry: { type: 'Point', coordinates: end.at(-Math.max(90, widthM * 1.6), 0) },
       })
       approachPath(end, out.approach.features)
+      out.pads.push(blastPad(end, widthM))
     }
   }
   return out

@@ -1,9 +1,9 @@
 /**
- * The jagged dark waveform along the bottom of the station bar.
+ * The row of thin bars along the bottom of the station bar.
  *
  * In playback it is the real spectrum of the audio, read from the analyser
- * every frame. With no audio (live mode, or a silent replay) it rests as a
- * thin flat line; nothing is faked.
+ * every frame. With no audio (live mode, or a silent replay) the bars rest
+ * at their minimum height; nothing is faked.
  */
 import { useEffect, useRef } from 'react'
 import { audioAnalyser } from '../playback/AudioEngine'
@@ -50,18 +50,18 @@ export function Waveform({ active, color = 'rgba(40,26,0,0.78)' }: { active: boo
         if (levels[i] > 0.01) moving = true
       }
 
+      // Thin vertical bars rising from the bottom edge.
       ctx.fillStyle = color
-      ctx.beginPath()
-      ctx.moveTo(0, h)
-      const step = w / (BARS - 1)
-      for (let i = 0; i < BARS; i++) {
-        // Alternate bars slightly so the edge reads as jagged, not smooth.
-        const jag = i % 2 ? 0.82 : 1
-        ctx.lineTo(i * step, h - 2 - levels[i] * jag * (h - 2))
+      const pitch = 4
+      const count = Math.floor(w / pitch)
+      for (let x = 0; x < count; x++) {
+        // Stretch the level curve across however many bars fit.
+        const f = (x / Math.max(1, count - 1)) * (BARS - 1)
+        const i = Math.floor(f)
+        const level = levels[i] + (levels[Math.min(BARS - 1, i + 1)] - levels[i]) * (f - i)
+        const bar = Math.max(2, level * (h - 1))
+        ctx.fillRect(x * pitch, h - bar, 2, bar)
       }
-      ctx.lineTo(w, h)
-      ctx.closePath()
-      ctx.fill()
       // Nothing left to animate: stop until the next change.
       if (!analyser && !moving) cancelAnimationFrame(raf)
     }
@@ -69,5 +69,5 @@ export function Waveform({ active, color = 'rgba(40,26,0,0.78)' }: { active: boo
     return () => cancelAnimationFrame(raf)
   }, [active, color])
 
-  return <canvas ref={ref} className="block h-4 w-full" aria-hidden />
+  return <canvas ref={ref} className="block h-5 w-full" aria-hidden />
 }
