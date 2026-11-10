@@ -5,10 +5,10 @@ import { usePlayhead, type Panel } from '../playback/playheadStore'
 
 /** Shown in the help panel; the handler below is the source of truth for behaviour. */
 export const SHORTCUTS: [string, string][] = [
-  ['/', 'Search traffic'],
+  ['/', 'Traffic and recent activity'],
   ['A', 'Change airport'],
   ['C', 'Switch channel'],
-  ['T', 'Transcript or tower log'],
+  ['T', 'Radio transcript'],
   ['W', 'Weather and ATIS'],
   ['R', 'Replay'],
   ['L', 'Map layers'],

@@ -1,95 +1,34 @@
 /**
- * Weather and ATIS for the current airport: the latest observation decoded
- * into plain numbers, a wind rose showing how the wind lines up with the
- * runways, and the real ATIS broadcast, which can be read aloud.
+ * Weather and ATIS for the current airport, laid out like an aviation
+ * weather card: a summary up top (flight category, temperature, conditions
+ * in plain words, how old the report is), the wind and what it means on the
+ * runways in use, compact tiles for the rest of the observation, the ATIS
+ * broadcast (readable, or read aloud), the forecast as a timeline, and the
+ * raw reports for those who want them.
  */
-import { ExternalLink, Square, Volume2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudMoon, CloudRain, CloudSnow, CloudSun, Eye, Gauge, ExternalLink, Moon, Mountain, Square, Sun, Thermometer, Volume2, type LucideIcon } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { icaoCode } from '../api/airportData'
 import { getAirport } from '../api/airports'
-import { useNow } from '../hooks/useNow'
 import type { Atis, Metar } from '../api/types'
+import { useNow } from '../hooks/useNow'
 import { useAirfield } from '../live/airfield'
-import { summariseRunwayUse, type ActiveRunways } from '../live/runwayUse'
-import { runwayEnds, type RunwayEndGeometry } from '../map/airportDiagram'
-import { RUNWAY_USE_COLOR } from '../map/mapStyle'
+import { runwayEnds } from '../map/airportDiagram'
+import { sunElevation, SUNSET_ELEVATION } from '../map/lighting/sun'
 import { usePlayhead } from '../playback/playheadStore'
+import { useSettings, type AltitudeUnit } from '../settings/settingsStore'
 import { CATEGORY_COLOR, useWeather } from '../station/StationBar'
 import { PanelFrame, SectionLabel } from '../ui/Panel'
 import { EmptyState, OfflineArt, StateAction, WeatherSkeleton } from '../ui/States'
-import { ceilingFt, phonetic, readableAtis, runwayWinds, sentenceCase } from './atis'
-import { tafLines } from './taf'
+import { atisForScreen, phonetic, readableAtis } from './atis'
+import { agoText, CATEGORY_TEXT, ceilingOf, conditionsLine, coverOktas, coverWord, densityAltitudeFt, formatHeight, formatVisibility, reportsHpa, signed, toF, toHpa } from './decode'
+import { RawReport } from './RawReport'
+import { TafTimeline } from './TafTimeline'
+import { WindCard } from './WindCard'
 
-const CATEGORY_TEXT = {
-  VFR: 'Clear enough to fly by sight',
-  MVFR: 'Marginal: lowish cloud or haze',
-  IFR: 'Instrument conditions: low cloud or poor visibility',
-  LIFR: 'Very low cloud or fog',
-} as const
-
-function WindRose({ metar, ends }: { metar: Metar; ends: RunwayEndGeometry[] }) {
-  const dir = metar.windDirDeg
-  // One line per runway (each has two ends on the same line).
-  const lines = [...new Map(ends.map((e) => [Math.round(e.bearing % 180), e])).values()]
-  return (
-    <svg viewBox="-60 -60 120 120" className="size-36 shrink-0" role="img" aria-label={dir != null ? `Wind from ${dir} degrees at ${metar.windKt} knots` : 'Wind calm or variable'}>
-      <circle r="52" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)" />
-      {[0, 90, 180, 270].map((a) => (
-        <text key={a} x={Math.sin((a * Math.PI) / 180) * 44} y={-Math.cos((a * Math.PI) / 180) * 44 + 3.5} textAnchor="middle" fontSize="9" fontWeight="700" fill="rgba(255,255,255,0.45)">
-          {'NESW'[a / 90]}
-        </text>
-      ))}
-      {lines.map((e) => (
-        <line key={e.ident} x1="0" y1="-30" x2="0" y2="30" stroke="rgba(255,255,255,0.55)" strokeWidth="5" strokeLinecap="round" transform={`rotate(${e.bearing})`} />
-      ))}
-      {dir != null && (
-        <g transform={`rotate(${dir})`} className="transition-transform duration-700">
-          {/* Arrow flies with the wind: tail where it comes from, head toward the centre. */}
-          <line x1="0" y1="-50" x2="0" y2="-14" stroke="#FFB800" strokeWidth="3" strokeLinecap="round" />
-          <path d="M0 -6 L-7 -20 L7 -20 Z" fill="#FFB800" />
-        </g>
-      )}
-    </svg>
-  )
-}
-
-/** `↓ Landing 22L 22R · ↑ Departing 22R 31L`: from the traffic, else the ATIS, else the wind's guess. */
-function RunwaysInUse({ active }: { active: ActiveRunways }) {
-  const arrow = (up: boolean) => (
-    <span aria-hidden className="grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold leading-none text-white" style={{ background: up ? RUNWAY_USE_COLOR.departures : RUNWAY_USE_COLOR.arrivals }}>
-      {up ? '↑' : '↓'}
-    </span>
-  )
-  if (active.basis === 'wind') return <p className="mb-2.5 text-white/70">No landings or departures seen yet. {summariseRunwayUse(active)}.</p>
-  return (
-    <>
-      <p className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold tabular-nums text-white" aria-label={summariseRunwayUse(active) ?? undefined}>
-        {active.landing.length > 0 && (
-          <span className="inline-flex items-center gap-1.5">
-            {arrow(false)}Landing {active.landing.join(' ')}
-          </span>
-        )}
-        {active.landing.length > 0 && active.departing.length > 0 && <span className="text-white/35">·</span>}
-        {active.departing.length > 0 && (
-          <span className="inline-flex items-center gap-1.5">
-            {arrow(true)}Departing {active.departing.join(' ')}
-          </span>
-        )}
-      </p>
-      {active.basis === 'atis' && <p className="-mt-1.5 mb-2.5 text-caption text-atc-muted">As announced on the ATIS; no landings or departures seen yet.</p>}
-    </>
-  )
-}
-
-function Fact({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-2xl bg-white/[0.05] px-3 py-2.5">
-      <div className="text-caption font-medium text-white/55">{label}</div>
-      <div className="mt-0.5 text-body font-bold tabular-nums">{value}</div>
-      {hint && <div className="text-caption2 text-white/50">{hint}</div>}
-    </div>
-  )
-}
+/** An observation older than this is flagged: METARs come hourly, so one is missing. */
+const STALE_MIN = 75
+const AMBER = '#FFB340'
 
 /** Read text aloud with the browser's speech synthesizer. */
 function useSpeech() {
@@ -100,7 +39,7 @@ function useSpeech() {
     supported,
     speaking,
     stop: () => {
-      window.speechSynthesis.cancel()
+      window.speechSynthesis?.cancel()
       setSpeaking(null)
     },
     speak: (id: string, text: string) => {
@@ -116,59 +55,242 @@ function useSpeech() {
   }
 }
 
+/** A picture for the sky: storms, snow, rain, fog, else how cloudy, with the moon at night. */
+function skyIcon(m: Metar, night: boolean): LucideIcon {
+  const wx = m.weather ?? ''
+  if (/TS/.test(wx)) return CloudLightning
+  if (/SN|SG|PL|IC|GR|GS/.test(wx)) return CloudSnow
+  if (/DZ/.test(wx)) return CloudDrizzle
+  if (/RA|SH|UP/.test(wx)) return CloudRain
+  if (/FG|BR|HZ|FU|DU|SA/.test(wx)) return CloudFog
+  if (ceilingOf(m.clouds) != null) return Cloud
+  if (m.clouds.some((c) => c.cover === 'FEW' || c.cover === 'SCT')) return night ? CloudMoon : CloudSun
+  return night ? Moon : Sun
+}
+
+function SkyGlyph({ icon: Icon }: { icon: LucideIcon }) {
+  return <Icon aria-hidden className="ml-auto size-12 shrink-0 text-white/85 @md:size-14" strokeWidth={1.5} />
+}
+
+function CategoryChip({ category }: { category: NonNullable<Metar['flightCategory']> }) {
+  return (
+    <span className="inline-flex h-6 items-center rounded-full px-2.5 text-caption font-bold tracking-[0.02em] text-white shadow-[0_1px_6px_rgb(0_0_0/0.25)]" style={{ background: CATEGORY_COLOR[category] }}>
+      {category}
+    </span>
+  )
+}
+
+function Hero({ metar, ageMs, night, heights }: { metar: Metar; ageMs: number; night: boolean; heights: AltitudeUnit }) {
+  const cat = metar.flightCategory
+  const tint = cat ? CATEGORY_COLOR[cat] : '#7c5cfc'
+  const stale = ageMs > STALE_MIN * 60_000
+  return (
+    <section
+      aria-label="Current conditions"
+      className="relative overflow-hidden rounded-[1.375rem] p-4 ring-1 ring-inset ring-white/[0.08]"
+      // A wash of the category colour from the top corner, over the panel's own glass.
+      style={{ background: `radial-gradient(130% 110% at 0% 0%, color-mix(in srgb, ${tint} 30%, transparent), transparent 62%), linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.03))` }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {cat && <CategoryChip category={cat} />}
+          <span className="truncate text-footnote font-medium text-white/70">{cat ? CATEGORY_TEXT[cat] : 'Conditions reported'}</span>
+        </div>
+        <span className="flex shrink-0 items-center gap-1.5 text-caption font-medium tabular-nums" style={{ color: stale ? AMBER : 'rgb(255 255 255 / 0.55)' }} title={new Date(metar.observedAt).toLocaleString()}>
+          <span aria-hidden className={`size-1.5 rounded-full ${stale ? '' : 'animate-pulse-dot'}`} style={{ background: stale ? AMBER : '#30D158' }} />
+          {agoText(ageMs)}
+        </span>
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <div className="flex items-start font-light leading-none tracking-[-0.03em] tabular-nums">
+          <span className="text-[3.5rem]">{metar.tempC != null ? signed(metar.tempC) : '—'}</span>
+          <span className="mt-1.5 text-title2 font-normal text-white/55">°C</span>
+        </div>
+        <SkyGlyph icon={skyIcon(metar, night)} />
+      </div>
+      <p className="mt-2 text-body font-semibold">{conditionsLine(metar, heights)}</p>
+      {metar.tempC != null && (
+        <p className="mt-0.5 text-footnote tabular-nums text-white/55">
+          {signed(toF(metar.tempC))}°F{metar.dewpointC != null ? ` · Dew point ${signed(metar.dewpointC)}°C` : ''}
+        </p>
+      )}
+    </section>
+  )
+}
+
+function Tile({ icon: Icon, label, children, hint, tone, className = '' }: { icon: LucideIcon; label: string; children: ReactNode; hint?: ReactNode; tone?: 'warn'; className?: string }) {
+  return (
+    <div className={`min-w-0 rounded-2xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-inset ring-white/[0.06] ${className}`}>
+      <div className="flex items-center gap-1.5 text-caption font-medium text-white/55">
+        <Icon aria-hidden className="size-3.5 shrink-0" strokeWidth={2.25} />
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="mt-1 truncate text-title3 font-semibold tabular-nums">{children}</div>
+      {hint && <div className="mt-0.5 text-caption tabular-nums" style={{ color: tone === 'warn' ? AMBER : 'rgb(255 255 255 / 0.5)' }}>{hint}</div>}
+    </div>
+  )
+}
+
+const Unit = ({ children }: { children: ReactNode }) => <span className="ml-1 text-footnote font-medium text-white/50">{children}</span>
+
+/** Sky cover as on a station model: a circle filled by the eighths of sky the layer covers. */
+function Okta({ cover }: { cover: string }) {
+  const n = coverOktas(cover)
+  const a = (n / 8) * 2 * Math.PI
+  const [x, y] = [Math.sin(a) * 6, -Math.cos(a) * 6]
+  return (
+    <svg viewBox="-8 -8 16 16" className="size-4 shrink-0" aria-hidden>
+      <circle r="6.25" fill="#121821" stroke="rgba(255,255,255,0.7)" strokeWidth="1.3" />
+      {n >= 8 ? <circle r="6" fill="#fff" /> : n > 0 && <path d={`M0 0 L0 -6 A6 6 0 ${n > 4 ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`} fill="#fff" />}
+    </svg>
+  )
+}
+
+/** The cloud layers stacked as they sit in the sky, highest at the top, on a thin height line down to the field. */
+function CloudStack({ metar, heights }: { metar: Metar; heights: AltitudeUnit }) {
+  const ceiling = ceilingOf(metar.clouds)
+  const layers = metar.clouds.filter((c) => coverOktas(c.cover) > 0).sort((a, b) => (b.baseFt ?? 0) - (a.baseFt ?? 0))
+  return (
+    <div className="min-w-0 rounded-2xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-inset ring-white/[0.06] row-span-2 flex flex-col">
+      <div className="flex items-center gap-1.5 text-caption font-medium text-white/55">
+        <Cloud aria-hidden className="size-3.5 shrink-0" strokeWidth={2.25} />
+        Ceiling
+      </div>
+      <div className="mt-1 truncate text-title3 font-semibold tabular-nums">{ceiling != null ? formatHeight(ceiling, heights) : 'None'}</div>
+      <ol className="relative mt-2 flex flex-1 flex-col justify-end gap-1.5 pb-3" aria-label="Cloud layers">
+        {/* Height line and the ground. */}
+        <span aria-hidden className="absolute bottom-1.5 left-[7.5px] top-1 w-px bg-white/15" />
+        <span aria-hidden className="absolute bottom-1 left-0 right-0 h-[3px] rounded-full bg-[repeating-linear-gradient(90deg,rgb(255_255_255/0.22)_0_4px,transparent_4px_7px)]" />
+        {layers.length === 0 ? (
+          <li className="relative flex items-center gap-2 text-caption text-white/60">
+            <Okta cover="SKC" />
+            Sky clear
+          </li>
+        ) : (
+          layers.slice(0, 4).map((c, i) => {
+            const isCeiling = c.baseFt === ceiling && /^(BKN|OVC|OVX)/.test(c.cover)
+            return (
+              <li key={i} className={`relative flex items-center gap-2 text-caption ${isCeiling ? 'text-white' : 'text-white/60'}`}>
+                <Okta cover={c.cover} />
+                <span className={`min-w-0 flex-1 truncate ${isCeiling ? 'font-semibold' : ''}`}>{coverWord(c.cover)}</span>
+                <span className="shrink-0 tabular-nums">{c.baseFt != null ? formatHeight(c.baseFt, heights) : '—'}</span>
+              </li>
+            )
+          })
+        )}
+      </ol>
+    </div>
+  )
+}
+
+function Tiles({ metar, elevationFt, heights }: { metar: Metar; elevationFt: number; heights: AltitudeUnit }) {
+  const spread = metar.tempC != null && metar.dewpointC != null ? Math.round(metar.tempC - metar.dewpointC) : null
+  const da = densityAltitudeFt(elevationFt, metar.tempC, metar.altimeterInHg)
+  const hpa = reportsHpa(metar.raw)
+  const vis = metar.visibilitySm
+  const visHint = vis == null ? undefined : metar.visibilityPlus ? 'Unrestricted' : vis < 3 ? 'Poor' : vis <= 5 ? 'Reduced' : 'Good'
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      <Tile icon={Eye} label="Visibility" hint={visHint} tone={vis != null && vis < 3 ? 'warn' : undefined}>
+        {formatVisibility(vis, metar.visibilityPlus, heights)}
+      </Tile>
+      <CloudStack metar={metar} heights={heights} />
+      <Tile
+        icon={Thermometer}
+        label="Temp / dew point"
+        hint={spread != null ? (spread <= 3 ? `Spread ${spread}°: fog likely` : `Spread ${spread}°`) : undefined}
+        tone={spread != null && spread <= 3 ? 'warn' : undefined}
+      >
+        {metar.tempC != null ? `${signed(metar.tempC)}°` : '—'}
+        <span className="font-normal text-white/35"> / </span>
+        {metar.dewpointC != null ? `${signed(metar.dewpointC)}°` : '—'}
+      </Tile>
+      <Tile icon={Gauge} label="Altimeter" hint={metar.altimeterInHg != null ? (hpa ? `${metar.altimeterInHg.toFixed(2)} inHg` : `${toHpa(metar.altimeterInHg)} hPa`) : undefined}>
+        {metar.altimeterInHg == null ? '—' : hpa ? toHpa(metar.altimeterInHg) : metar.altimeterInHg.toFixed(2)}
+        {metar.altimeterInHg != null && <Unit>{hpa ? 'hPa' : 'inHg'}</Unit>}
+      </Tile>
+      {da != null && (
+        <Tile icon={Mountain} label="Density altitude" hint={`Field ${formatHeight(elevationFt, heights)}`} tone={da - elevationFt > 2000 ? 'warn' : undefined}>
+          {formatHeight(da, heights)}
+        </Tile>
+      )}
+    </div>
+  )
+}
+
+function AtisCard({ atis, speech, now }: { atis: Atis; speech: ReturnType<typeof useSpeech>; now: number }) {
+  const [open, setOpen] = useState(false)
+  const [raw, setRaw] = useState(false)
+  const id = `${atis.kind}-${atis.code}`
+  const speaking = speech.speaking === id
+  const text = raw ? atis.text : atisForScreen(atis.text)
+  const updated = atis.updatedAt ? Date.parse(atis.updatedAt) : NaN
+  return (
+    <div className="rounded-2xl bg-white/[0.05] ring-1 ring-inset ring-white/[0.06]">
+      <div className="flex items-center gap-3 p-3.5 pb-2.5">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-atc-yellow font-display text-[28px] leading-none text-black shadow-[inset_0_-2px_0_rgb(0_0_0/0.12)]" aria-hidden>
+          {atis.code || '?'}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-subhead font-semibold">Information {phonetic(atis.code)}</div>
+          <div className="truncate text-caption text-atc-muted">
+            {atis.kind === 'combined' ? 'Arrivals and departures' : atis.kind === 'arrival' ? 'Arrivals' : 'Departures'}
+            {Number.isFinite(updated) ? ` · ${agoText(now - updated)}` : ''}
+          </div>
+        </div>
+        {speech.supported && (
+          <button
+            type="button"
+            aria-label={speaking ? 'Stop reading' : `Read information ${phonetic(atis.code)} aloud`}
+            className={`pressable flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-footnote font-semibold @sm:px-3.5 ${speaking ? 'bg-atc-card text-white' : 'bg-white text-black hover:bg-white/90'}`}
+            onClick={() => (speaking ? speech.stop() : speech.speak(id, readableAtis(atis.text)))}
+          >
+            {speaking ? <Square className="size-3.5 fill-current" /> : <Volume2 className="size-4" />}
+            <span className="hidden @sm:inline">{speaking ? 'Stop' : 'Listen'}</span>
+          </button>
+        )}
+      </div>
+      <div className="px-3.5 pb-1.5">
+        <p className={`text-subhead text-white/85 ${raw ? 'break-words font-mono text-footnote' : ''} ${open ? '' : 'line-clamp-3 [mask-image:linear-gradient(to_bottom,#000_55%,transparent)]'}`}>{text}</p>
+      </div>
+      <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5">
+        <button type="button" aria-expanded={open} className="pressable flex min-h-10 items-center gap-1 rounded-full px-2 text-footnote font-semibold text-[#C9BCFF] hover:text-white" onClick={() => setOpen(!open)}>
+          {open ? 'Show less' : 'Full broadcast'}
+          <ChevronDown aria-hidden className={`size-4 transition-transform duration-[var(--duration-base)] ease-[var(--ease-out)] ${open ? 'rotate-180' : ''}`} strokeWidth={2.5} />
+        </button>
+        {open && (
+          <button type="button" className="pressable min-h-10 rounded-full px-2 text-caption font-medium text-atc-muted hover:text-white" onClick={() => setRaw(!raw)}>
+            {raw ? 'Readable version' : 'Original shorthand'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /** `docked`: rendered in the desktop side panel instead of as a sheet. */
 export function WeatherPanel({ docked = false }: { docked?: boolean }) {
   const open = usePlayhead((s) => s.panel === 'weather') || docked
   const airportIcao = usePlayhead((s) => s.airportIcao)
   const active = useAirfield((s) => s.runways)
   const setPanel = usePlayhead((s) => s.setPanel)
+  const heights = useSettings((s) => s.altitudeUnit)
   const query = useWeather(airportIcao)
   const speech = useSpeech()
-  const [raw, setRaw] = useState(false)
   const now = useNow()
 
   const airport = getAirport(airportIcao)
   const ends = useMemo(() => runwayEnds(airportIcao), [airportIcao])
   const metar = query.data?.metar ?? null
   const atis = query.data?.atis ?? []
-  const taf = tafLines(query.data?.taf)
-  const winds = useMemo(() => runwayWinds(metar, ends), [metar, ends])
-  const inUse = summariseRunwayUse(active)
+  const taf = query.data?.taf?.trim() || null
+  const night = sunElevation(now, airport.center[1], airport.center[0]) < SUNSET_ELEVATION
 
   const close = () => {
     speech.stop()
     setPanel(null)
   }
   const icao = icaoCode(airportIcao) ?? airportIcao
-  const ceiling = metar ? ceilingFt(metar) : null
-  const ageMin = metar ? Math.max(0, Math.round((now - new Date(metar.observedAt).getTime()) / 60_000)) : null
-
-  const atisCard = (a: Atis) => {
-    const id = `${a.kind}-${a.code}`
-    const spoken = readableAtis(a.text)
-    return (
-      <div key={id} className="rounded-2xl bg-white/[0.05] p-3.5">
-        <div className="flex items-center gap-3">
-          <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-atc-yellow font-display text-[30px] leading-none text-black">{a.code || '?'}</span>
-          <div className="min-w-0 flex-1">
-            <div className="text-subhead font-semibold">Information {phonetic(a.code)}</div>
-            <div className="text-caption text-atc-muted">{a.kind === 'combined' ? 'Arrivals and departures' : a.kind === 'arrival' ? 'Arrivals' : 'Departures'}</div>
-          </div>
-          {speech.supported && (
-            <button
-              type="button"
-              className="pressable flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3.5 py-2 text-footnote font-semibold text-black hover:bg-white/90"
-              onClick={() => (speech.speaking === id ? speech.stop() : speech.speak(id, spoken))}
-            >
-              {speech.speaking === id ? <Square className="size-3.5 fill-current" /> : <Volume2 className="size-4" />}
-              {speech.speaking === id ? 'Stop' : 'Read aloud'}
-            </button>
-          )}
-        </div>
-        <p className="mt-3 text-subhead text-white/85">{raw ? a.text : sentenceCase(spoken)}</p>
-      </div>
-    )
-  }
 
   return (
     <PanelFrame docked={docked} open={open} title={`Weather at ${airport.icao}`} onClose={close}>
@@ -188,91 +310,49 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
         </EmptyState>
       ) : (
         <>
-          {metar && (
+          {query.isError && (
+            <p role="status" className="mb-2 rounded-xl bg-[#FFB340]/10 px-3 py-2 text-caption text-[#FFC266] ring-1 ring-inset ring-[#FFB340]/20">
+              Couldn’t refresh just now; showing the last report.
+            </p>
+          )}
+          {metar ? (
             <>
-              <div className="flex items-center gap-4 rounded-2xl bg-white/[0.05] p-3.5">
-                <WindRose metar={metar} ends={ends} />
-                <div className="min-w-0 flex-1">
-                  {metar.flightCategory && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-caption font-bold text-white" style={{ background: CATEGORY_COLOR[metar.flightCategory] }}>
-                      {metar.flightCategory}
-                    </span>
-                  )}
-                  <p className="mt-1.5 text-footnote text-white/80">{metar.flightCategory ? CATEGORY_TEXT[metar.flightCategory] : 'Conditions reported'}</p>
-                  <p className="mt-2 text-title2 font-bold tabular-nums">
-                    {metar.windKt ? `${metar.windDirDeg != null ? `${String(metar.windDirDeg).padStart(3, '0')}°` : 'Variable'} at ${metar.windKt} kt` : 'Calm'}
-                  </p>
-                  {metar.gustKt && <p className="text-footnote text-white/70">Gusting {metar.gustKt} kt</p>}
-                  <p className="mt-1 text-caption text-atc-muted">Observed {ageMin === 0 ? 'just now' : `${ageMin} min ago`}</p>
-                </div>
+              <Hero metar={metar} ageMs={now - Date.parse(metar.observedAt)} night={night} heights={heights} />
+              <div className="mt-2">
+                <WindCard metar={metar} ends={ends} active={active} />
               </div>
-
-              <div className="mt-2 grid grid-cols-2 gap-2 @xl:grid-cols-4">
-                <Fact label="Visibility" value={metar.visibilitySm != null ? `${metar.visibilitySm}${metar.visibilityPlus ? '+' : ''} mi` : '—'} hint={metar.weather ?? undefined} />
-                <Fact label="Cloud ceiling" value={ceiling != null ? `${ceiling.toLocaleString()} ft` : 'None'} hint={metar.clouds[0] ? metar.clouds.map((c) => c.cover).join(' ') : 'clear'} />
-                <Fact label="Temperature" value={metar.tempC != null ? `${Math.round(metar.tempC)}°C` : '—'} hint={metar.tempC != null ? `${Math.round((metar.tempC * 9) / 5 + 32)}°F, dew point ${metar.dewpointC != null ? Math.round(metar.dewpointC) : '—'}°C` : undefined} />
-                <Fact label="Altimeter" value={metar.altimeterInHg != null ? `${metar.altimeterInHg.toFixed(2)}` : '—'} hint="inches of mercury" />
-              </div>
-
-              {(winds.length > 0 || inUse) && (
-                <>
-                  <SectionLabel>Runways</SectionLabel>
-                  <div className="rounded-2xl bg-white/[0.05] p-3.5 text-footnote">
-                    {active && inUse && <RunwaysInUse active={active} />}
-                    {winds.length > 0 && (
-                      <>
-                        <p className="mb-2 text-caption text-atc-muted">Aircraft land and take off into the wind. Best aligned right now:</p>
-                        <ul className="grid grid-cols-1 gap-1.5 @xl:grid-cols-2">
-                          {winds.slice(0, 4).map((w) => (
-                            <li key={w.ident} className="flex items-center gap-3 rounded-xl bg-white/[0.06] px-3 py-2">
-                              <span className="rounded-md bg-[#C8102E] px-1.5 py-0.5 text-caption font-bold text-white ring-1 ring-white/70">{w.ident}</span>
-                              <span className="tabular-nums text-white/85">
-                                {w.headwindKt >= 0 ? `${w.headwindKt} kt headwind` : `${-w.headwindKt} kt tailwind`}
-                                {w.crosswindKt > 0 && w.from ? `, ${w.crosswindKt} kt from the ${w.from}` : ''}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
+              <Tiles metar={metar} elevationFt={airport.elevationFt} heights={heights} />
             </>
+          ) : (
+            <EmptyState compact title="No current observation">
+              {icao} hasn’t reported its weather recently. The ATIS below is the latest word.
+            </EmptyState>
           )}
 
-          <SectionLabel>ATIS broadcast</SectionLabel>
+          <SectionLabel>ATIS</SectionLabel>
           {atis.length > 0 ? (
             <div className="space-y-2">
-              {atis.map(atisCard)}
-              <button type="button" className="px-1 text-caption font-medium text-atc-muted underline decoration-white/20 underline-offset-2 transition-colors hover:text-white" onClick={() => setRaw(!raw)}>
-                {raw ? 'Show the readable version' : 'Show the original shorthand'}
-              </button>
+              {atis.map((a) => (
+                <AtisCard key={`${a.kind}-${a.code}`} atis={a} speech={speech} now={now} />
+              ))}
             </div>
           ) : (
-            <p className="rounded-2xl bg-white/[0.05] p-3.5 text-footnote text-atc-muted">
+            <p className="rounded-2xl bg-white/[0.05] p-3.5 text-footnote text-atc-muted ring-1 ring-inset ring-white/[0.06]">
               {airport.group === 'US' ? 'No digital ATIS is published for this airport right now.' : 'Digital ATIS text is only published for US airports. The observation above is current.'}
             </p>
           )}
 
-          {metar && (
+          {taf && (
             <>
-              <SectionLabel>Original observation</SectionLabel>
-              <p className="break-words rounded-2xl bg-white/[0.05] p-3.5 font-mono text-caption text-white/75">{metar.raw}</p>
+              <SectionLabel>Forecast</SectionLabel>
+              <TafTimeline raw={taf} now={now} fetchedAt={query.data?.fetchedAt} />
             </>
           )}
 
-          {/* The terminal forecast comes with every weather answer but was never shown; one period per line. */}
-          {taf.length > 0 && (
+          {metar && (
             <>
-              <SectionLabel>Forecast (TAF)</SectionLabel>
-              <div className="break-words rounded-2xl bg-white/[0.05] p-3.5 font-mono text-caption text-white/75">
-                {taf.map((line, i) => (
-                  <p key={i} className={i ? 'mt-1 pl-3' : ''}>
-                    {line}
-                  </p>
-                ))}
-              </div>
+              <SectionLabel>Observation</SectionLabel>
+              <RawReport label="Raw METAR" text={metar.raw} />
             </>
           )}
 
@@ -283,7 +363,7 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
               ['Official airport diagram', 'airnav.com', `https://www.airnav.com/airport/${icao}`],
               ['Aeronautical chart', 'skyvector.com', `https://skyvector.com/airport/${airportIcao}`],
             ].map(([label, host, href]) => (
-              <a key={href} href={href} target="_blank" rel="noreferrer" className="pressable-soft flex items-center justify-between gap-2 rounded-2xl bg-white/[0.05] px-3.5 py-3 hover:bg-white/[0.09]">
+              <a key={href} href={href} target="_blank" rel="noreferrer" className="pressable-soft flex items-center justify-between gap-2 rounded-2xl bg-white/[0.05] px-3.5 py-3 ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.09]">
                 <span className="min-w-0">
                   <span className="block truncate text-footnote font-semibold">{label}</span>
                   <span className="block text-caption text-atc-muted">{host}</span>

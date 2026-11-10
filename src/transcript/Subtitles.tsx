@@ -142,7 +142,7 @@ export function Subtitles() {
     if (radioOn) return <RadioCaption />
     if (!caption) return null
     return (
-      <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the tower log">
+      <button type="button" className={SCRIM} onClick={() => setPanel('traffic')} aria-label="Open recent activity">
         {previousEvent && <p className={`line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 ${GLOW_SOFT}`}>{previousEvent.text}</p>}
         <p key={caption.id} className={`animate-caption text-[21px] font-semibold leading-snug text-white ${GLOW}`}>
           {caption.text}

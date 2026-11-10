@@ -106,7 +106,7 @@ test.describe('desktop', () => {
     await expect(panel.getByRole('searchbox', { name: 'Search traffic' })).toBeVisible()
     expect(await app.playhead((s) => s.selectedIcao)).toBe(JFK.arrival.icao24)
     await app.dockTab('Weather').click()
-    await expect(panel).toContainText('300° at 9 kt')
+    await expect(panel).toContainText(/300°\s*·\s*9\s*kt/)
     await app.dockTab(JFK.arrival.callsign).click()
     await expect(app.flightDetail()).toBeVisible()
 

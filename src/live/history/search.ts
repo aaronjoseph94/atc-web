@@ -26,14 +26,14 @@ export type SearchItem = {
 
 export type Range = [number, number]
 
-export type Phrase = { id: string; label: string; re: RegExp; events?: string[] }
+export type Phrase = { id: string; label: string; re: RegExp }
 
 /** Quick chips for what people look for most. */
 export const PHRASES: Phrase[] = [
-  { id: 'goaround', label: 'Go around', re: /\bgo(?:ing)?[\s-]*around\b|\bgo-?around\b/gi, events: ['goaround'] },
+  { id: 'goaround', label: 'Go around', re: /\bgo(?:ing)?[\s-]*around\b|\bgo-?around\b/gi },
   { id: 'holdshort', label: 'Hold short', re: /\bhold(?:ing)?\s+short\b/gi },
   { id: 'land', label: 'Cleared to land', re: /\bclear(?:ed)?\s+(?:to\s+)?land\b/gi },
-  { id: 'luaw', label: 'Line up and wait', re: /\b(?:line|lined|lining)\s*up\s+(?:and|&|n)\s+wait\b|\bposition\s+and\s+hold\b/gi, events: ['lineup'] },
+  { id: 'luaw', label: 'Line up and wait', re: /\b(?:line|lined|lining)\s*up\s+(?:and|&|n)\s+wait\b|\bposition\s+and\s+hold\b/gi },
   { id: 'takeoff', label: 'Cleared for takeoff', re: /\bclear(?:ed)?\s+for\s+take\s*-?\s*off\b/gi },
   { id: 'taxi', label: 'Taxi', re: /\btaxi(?:ing)?\b/gi },
   { id: 'contact', label: 'Contact', re: /\b(?:contact|monitor)\b/gi },
@@ -119,7 +119,8 @@ export function matchItem<T extends SearchItem>(item: T, f: Filters): Hit<T> | n
     const p = PHRASES.find((x) => x.id === f.phrase)
     if (p) {
       const r = allRanges(item.text, p.re)
-      if (!r.length && !(item.eventKind && p.events?.includes(item.eventKind))) return null
+      // Phrases match what was said: a detected go-around isn't a call that says "go around".
+      if (!r.length) return null
       ranges.push(...r)
     }
   }
