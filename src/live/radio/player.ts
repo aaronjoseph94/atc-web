@@ -61,6 +61,8 @@ type SegmentListener = (seg: Segment, feed: RadioFeed, endedAt: number) => void
 
 let el: HTMLAudioElement | null = null
 let source: MediaElementAudioSourceNode | null = null
+/** The live channel's volume on its way to the speakers (turned down while a saved call is replayed). */
+let volume: GainNode | null = null
 let tapReady: Promise<void> | null = null
 let segmenter: Segmenter | null = null
 let feed: RadioFeed | null = null
@@ -74,6 +76,8 @@ let watchdog = 0
 let lastProgress = 0
 let lastTime = -1
 let connectStarted = 0
+/** Bumped by every connect and stop, so a failure check that outlives its connection does nothing. */
+let generation = 0
 /** The MSE feed into the element, when that is how this browser plays the stream. */
 let stream: MseStream | null = null
 /** MSE failed once in this browser: use plain `src` from then on. */
@@ -132,8 +136,11 @@ function graph(media: HTMLAudioElement) {
     return
   }
   const analyser = makeAnalyser(ctx)
+  // The volume sits after the analyser, so the waveform keeps showing the channel while it is turned down.
+  volume = ctx.createGain()
   source.connect(analyser)
-  analyser.connect(ctx.destination)
+  analyser.connect(volume)
+  volume.connect(ctx.destination)
   analysers.live = analyser
   segmenter = new Segmenter({ sampleRate: ctx.sampleRate })
   tapReady = attachTap(ctx, source)
@@ -197,6 +204,7 @@ function connect() {
   const media = element()
   if (!feed) return
   clearTimers()
+  generation++
   stream?.stop()
   stream = null
   segmenter?.reset()
@@ -271,6 +279,7 @@ async function mountExists(mount: string): Promise<boolean | null> {
 async function fail(known?: boolean | null) {
   if (!want || !feed || retryTimer) return
   const owner = feed.mount
+  const gen = generation
   const mount = mountNow() ?? owner
   stream?.stop()
   stream = null
@@ -281,7 +290,8 @@ async function fail(known?: boolean | null) {
   // Placeholder so a burst of error events schedules only one retry.
   retryTimer = -1
   const exists = known === false ? false : await mountExists(mount)
-  if (!want || feed?.mount !== owner) return
+  // Stopped, retuned or restarted while checking: that newer connection is in charge now.
+  if (!want || feed?.mount !== owner || gen !== generation) return
   // This mount is gone but the same channel has another: switch straight away.
   if (exists === false && mountIndex < (feed.alt?.length ?? 0)) {
     mountIndex++
@@ -331,6 +341,7 @@ export function startRadio(next: RadioFeed) {
 /** Stop the stream. `keepIntent` leaves `on` set (the listener didn't ask to stop: e.g. a replay started). */
 export function stopRadio(keepIntent = false, status: RadioStatus = 'off') {
   want = false
+  generation++
   clearTimers()
   window.clearInterval(watchdog)
   const tail = segmenter?.flush()
@@ -378,6 +389,27 @@ if (typeof document !== 'undefined') {
     resumeAudio()
     if (el.paused && !retryTimer) connect()
   })
+}
+
+/** How loud the live channel stays while a saved call plays over it: still there, but out of the way. */
+const DUCK_GAIN = 0.12
+
+/**
+ * Turn the live channel down (or back up) so a call replayed from the
+ * transcript can be heard over it. Short ramps, so it doesn't click.
+ */
+export function duckRadio(on: boolean) {
+  const ctx = getAudioContext()
+  if (!volume || !ctx) return
+  const g = volume.gain
+  g.cancelScheduledValues(ctx.currentTime)
+  g.setValueAtTime(g.value, ctx.currentTime)
+  g.linearRampToValueAtTime(on ? DUCK_GAIN : 1, ctx.currentTime + (on ? 0.12 : 0.35))
+}
+
+/** The live channel's current loudness, 0..1 (for diagnostics). Null before the radio first plays. */
+export function radioVolume(): number | null {
+  return volume?.gain.value ?? null
 }
 
 /** Current analyser readings are flat while nothing plays; tests and diagnostics read the element directly. */

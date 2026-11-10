@@ -198,6 +198,9 @@ export function startTranscriber(): () => void {
   return onSegment((seg, feed, endedAt) => {
     if (useRadio.getState().transcripts === 'unavailable') return
     const ph = usePlayhead.getState()
+    // The radio only plays live. A segment arriving in a replay is the tail cut off as the replay
+    // started, and the playhead already names the replay's airport and channel, not the one it was heard on.
+    if (ph.mode !== 'live') return
     const airport = getAirport(ph.airportIcao)
     const station = resolveStation(airport, ph.stationId)
     const facility = `${airport.stations[0]?.name ?? airport.name} ${station?.label ?? 'Tower'}`
