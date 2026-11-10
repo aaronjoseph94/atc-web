@@ -12,7 +12,7 @@
  * timeline, and the conversation so far (radio calls in a
  * replayed scene, logged events for live traffic).
  */
-import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
+import { Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { useMemo, type CSSProperties } from 'react'
 import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
@@ -20,6 +20,7 @@ import { airlineInfo, parseCallsign } from '../airline/airlines'
 import { aircraftProfile } from '../aircraft/types'
 import { callsFor, useRadio, type Transmission } from '../live/radio/radioStore'
 import { FrequencyTuner } from '../station/FrequencyTuner'
+import { EventBadge } from '../ui/EventBadge'
 import { Waveform } from '../station/Waveform'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, useSettings } from '../settings/settingsStore'
@@ -393,7 +394,7 @@ export function FlightDetail({ docked = false }: { docked?: boolean }) {
                 <ol className="flex flex-col gap-2">
                   {flight.events.map((e) => (
                     <li key={e.id} className="flex items-start gap-3 rounded-2xl bg-white/[0.06] px-3.5 py-2.5">
-                      {e.kind === 'landed' ? <ArrowDown className="mt-0.5 size-4 shrink-0 text-atc-yellow" /> : <ArrowUp className="mt-0.5 size-4 shrink-0 text-atc-yellow" />}
+                      <EventBadge kind={e.kind} size={22} className="mt-px shrink-0" />
                       <span className="min-w-0 flex-1 text-[15px] leading-snug">{e.text}</span>
                       <time className="shrink-0 text-xs tabular-nums text-white/45">{new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</time>
                     </li>
