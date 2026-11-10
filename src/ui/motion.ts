@@ -19,7 +19,7 @@ export const DURATION = {
   /** Sheets sliding up. */
   sheet: 460,
   /** Sheets and popovers leaving: always quicker than arriving. */
-  exit: 260,
+  exit: 220,
 } as const
 
 /**

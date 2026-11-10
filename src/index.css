@@ -101,7 +101,7 @@
   --duration-fast: 160ms;
   --duration-base: 240ms;
   --duration-sheet: 460ms;
-  --duration-exit: 260ms;
+  --duration-exit: 220ms;
   --duration-exit-fast: 160ms;
 
   --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
