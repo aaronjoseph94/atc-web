@@ -11,6 +11,7 @@
  */
 import type { LayerSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import type { MapTheme } from '../settings/settingsStore'
+import { LIGHT_BAND_ZOOMS } from './fx/sprites'
 import { differs, nightShade } from './lighting/color'
 
 /** Ids other modules need to reference. */
@@ -45,6 +46,14 @@ export const LAYER = {
   aircraft: 'ac-icon',
   label: 'ac-label',
   event: 'ac-event',
+  // Aircraft effects (see `fx/aircraftFx.ts`).
+  contrail: 'ac-contrail',
+  contrailWide: 'ac-contrail-wide',
+  shadowSoft: 'ac-shadow-soft',
+  landing: 'ac-landing',
+  exhaust: 'ac-exhaust',
+  livery: 'ac-livery',
+  lights: 'ac-lights',
 } as const
 
 type Palette = {
@@ -410,11 +419,20 @@ function layers(p: Palette): LayerSpecification[] {
     },
 
     // ---- aircraft ----------------------------------------------------------------
+    // Contrails behind aircraft cruising above ~FL250: a thin bright core that forms a little behind the aircraft, and a wider, softer spread further back.
+    { id: LAYER.contrailWide, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 2], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 8, 2.2, 11, 4.5, 14, 14], 'line-blur': ['interpolate', ['exponential', 2], ['zoom'], 8, 1.6, 11, 3.5, 14, 11], 'line-opacity': ['get', 'co'], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(236,242,255,0)', 0.3, chart ? 'rgba(90,100,120,0.12)' : 'rgba(236,242,255,0.2)', 0.8, chart ? 'rgba(90,100,120,0.1)' : 'rgba(236,242,255,0.16)', 1, 'rgba(236,242,255,0)'] } },
+    { id: LAYER.contrail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 2], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 8, 0.9, 11, 1.4, 14, 3.2], 'line-blur': 0.6, 'line-opacity': ['get', 'co'], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(244,248,255,0)', 0.5, chart ? 'rgba(80,90,110,0.18)' : 'rgba(244,248,255,0.3)', 0.9, chart ? 'rgba(80,90,110,0.3)' : 'rgba(244,248,255,0.62)', 0.975, 'rgba(244,248,255,0.2)', 1, 'rgba(244,248,255,0)'] } },
     // Faint wake behind every airborne aircraft; the selected one gets the bright trail.
     { id: LAYER.trails, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 0], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 1.6], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(160,178,220,0)', 1, chart ? 'rgba(27,37,64,0.55)' : 'rgba(160,178,220,0.42)'] } },
-    { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7C5CFC', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
-    { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(124,92,252,0.02)', 0.5, 'rgba(124,92,252,0.5)', 1, 'rgba(168,140,255,1)'] } },
-    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#000000', 'icon-opacity': ['*', chart ? 0.22 : 0.42, ['get', 'o']], 'icon-halo-color': 'rgba(0,0,0,0.4)', 'icon-halo-width': 1.6, 'icon-halo-blur': 1.6 } },
+    // The selected aircraft's trail is in the selected tag's violet (#5B3DF5), lifted a little toward the aircraft so it reads on navy: one family with the tag and the halo.
+    { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#6A4CF8', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
+    { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(98,68,246,0.02)', 0.5, 'rgba(98,68,246,0.52)', 1, 'rgba(146,122,255,1)'] } },
+    // The shadow sharpens on the ground and softens with height: a crisp distance-field silhouette cross-fades into a pre-blurred one (`bl`).
+    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#000000', 'icon-opacity': ['*', chart ? 0.22 : 0.42, ['get', 'o'], ['-', 1, ['coalesce', ['get', 'bl'], 0]]], 'icon-halo-color': 'rgba(0,0,0,0.4)', 'icon-halo-width': 1.6, 'icon-halo-blur': 1.6 } },
+    { id: LAYER.shadowSoft, type: 'symbol', source: SRC.shadows, filter: ['>', ['coalesce', ['get', 'bl'], 0], 0], layout: { 'icon-image': ['concat', 'fx-blur-', ['get', 'sh']], 'icon-size': iconScale(['*', ['get', 'scale'], 1.06]), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['*', chart ? 0.24 : 0.46, ['get', 'o'], ['get', 'bl']] } },
+    // Landing lights thrown ahead of the nose, and heat shimmer behind the engines on the takeoff roll.
+    { id: LAYER.landing, type: 'symbol', source: SRC.aircraft, filter: ['>', ['coalesce', ['get', 'll'], 0], 0], layout: { 'icon-image': ['concat', 'fx-land-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 10, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.35], 14, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.85]] } },
+    { id: LAYER.exhaust, type: 'symbol', source: SRC.aircraft, filter: ['!=', ['coalesce', ['get', 'ex'], ''], ''], layout: { 'icon-image': ['get', 'ex'], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['*', ['get', 'o'], ['get', 'exo']] } },
     { id: LAYER.event, type: 'circle', source: SRC.events, paint: { 'circle-radius': ['get', 'r'], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2, 'circle-stroke-opacity': ['get', 'o'], 'circle-pitch-alignment': 'map' } },
     { id: LAYER.ping, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'tx'], 1], paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#F5C518', 'circle-stroke-width': 2, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } },
     // Two flat discs, one inside the other, under whoever is selected or being talked to.
@@ -428,7 +446,7 @@ function layers(p: Palette): LayerSpecification[] {
       source: SRC.aircraft,
       layout: {
         'icon-image': ['case', ['==', ['get', 'hi'], 1], ['concat', ['get', 'icon'], '-hi'], ['get', 'icon']],
-        'icon-size': iconScale(['*', ['get', 'scale'], ['case', ['==', ['get', 'hi'], 1], 1.25, 1]]),
+        'icon-size': iconScale(acSize),
         'icon-rotate': ['get', 'heading'],
         'icon-rotation-alignment': 'map',
         'icon-pitch-alignment': 'map',
@@ -438,8 +456,37 @@ function layers(p: Palette): LayerSpecification[] {
       },
       // The silhouettes are shaded artwork (white, and yellow when highlighted), not tinted masks.
       paint: {
-        'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.58, 1]]],
+        // Parked aircraft use a greyer drawing (`-pk`), so they need less fading to sit back.
+        'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.8, 1]]],
       },
+    },
+    // The airline's colour on the fin: a distance-field patch tinted per aircraft, over the white artwork.
+    {
+      id: LAYER.livery,
+      type: 'symbol',
+      source: SRC.aircraft,
+      minzoom: 12,
+      filter: ['!=', ['coalesce', ['get', 'lv'], ''], ''],
+      layout: { 'icon-image': ['concat', 'fx-fin-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'symbol-sort-key': ['get', 'z'] },
+      paint: { 'icon-color': ['get', 'lv'], 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 13, ['*', ['get', 'o'], ['match', ['get', 'state'], 0, 0.4, 0.66]]] },
+    },
+    // Navigation lights, strobes and beacon: `lt` names the sprite lit this instant; the glow size steps with zoom.
+    {
+      id: LAYER.lights,
+      type: 'symbol',
+      source: SRC.aircraft,
+      filter: ['!=', ['coalesce', ['get', 'lt'], ''], ''],
+      layout: {
+        'icon-image': ['step', ['zoom'], ['concat', ['get', 'lt'], '0'], LIGHT_BAND_ZOOMS[0], ['concat', ['get', 'lt'], '1'], LIGHT_BAND_ZOOMS[1], ['concat', ['get', 'lt'], '2']],
+        'icon-size': iconScale(acSize),
+        'icon-rotate': ['get', 'heading'],
+        'icon-rotation-alignment': 'map',
+        'icon-pitch-alignment': 'map',
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'symbol-sort-key': ['get', 'z'],
+      },
+      paint: { 'icon-opacity': ['*', ['get', 'o'], ['get', 'lo'], chart ? 0.5 : 1] },
     },
     {
       id: LAYER.label,
@@ -460,11 +507,15 @@ function layers(p: Palette): LayerSpecification[] {
         'symbol-sort-key': ['get', 'z'],
       },
       // Parked aircraft carry a faded tag, as their silhouettes are faded.
-      paint: { 'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.7, 1]]] },
+      // Tags toward the screen edges are fainter (`eo`), keeping the eye on the middle.
+      paint: { 'icon-opacity': ['*', ['get', 'o'], ['coalesce', ['get', 'eo'], 1], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.7, 1]]] },
     },
   ]
   return list as LayerSpecification[]
 }
+
+/** Drawn size of an aircraft feature relative to the class's base: the highlighted one is a quarter bigger. Effects drawn over or under the aircraft use it too, so they stay registered. */
+const acSize: unknown[] = ['*', ['get', 'scale'], ['case', ['==', ['get', 'hi'], 1], 1.25, 1]]
 
 /**
  * Icon size by zoom, times a per-feature factor. Below z15 the silhouettes

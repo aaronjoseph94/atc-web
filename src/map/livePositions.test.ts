@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Aircraft } from '../api/types'
-import { lerpAngle, LivePositionBuffer } from './livePositions'
+import { headingEase, lerpAngle, LivePositionBuffer, measureTurn } from './livePositions'
 
 const ac = (
   icao24: string,
@@ -110,6 +110,34 @@ describe('LivePositionBuffer', () => {
     expect(b.sample(3500).map((a) => a.icao24)).toEqual(['new'])
   })
 
+  it('keeps a turning aircraft turning between fixes, along an arc', () => {
+    const b = new LivePositionBuffer()
+    // 3°/s right turn at 200 kt: 0° then 15° five seconds apart.
+    b.push([ac('a', 41, -87, 0, 200)], 0)
+    b.push([ac('a', 41.0046, -87, 15, 200)], 5000)
+    // At the fix the icon shows the fix heading (no jump)...
+    expect(b.sample(5000)[0].heading).toBeCloseTo(0 + 0, 0)
+    // ...and two seconds on it has kept turning past the reported 15°.
+    const later = b.sample(9000)[0]
+    expect(later.heading).toBeGreaterThan(20)
+    expect(later.heading).toBeLessThan(30)
+    // The arc bends east of a straight run north.
+    expect(later.lon).toBeGreaterThan(-87)
+    // The next fix agrees with the extrapolation, so there is almost nothing to correct.
+    b.push([ac('a', 41.009, -86.9985, 30, 200)], 10_000)
+    const atFix = b.sample(10_000)[0].heading
+    expect(Math.abs(atFix - 30)).toBeLessThan(1)
+  })
+
+  it('stops turning about one poll after the last fix', () => {
+    const b = new LivePositionBuffer()
+    b.push([ac('a', 41, -87, 0, 200)], 0)
+    b.push([ac('a', 41.0046, -87, 15, 200)], 5000)
+    const h1 = b.sample(5000 + 15_000)[0].heading
+    const h2 = b.sample(5000 + 19_000)[0].heading
+    expect(h1).toBeCloseTo(h2, 5)
+  })
+
   it('clear() forgets everything', () => {
     const b = new LivePositionBuffer()
     b.push([ac('a', 0, 0)], 0)
@@ -123,5 +151,26 @@ describe('lerpAngle', () => {
     expect(lerpAngle(350, 10, 0.5)).toBeCloseTo(0)
     expect(lerpAngle(10, 350, 0.5)).toBeCloseTo(0)
     expect(lerpAngle(90, 180, 0.5)).toBeCloseTo(135)
+  })
+})
+
+describe('measureTurn', () => {
+  it('reads a turn rate from two headings, ignoring noise and capping silly values', () => {
+    expect(measureTurn(350, 5, 5000, false)).toBeCloseTo(3)
+    expect(measureTurn(90, 90.5, 5000, false)).toBe(0)
+    expect(measureTurn(0, 90, 5000, false)).toBe(4)
+    expect(measureTurn(0, 90, 10_000, true)).toBe(9)
+    expect(measureTurn(0, 10, 200, false)).toBe(0)
+    // Agreeing estimates are smoothed; a reversal is believed straight away.
+    expect(measureTurn(0, 10, 5000, false, 3)).toBeCloseTo(2.35)
+    expect(measureTurn(10, 0, 5000, false, 3)).toBeCloseTo(-2)
+  })
+})
+
+describe('headingEase', () => {
+  it('starts flat at 1 and settles to 0', () => {
+    expect(headingEase(0)).toBe(1)
+    expect(headingEase(30)).toBeGreaterThan(0.99)
+    expect(headingEase(4000)).toBeLessThan(0.02)
   })
 })

@@ -29,6 +29,8 @@ type Track = {
   errLon: number
   /** Signed heading error in degrees (−180..180) at `fixAt`. */
   errHdg: number
+  /** Degrees per second the aircraft was turning between its last two fixes; the icon keeps turning at this rate between fixes. */
+  turnRate: number
   /** Polls missed since this aircraft was last seen. Fades out after two. */
   misses: number
   bornAt: number
@@ -40,6 +42,18 @@ type Track = {
 
 /** e^-1 of the correction is gone after this long (~1.6s to settle onto a new fix). */
 const EASE_MS = 1600
+/**
+ * Heading corrections settle with a critically damped ease over about this
+ * time constant: unlike a plain exponential, it starts at zero speed, so a
+ * new fix never makes the icon twitch, it just leans into the new heading.
+ */
+const HDG_EASE_MS = 650
+/** Keep turning at the measured rate for at most this long after a fix (about one poll); after that, hold the heading. */
+const TURN_COAST_MS = 7000
+/** Turn rates (degrees per second) worth acting on, and the most believed: a steep airliner turn is ~3°/s, taxi turns are quicker. */
+const TURN_MIN_DPS = 0.25
+const TURN_MAX_AIR_DPS = 4
+const TURN_MAX_GROUND_DPS = 12
 /** Stop inventing position this long after the last real fix. */
 const MAX_COAST_MS = 20_000
 /** Farther than this (~3 nm) is treated as a brand-new track and snapped. */
@@ -77,6 +91,7 @@ export class LivePositionBuffer {
           errLat: 0,
           errLon: 0,
           errHdg: 0,
+          turnRate: 0,
           misses: 0,
           bornAt: now,
           goneAt: null,
@@ -101,8 +116,12 @@ export class LivePositionBuffer {
       const coastHdg = pin ? prev.coastHdg : reportedHdg && ac.speedKt != null ? ac.heading : (derived?.hdg ?? (reportedHdg ? ac.heading : prev.coastHdg))
       const hdgKnown = pin ? prev.hdgKnown : reportedHdg || derived != null || prev.hdgKnown
 
+      // How fast it was turning: from two reported tracks only (derived ones are too noisy), and never for parked aircraft.
+      const turnRate = pin || snap || !reportedHdg || prev.fix.headingKnown === false || parked ? 0 : measureTurn(prev.coastHdg, coastHdg, dt, ac.onGround, prev.turnRate)
+
       prev.fix = fix
       prev.fixAt = now
+      prev.turnRate = turnRate
       prev.coastKt = coastKt
       prev.coastHdg = coastHdg
       prev.hdgKnown = hdgKnown
@@ -181,16 +200,49 @@ function fade(tr: Track, now: number): number {
   return Math.max(0, Math.min(1, 0.25 + 0.75 * fadeIn) * fadeOut)
 }
 
-/** Where this track should be drawn at `now`. Pure function of the last fix. */
+/**
+ * Where this track should be drawn at `now`. Pure function of the last fix.
+ * A turning aircraft keeps turning between fixes (along an arc, for about one
+ * poll), so turns read as one continuous motion instead of a hold-then-swing.
+ */
 function pose(tr: Track, now: number): { lat: number; lon: number; heading: number } {
   const dt = Math.max(0, now - tr.fixAt)
   const decay = Math.exp(-dt / EASE_MS)
-  const coast = project(tr.fix.lat, tr.fix.lon, tr.coastHdg, tr.coastKt, Math.min(dt, MAX_COAST_MS))
+  const coastMs = Math.min(dt, MAX_COAST_MS)
+  const turnMs = Math.min(coastMs, TURN_COAST_MS)
+  const turned = (tr.turnRate * turnMs) / 1000
+  let coast: { lat: number; lon: number }
+  if (turned === 0) coast = project(tr.fix.lat, tr.fix.lon, tr.coastHdg, tr.coastKt, coastMs)
+  else {
+    const arc = projectArc(tr.fix.lat, tr.fix.lon, tr.coastHdg, tr.turnRate, tr.coastKt, turnMs)
+    coast = project(arc.lat, arc.lon, tr.coastHdg + turned, tr.coastKt, coastMs - turnMs)
+  }
   return {
     lat: coast.lat + tr.errLat * decay,
     lon: coast.lon + tr.errLon * decay,
-    heading: (tr.coastHdg + tr.errHdg * decay + 360) % 360,
+    heading: (((tr.coastHdg + turned + tr.errHdg * headingEase(dt)) % 360) + 360) % 360,
   }
+}
+
+/** Share of a heading correction still left `dt` ms after a fix: critically damped, so it starts flat and has no corner. */
+export function headingEase(dt: number): number {
+  const x = Math.max(0, dt) / HDG_EASE_MS
+  return (1 + x) * Math.exp(-x)
+}
+
+/**
+ * Turn rate in degrees per second between two reported headings `dtMs`
+ * apart. Small rates are noise and read as straight; the rest is blended
+ * with the previous estimate and capped at what the aircraft can plausibly do.
+ */
+export function measureTurn(fromHdg: number, toHdg: number, dtMs: number, onGround: boolean, prevRate = 0): number {
+  if (dtMs < 400 || dtMs > 30_000) return 0
+  const rate = (shortestDelta(fromHdg, toHdg) * 1000) / dtMs
+  if (Math.abs(rate) < TURN_MIN_DPS) return 0
+  const max = onGround ? TURN_MAX_GROUND_DPS : TURN_MAX_AIR_DPS
+  // Agreeing with the last estimate: smooth; a reversal: believe the new one.
+  const blended = Math.sign(rate) === Math.sign(prevRate) ? 0.65 * rate + 0.35 * prevRate : rate
+  return Math.max(-max, Math.min(max, blended))
 }
 
 function isParked(ac: Aircraft) {
@@ -224,6 +276,20 @@ function project(lat: number, lon: number, heading: number, speedKt: number, dtM
   const cosLat = Math.max(0.25, Math.cos((lat * Math.PI) / 180))
   const dLon = (dist * Math.sin(rad)) / cosLat
   return { lat: lat + dLat, lon: lon + dLon }
+}
+
+/** Move along a circular arc: start heading `heading`, turning `rateDps` degrees per second, for `dtMs`. */
+function projectArc(lat: number, lon: number, heading: number, rateDps: number, speedKt: number, dtMs: number) {
+  if (speedKt <= 0 || dtMs <= 0) return { lat, lon }
+  const v = speedKt * DEG_PER_MS_PER_KT // degrees of latitude per ms
+  const w = (rateDps * Math.PI) / 180 / 1000 // radians per ms
+  const h0 = (heading * Math.PI) / 180
+  const h1 = h0 + w * dtMs
+  // Integral of (sin h, cos h) dt over the arc, in closed form.
+  const dEast = (v / w) * (Math.cos(h0) - Math.cos(h1))
+  const dNorth = (v / w) * (Math.sin(h1) - Math.sin(h0))
+  const cosLat = Math.max(0.25, Math.cos((lat * Math.PI) / 180))
+  return { lat: lat + dNorth, lon: lon + dEast / cosLat }
 }
 
 /** Equirectangular separation in degrees (latitude-sized). */
