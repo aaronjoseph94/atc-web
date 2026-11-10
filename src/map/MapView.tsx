@@ -17,6 +17,7 @@ import { CAMERA_EASE } from '../ui/motion'
 import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
+import { RunwayGateLayer } from './RunwayGateLayer'
 import type { LiveAircraft } from './livePositions'
 import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
 
@@ -319,6 +320,7 @@ export function MapView() {
           }}
         >
           <AirportDiagramLayer map={map} airportIcao={airportIcao} />
+          <RunwayGateLayer map={map} airportIcao={airportIcao} />
           <AircraftLayer
             map={map}
             liveBuffer={liveBuffer}

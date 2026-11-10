@@ -3,6 +3,7 @@
  * popover: designators, length, width, headings and surface.
  */
 import { getRunways, icaoCode, paintedDesignator, type Runway } from '../api/airportData'
+import type { ActiveRunways, RunwayRole } from '../live/runwayUse'
 import { bearingDeg, toLocal, type LngLat } from '../map/geo'
 
 export type RunwayEndFacts = {
@@ -93,4 +94,32 @@ export function formatRunwaySize(f: Pick<RunwayFacts, 'lengthFt' | 'widthFt'>, m
   const len = metric ? Math.round(f.lengthFt * 0.3048) : f.lengthFt
   const wid = f.widthFt == null ? null : metric ? Math.round(f.widthFt * 0.3048) : f.widthFt
   return `${len.toLocaleString('en-US')}${wid != null ? ` × ${wid.toLocaleString('en-US')}` : ''} ${metric ? 'm' : 'ft'}`
+}
+
+export type LiveRunwayStatus = {
+  /** `active`: seen in use now; `idle`: other runways are, this one isn't; `guess`: no traffic yet, the wind's pick. */
+  tone: 'active' | 'idle' | 'guess'
+  /** Per active end: its designator and what it is used for. */
+  ends: { ident: string; role: RunwayRole }[]
+  text: string
+}
+
+const ROLE_TEXT: Record<RunwayRole, string> = { arrivals: 'landings', departures: 'departures', both: 'landings and departures' }
+
+/** What the live traffic says about this runway, for the runway card. Null when there is nothing to say. */
+export function liveRunwayStatus(facts: Pick<RunwayFacts, 'ends'>, active: ActiveRunways | null | undefined): LiveRunwayStatus | null {
+  if (!active || active.basis === 'none') return null
+  const mine = new Set(facts.ends.map((e) => e.ident))
+  if (active.basis === 'wind') {
+    const favoured = active.favoured.filter((r) => mine.has(r))
+    return favoured.length ? { tone: 'guess', ends: [], text: `No traffic seen yet; the wind favours ${favoured.join(' and ')}` } : null
+  }
+  const ends = active.runways.filter((r) => mine.has(r.ident) && r.role).map((r) => ({ ident: r.ident, role: r.role! }))
+  if (!ends.length) return { tone: 'idle', ends: [], text: active.basis === 'atis' ? 'Not in use, per the ATIS' : 'Not in use right now' }
+  if (active.basis === 'atis') return { tone: 'active', ends, text: `The ATIS has it in use for ${ends.map((e) => `${ROLE_TEXT[e.role]} on ${e.ident}`).join('; ')}` }
+  const counts = active.runways.filter((r) => mine.has(r.ident)).reduce((n, r) => ({ arr: n.arr + r.arrivalCount, dep: n.dep + r.departureCount }), { arr: 0, dep: 0 })
+  const plural = (n: number, word: string) => (n ? `${n} ${word}${n === 1 ? '' : 's'}` : '')
+  const tally = [plural(counts.arr, 'arrival'), plural(counts.dep, 'departure')].filter(Boolean).join(', ')
+  const what = ends.map((e) => `${ROLE_TEXT[e.role]} on ${e.ident}`).join('; ')
+  return { tone: 'active', ends, text: `In use for ${what}${tally ? ` (${tally} in the last 20 min)` : ''}` }
 }
