@@ -3,6 +3,7 @@
  * served by Cloudflare Pages Functions in production and by the Vite
  * middleware in development.
  */
+import type { SourceStatus } from './sourceHealth'
 import type { AiStatus, SummarizeRequest, SummarizeResponse } from './summarizeHandler'
 import type { Aircraft, AircraftSnapshot, ClipPack, ClipSummary, FlightInfo, Station, Weather } from './types'
 
@@ -16,6 +17,8 @@ export type Health = {
   region?: string
   error?: string
   checkedAt: string
+  /** Every upstream source (ADS-B, metadata, weather) with its own status. */
+  sources?: SourceStatus[]
 }
 
 async function getJson<T>(url: string, what: string): Promise<T> {

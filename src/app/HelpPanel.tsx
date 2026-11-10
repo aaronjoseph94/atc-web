@@ -16,12 +16,13 @@ const GESTURES: [string, string][] = [
 ]
 
 const CREDITS: [string, string, string][] = [
-  ['Live traffic', 'adsb.lol, adsb.fi, OpenSky Network', 'https://adsb.lol'],
+  ['Live traffic', 'adsb.fi, adsb.lol (ODbL), The OpenSky Network', 'https://adsb.fi'],
   ['Base map', 'OpenFreeMap, OpenMapTiles, © OpenStreetMap contributors', 'https://www.openstreetmap.org/copyright'],
   ['Aerial imagery', 'USGS The National Map', 'https://www.usgs.gov/programs/national-geospatial-program/national-map'],
   ['Charts, frequencies', 'FAA Aeronautical Information Services', 'https://www.faa.gov/air_traffic/flight_info/aeronav/'],
   ['Runways', 'OurAirports', 'https://ourairports.com/data/'],
-  ['Weather, ATIS', 'aviationweather.gov, atis.info', 'https://aviationweather.gov'],
+  ['Aircraft details', 'hexdb.io, adsbdb.com, ADS-B feeds', 'https://hexdb.io'],
+  ['Weather, ATIS', 'aviationweather.gov, NOAA, atis.info', 'https://aviationweather.gov'],
   ['Radar', 'NOAA NEXRAD via Iowa Environmental Mesonet', 'https://mesonet.agron.iastate.edu/'],
   ['Routes, photos', 'adsbdb.com, airport-data.com', 'https://www.adsbdb.com'],
 ]

@@ -1,0 +1,9 @@
+{"ac":[
+{"hex":"a0b169","type":"adsb_icao","flight":"ATN3321 ","r":"N1439A","t":"B763","desc":"BOEING 767-300","ownOp":"ANDROMEDA LEASING I LLC","year":"1997","alt_baro":2225,"alt_geom":2125,"gs":179.6,"track":328.43,"baro_rate":-832,"squawk":"4021","emergency":"none","category":"A5","nav_qnh":1016.0,"nav_altitude_mcp":2016,"nav_heading":340.31,"lat":40.457840,"lon":-73.530151,"nic":8,"rc":186,"seen_pos":0.005,"version":2,"nic_baro":1,"nac_p":10,"nac_v":2,"sil":3,"sil_type":"perhour","gva":2,"sda":3,"alert":0,"spi":0,"mlat":[],"tisb":[],"messages":136614,"seen":0.0,"rssi":-16.7}
+]
+,"msg": "No error"
+,"now": 1794294588000
+,"total": 1
+,"ctime": 1794294588000
+,"ptime": 0
+}

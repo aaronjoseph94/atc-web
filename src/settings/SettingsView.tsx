@@ -190,7 +190,18 @@ function BackendStatus() {
         <KV k="Runtime" v={h?.runtime ?? '—'} />
       </dl>
       {h?.error && <p className="mt-2 break-words text-footnote text-atc-live">{h.error}</p>}
-      <p className="mt-2.5 text-caption text-atc-muted">Free community ADS-B feeds, tried in order: adsb.lol, adsb.fi, OpenSky. No accounts or keys.</p>
+      {h?.sources && (
+        <ul className="mt-2.5 space-y-1 text-footnote">
+          {h.sources.filter((s) => s.enabled !== false).map((s) => (
+            <li key={s.name} className="flex items-center gap-2" title={s.error ?? s.note ?? ''}>
+              <span className={`size-1.5 shrink-0 rounded-full ${s.ok ? 'bg-emerald-400' : s.ok === false ? 'bg-atc-live' : 'bg-white/30'}`} />
+              <span className="font-medium">{s.name}</span>
+              <span className="truncate text-atc-muted">{s.ok === false ? (s.error ?? 'failing') : s.latencyMs != null ? `${s.latencyMs} ms` : 'standby'}{s.breaker === 'open' ? ' · paused' : ''}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2.5 text-caption text-atc-muted">Free community ADS-B feeds: adsb.fi and adsb.lol merged, OpenSky as a last resort; a failing feed is skipped automatically. No accounts or keys.</p>
     </Group>
   )
 }

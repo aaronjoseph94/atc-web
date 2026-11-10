@@ -36,7 +36,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 | Map | MapLibre GL 6 via `react-map-gl`; own style on OpenFreeMap vector tiles (no token) |
 | State | Zustand (playhead + persisted settings), TanStack Query (polling) |
 | Backend | Cloudflare Pages Functions (`functions/api/*`), edge cache |
-| Data | adsb.lol → adsb.fi → OpenSky (hedged, normalized to one shape); FAA NASR; aviationweather.gov |
+| Data | adsb.fi + adsb.lol merged, OpenSky last resort (health-aware failover); adsbdb + hexdb; aviationweather.gov + NOAA; FAA NASR. Every source and its terms: [docs/data-sources.md](docs/data-sources.md) |
 | Tooling | oxlint, Vitest, Wrangler; Python + Piper for the replay clips |
 
 No paid APIs, fonts, icon packs or tile services are used, and no accounts or keys are needed.

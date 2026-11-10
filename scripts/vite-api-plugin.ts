@@ -7,12 +7,23 @@ import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import type { Plugin } from 'vite'
-import { fetchAircraftForAirport, jsonResponse } from '../src/api/aircraftHandler'
+import { handleAircraftRequest, jsonResponse } from '../src/api/aircraftHandler'
 import { allStations } from '../src/api/airports'
-import { fetchFlightInfo, parseFlightQuery } from '../src/api/flightInfoHandler'
+import { parseFlightQuery } from '../src/api/flightInfoHandler'
+import { fetchFlightDetails } from '../src/api/flightSources'
 import { buildHealth } from '../src/api/healthHandler'
+import { memoryCache } from '../src/api/sourceHealth'
 import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
 import { fetchWeather } from '../src/api/weatherHandler'
+
+/** Stands in for the Cloudflare edge cache in dev. */
+const devCache = memoryCache()
+
+/** Data-source switches from the shell (`ATC_FAIL_SOURCES=adsb.fi npm run dev` rehearses failover). */
+const sourceEnv = () => ({
+  ATC_ENABLE_AIRPLANES_LIVE: process.env.ATC_ENABLE_AIRPLANES_LIVE,
+  ATC_FAIL_SOURCES: process.env.ATC_FAIL_SOURCES,
+})
 
 /** AI config comes from the shell environment in dev (never from files in the repo). */
 const aiEnv = () => ({
@@ -57,30 +68,22 @@ export function apiDevPlugin(): Plugin {
           const airport = (url.searchParams.get('airport') ?? 'ORD').toUpperCase()
 
           if (url.pathname === '/api/aircraft') {
-            try {
-              const { aircraft, provider } = await fetchAircraftForAirport(airport)
-              const r = jsonResponse(aircraft)
-              r.headers.set('X-Provider', provider)
-              return await send(res, r)
-            } catch (err) {
-              const r = jsonResponse([], 200, 'no-store')
-              r.headers.set('X-Upstream-Error', String(err instanceof Error ? err.message : err).slice(0, 300))
-              return await send(res, r)
-            }
+            return await send(res, await handleAircraftRequest(airport, devCache, sourceEnv()))
           }
 
           if (url.pathname === '/api/health') {
-            return await send(res, jsonResponse(await buildHealth(airport, 'vite-dev'), 200, 'no-store'))
+            const opts = { env: sourceEnv(), cache: devCache, probeAll: url.searchParams.get('probe') === 'all' }
+            return await send(res, jsonResponse(await buildHealth(airport, 'vite-dev', undefined, opts), 200, 'no-store'))
           }
 
           if (url.pathname === '/api/weather') {
-            return await send(res, jsonResponse(await fetchWeather(airport), 200, 'public, max-age=60'))
+            return await send(res, jsonResponse(await fetchWeather(airport, sourceEnv()), 200, 'public, max-age=60'))
           }
 
           if (url.pathname === '/api/flight') {
             const q = parseFlightQuery(url.searchParams.get('hex'), url.searchParams.get('callsign'))
             if (!q.hex && !q.callsign) return await send(res, jsonResponse({ error: 'hex or callsign required' }, 400, 'no-store'))
-            return await send(res, jsonResponse(await fetchFlightInfo(q.hex, q.callsign), 200, 'public, max-age=600'))
+            return await send(res, jsonResponse(await fetchFlightDetails(q.hex, q.callsign, devCache), 200, 'public, max-age=600'))
           }
 
           if (url.pathname === '/api/summarize') {
