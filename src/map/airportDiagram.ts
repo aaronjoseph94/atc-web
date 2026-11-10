@@ -24,7 +24,18 @@ export type AirportDiagram = {
   ends: FeatureCollection<Point>
   /** Extended centrelines with a tick every nautical mile. */
   approach: FeatureCollection<LineString>
+  /**
+   * Candidate blast pads, one per runway end: the paved overrun and its
+   * chevrons, plus a point at its outer edge. The data doesn't say which ends
+   * really have one, so the map only draws those that fall on airfield ground.
+   */
+  pads: BlastPad[]
 }
+
+export type BlastPad = { ident: string; probe: LngLat; features: Feature<Polygon | LineString>[] }
+
+/** Length of a standard blast pad. */
+const PAD_LENGTH_M = 200 * M_PER_FT
 
 const ft = (n: number) => n * M_PER_FT
 
@@ -199,11 +210,27 @@ function approachPath(end: End, features: Feature<LineString>[]) {
   }
 }
 
+/** The paved pad before a runway end, with chevrons pointing at the runway. */
+function blastPad(end: End, widthM: number): BlastPad {
+  const half = widthM * 0.72
+  const features: Feature<Polygon | LineString>[] = [quad(end, -PAD_LENGTH_M, 0, -half, half, { kind: 'pad' })]
+  const depth = half * 0.55
+  for (let i = 0; i < 3; i++) {
+    const tip = -6 - i * (PAD_LENGTH_M / 3.4)
+    features.push({
+      type: 'Feature',
+      properties: { kind: 'chevron' },
+      geometry: { type: 'LineString', coordinates: [end.at(tip - depth, -half * 0.86), end.at(tip, 0), end.at(tip - depth, half * 0.86)] },
+    })
+  }
+  return { ident: end.ident, probe: end.at(-PAD_LENGTH_M, 0), features }
+}
+
 const empty = <G extends Polygon | Point | LineString>(): FeatureCollection<G> => ({ type: 'FeatureCollection', features: [] })
 
 /** Diagram with no features, for airports without runway data. */
 export function emptyDiagram(): AirportDiagram {
-  return { surface: empty(), paint: empty(), designators: empty(), ends: empty(), approach: empty() }
+  return { surface: empty(), paint: empty(), designators: empty(), ends: empty(), approach: empty(), pads: [] }
 }
 
 /** Build the full painted diagram for a catalog airport (e.g. `ORD`). */
@@ -249,6 +276,7 @@ export function buildAirportDiagram(airport: string): AirportDiagram {
         geometry: { type: 'Point', coordinates: end.at(-Math.max(90, widthM * 1.6), 0) },
       })
       approachPath(end, out.approach.features)
+      out.pads.push(blastPad(end, widthM))
     }
   }
   return out

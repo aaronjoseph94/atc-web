@@ -44,18 +44,21 @@ export function AirportDiagramLayer({ map, airportIcao }: { map: MapLibreMap | n
     // Only one end per runway is needed to describe its centreline.
     const runways = runwayEnds(airportIcao).filter((_, i) => i % 2 === 0)
     const bars = new Map<string, Feature<LineString>[]>()
+    // Blast pads: undecided until their outer edge has been on screen once.
+    const pending = new Set(d.pads)
+    const pads: Feature[] = []
     let timer = 0
     let tries = 0
     const refresh = () => {
       window.clearTimeout(timer)
-      if (map.getZoom() < MIN_ZOOM) return
+      if (map.getZoom() < MIN_ZOOM - 1.5) return
       // Tiles for the new view may still be arriving; look again shortly.
       if (!map.isSourceLoaded('omt')) {
         if (tries++ < 12) timer = window.setTimeout(refresh, 400)
         return
       }
       tries = 0
-      const taxiways = map.querySourceFeatures('omt', {
+      const taxiways = map.getZoom() < MIN_ZOOM ? [] : map.querySourceFeatures('omt', {
         sourceLayer: 'aeroway',
         filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']],
       })
@@ -66,6 +69,23 @@ export function AirportDiagramLayer({ map, airportIcao }: { map: MapLibreMap | n
         for (const part of parts) added = holdBars(part as LngLat[], runways, bars) || added
       }
       if (added) setData(map, SRC.hold, { type: 'FeatureCollection', features: [...bars.values()].flat() })
+
+      // A pad is drawn only if the ground under its outer edge belongs to the
+      // airfield; otherwise it would stick out over water, roads or houses.
+      if (map.getLayer('aero-infield')) {
+        const { width, height } = map.getCanvas().getBoundingClientRect()
+        let decided = false
+        for (const pad of pending) {
+          const px = map.project(pad.probe)
+          if (px.x < 0 || px.y < 0 || px.x > width || px.y > height) continue
+          pending.delete(pad)
+          if (map.queryRenderedFeatures(px, { layers: ['aero-infield'] }).length) {
+            pads.push(...pad.features)
+            decided = true
+          }
+        }
+        if (decided) setData(map, SRC.pads, { type: 'FeatureCollection', features: pads })
+      }
     }
     // The map never goes "idle" while aircraft animate, so settle on the end of each move instead.
     const schedule = () => {
@@ -74,6 +94,7 @@ export function AirportDiagramLayer({ map, airportIcao }: { map: MapLibreMap | n
       timer = window.setTimeout(refresh, 350)
     }
     setData(map, SRC.hold, { type: 'FeatureCollection', features: [] })
+    setData(map, SRC.pads, { type: 'FeatureCollection', features: [] })
     map.on('moveend', schedule)
     schedule()
     return () => {

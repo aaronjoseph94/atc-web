@@ -86,6 +86,15 @@ describe('buildAirportDiagram', () => {
     expect(distanceM(a, b) / 1852).toBeCloseTo(8, 0)
   })
 
+  it('offers a blast pad with chevrons before every runway end', () => {
+    expect(ord.pads).toHaveLength(getRunways('ORD').length * 2)
+    const pad = ord.pads.find((p) => p.ident === '10L')!
+    expect(pad.features.map((f) => f.properties?.kind)).toEqual(['pad', 'chevron', 'chevron', 'chevron'])
+    // The pad lies wholly before the pavement: its probe point is 200 ft short of the runway end.
+    const end = runwayEnds('ORD').find((e) => e.ident === '10L')!
+    expect(relativeToRunway(end, pad.probe).along).toBeCloseTo(-200 * M_PER_FT, 0)
+  })
+
   it('returns an empty diagram for an unknown airport', () => {
     expect(buildAirportDiagram('ZZZ').surface.features).toEqual([])
   })

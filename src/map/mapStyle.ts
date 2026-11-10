@@ -20,6 +20,7 @@ export const SRC = {
   ends: 'apt-ends',
   approach: 'apt-approach',
   hold: 'apt-hold',
+  pads: 'apt-pads',
   aircraft: 'aircraft',
   shadows: 'aircraft-shadows',
   trails: 'aircraft-trails',
@@ -54,6 +55,10 @@ type Palette = {
   infield: string
   apron: string
   taxiway: string
+  /** Lighter band around pavement: the shoulder that rings each grass island. */
+  shoulder: string
+  /** Blast pads beyond the runway ends. */
+  pad: string
   runway: string
   runwayConcrete: string
   paint: string
@@ -83,31 +88,33 @@ type Palette = {
 }
 
 const NAVY: Palette = {
-  bg: '#0B1322',
-  water: '#091B36',
-  land: '#0E1729',
-  wood: '#0F2327',
-  grass: '#102B28',
-  infield: '#1C5643',
-  apron: '#1B2540',
-  taxiway: '#222E4B',
-  runway: '#283250',
-  runwayConcrete: '#2F3A59',
-  paint: '#F2F5FA',
-  taxiLine: '#F5C518',
-  building: '#151F36',
-  buildingEdge: '#263352',
-  buildingTop: '#1E2A47',
-  roadMinor: '#16213A',
-  roadMajor: '#1C2946',
-  motorway: '#223152',
-  roadCase: '#0C1526',
-  rail: '#1A2540',
-  boundary: '#2B3858',
-  label: '#7E8CAB',
-  labelHalo: '#0B1322',
-  waterLabel: '#3F5E91',
-  approach: '#8FA3CC',
+  bg: '#151B30',
+  water: '#0F1A36',
+  land: '#1A2138',
+  wood: '#27453A',
+  grass: '#2A4A3B',
+  infield: '#33594A',
+  apron: '#191C33',
+  taxiway: '#191C33',
+  shoulder: '#2E3A57',
+  pad: '#343D58',
+  runway: '#12152E',
+  runwayConcrete: '#151932',
+  paint: '#C9CED9',
+  taxiLine: '#9A852E',
+  building: '#262C44',
+  buildingEdge: '#343C58',
+  buildingTop: '#2E3550',
+  roadMinor: '#1C2440',
+  roadMajor: '#222B49',
+  motorway: '#283354',
+  roadCase: '#10152A',
+  rail: '#202844',
+  boundary: '#303B5C',
+  label: '#8B95AE',
+  labelHalo: '#151B30',
+  waterLabel: '#4A6496',
+  approach: '#9AA6C4',
   plane: '#FFFFFF',
   planeEdge: 'rgba(5,10,22,0.75)',
   raster: 'none',
@@ -117,16 +124,20 @@ const NAVY: Palette = {
 
 const GRAPHITE: Palette = {
   ...NAVY,
-  bg: '#101214',
-  water: '#0A1016',
-  land: '#141719',
-  wood: '#141B18',
-  grass: '#16201B',
-  infield: '#21392C',
-  apron: '#1F2327',
-  taxiway: '#282D32',
-  runway: '#30363C',
-  runwayConcrete: '#3A4047',
+  bg: '#17191C',
+  water: '#0F1318',
+  land: '#1C1F22',
+  wood: '#243029',
+  grass: '#26342B',
+  infield: '#34493C',
+  apron: '#1B1D20',
+  taxiway: '#1B1D20',
+  shoulder: '#33383E',
+  pad: '#3A4046',
+  runway: '#141618',
+  runwayConcrete: '#17191C',
+  paint: '#C8CBD0',
+  taxiLine: '#8F7F3A',
   building: '#1A1D21',
   buildingEdge: '#2B3036',
   buildingTop: '#24282D',
@@ -137,7 +148,7 @@ const GRAPHITE: Palette = {
   rail: '#202428',
   boundary: '#33383E',
   label: '#858B93',
-  labelHalo: '#101214',
+  labelHalo: '#17191C',
   waterLabel: '#4A5A6B',
   approach: '#9AA1AA',
 }
@@ -177,8 +188,8 @@ const PALETTES: Record<MapTheme, Palette> = { navy: NAVY, graphite: GRAPHITE, sa
 
 /** Display metadata for the theme picker. */
 export const MAP_THEMES: { id: MapTheme; label: string; hint: string; usOnly: boolean; swatch: [string, string, string] }[] = [
-  { id: 'navy', label: 'Night', hint: 'Navy airfield chart', usOnly: false, swatch: ['#0E1729', '#1C5643', '#283250'] },
-  { id: 'graphite', label: 'Graphite', hint: 'Neutral dark', usOnly: false, swatch: ['#141719', '#21392C', '#30363C'] },
+  { id: 'navy', label: 'Night', hint: 'Navy airfield chart', usOnly: false, swatch: ['#191C33', '#33594A', '#12152E'] },
+  { id: 'graphite', label: 'Graphite', hint: 'Neutral dark', usOnly: false, swatch: ['#1B1D20', '#34493C', '#141618'] },
   { id: 'satellite', label: 'Satellite', hint: 'USGS aerial photos', usOnly: true, swatch: ['#3A4A3C', '#6E7A63', '#9AA08F'] },
   { id: 'chart', label: 'FAA chart', hint: 'VFR sectional', usOnly: true, swatch: ['#E9E2CF', '#8FB7D9', '#C7B8E0'] },
 ]
@@ -227,8 +238,14 @@ function layers(p: Palette): LayerSpecification[] {
 
     // ---- airfield (OpenStreetMap geometry) ----------------------------------
     { id: 'aero-infield', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['==', ['get', 'class'], 'aerodrome'], layout: vis(base), paint: { 'fill-color': p.infield, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.55, 12, 1] } },
+    // Pavement is drawn twice: a wide, lighter "shoulder" pass first, then the dark
+    // pavement on top. What shows of the first pass is the band that rings every
+    // grass island, and round joins give the islands their rounded corners.
+    { id: 'aero-apron-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: { ...vis(base), 'line-join': 'round' }, paint: { 'line-color': p.shoulder, 'line-width': metres(16) } },
+    { id: 'aero-taxiway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.shoulder, 'line-width': metres(54) } },
+    { id: 'aero-runway-shoulder', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 12, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-color': p.shoulder, 'line-width': metres(72) } },
     { id: 'aero-apron', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'apron']], layout: vis(base), paint: { 'fill-color': p.apron } },
-    { id: 'aero-taxiway', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiway, 'line-width': metres(34) } },
+    { id: 'aero-taxiway', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(base), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiway, 'line-width': metres(38) } },
     { id: 'aero-runway-area', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'class'], 'runway']], layout: vis(base), paint: { 'fill-color': p.runway } },
     // Other airports in view (and far zooms) only get this plain stroke.
     { id: 'aero-runway-line', type: 'line', source: 'omt', 'source-layer': 'aeroway', filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], layout: { ...vis(base), 'line-cap': 'butt' }, paint: { 'line-color': p.runway, 'line-width': metres(46) } },
@@ -253,10 +270,13 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.approachTick, type: 'line', source: SRC.approach, filter: ['==', ['get', 'kind'], 'tick'], minzoom: 10.5, paint: { 'line-color': p.approach, 'line-opacity': 0.32, 'line-width': 1 } },
 
     // ---- runway pavement and paint (generated from OurAirports) ----------------
+    // Blast pads beyond the runway ends, with their yellow chevrons.
+    { id: 'apt-pad', type: 'fill', source: SRC.pads, minzoom: 12.5, filter: ['==', ['get', 'kind'], 'pad'], layout: vis(paint), paint: { 'fill-color': p.pad } },
+    { id: 'apt-pad-chevron', type: 'line', source: SRC.pads, minzoom: 14, filter: ['==', ['get', 'kind'], 'chevron'], layout: { ...vis(paint), 'line-join': 'miter' }, paint: { 'line-color': p.taxiLine, 'line-opacity': 0.85, 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 0.7, 17, 2.4, 20, 14] } },
     { id: 'apt-surface', type: 'fill', source: SRC.surface, minzoom: 10, layout: vis(paint), paint: { 'fill-color': ['match', ['get', 'surface'], 'concrete', p.runwayConcrete, p.runway] } },
-    { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.8], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.6, 16, 1.2, 19, 4] } },
+    { id: 'aero-taxi-centre', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13.2, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], layout: { ...vis(paint), 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': p.taxiLine, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.2, 0, 14, 0.9], 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 0.5, 16, 1.1, 19, 5] } },
     { id: 'apt-hold', type: 'line', source: SRC.hold, minzoom: 14, layout: vis(paint), paint: { 'line-color': p.taxiLine, 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, 0.8, 17, 2, 20, 8], 'line-dasharray': ['case', ['==', ['get', 'dashed'], 1], ['literal', [1.6, 1.2]], ['literal', [1, 0]]] } },
-    { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': p.paint, 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, ['match', ['get', 'kind'], 'edge', 0.55, 'centre', 0.85, 0.92]] } },
+    { id: 'apt-paint', type: 'fill', source: SRC.paint, minzoom: 12.5, layout: vis(paint), paint: { 'fill-color': p.paint, 'fill-antialias': true, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, ['match', ['get', 'kind'], 'edge', 0.5, 'centre', 0.8, 0.95]] } },
     {
       id: 'apt-designator',
       type: 'symbol',
@@ -291,30 +311,29 @@ function layers(p: Palette): LayerSpecification[] {
 
     // Gate numbers and taxiway location signs straight from OpenStreetMap.
     { id: 'aero-gate', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 15.3, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate'], ['has', 'ref']], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.3, 9, 18, 13], 'text-padding': 4 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
+    // Taxiway letters, laid along the pavement beside the centreline.
     {
       id: 'aero-taxi-sign',
       type: 'symbol',
       source: 'omt',
       'source-layer': 'aeroway',
-      minzoom: 14.4,
+      minzoom: 14.2,
       filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway'], ['has', 'ref']],
       layout: {
         'symbol-placement': 'line',
-        'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 14, 340, 17, 620],
+        'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 14, 280, 17, 560],
         'text-field': ['get', 'ref'],
         'text-font': FONT_BOLD,
-        'text-size': ['interpolate', ['linear'], ['zoom'], 14, 8.5, 17, 12],
-        'text-rotation-alignment': 'viewport',
-        'text-pitch-alignment': 'viewport',
-        'icon-image': 'sign-taxiway',
-        'icon-text-fit': 'both',
-        'icon-text-fit-padding': [1, 4, 1, 4],
-        'icon-rotation-alignment': 'viewport',
-        'icon-pitch-alignment': 'viewport',
-        'text-padding': 14,
-        'text-max-angle': 90,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 14.2, 9, 16, 11.5, 18, 15],
+        'text-rotation-alignment': 'map',
+        'text-pitch-alignment': 'map',
+        'text-keep-upright': true,
+        'text-offset': [0, 0.95],
+        'text-letter-spacing': 0.04,
+        'text-padding': 10,
+        'text-max-angle': 35,
       },
-      paint: { 'text-color': '#F5C518' },
+      paint: { 'text-color': chart ? '#1B2540' : 'rgba(228,233,244,0.86)', 'text-halo-color': chart ? 'rgba(255,255,255,0.8)' : sat ? 'rgba(0,0,0,0.7)' : p.taxiway, 'text-halo-width': 1.1 },
     },
     { id: 'aero-other', type: 'symbol', source: 'omt', 'source-layer': 'aerodrome_label', minzoom: 8, maxzoom: 11, layout: { ...vis(!chart), 'text-field': ['coalesce', ['get', 'iata'], ['get', 'name_en'], ['get', 'name']], 'text-font': FONT_BOLD, 'text-size': 11, 'text-letter-spacing': 0.06, 'text-padding': 8 }, paint: { 'text-color': p.label, 'text-halo-color': p.labelHalo, 'text-halo-width': 1.4 } },
     {
@@ -322,6 +341,8 @@ function layers(p: Palette): LayerSpecification[] {
       type: 'symbol',
       source: SRC.ends,
       minzoom: 10.8,
+      // Once the painted numbers are legible the signs would only repeat them.
+      maxzoom: sat ? 24 : 14,
       layout: {
         'text-field': ['get', 'ident'],
         'text-font': FONT_BOLD,
@@ -343,7 +364,7 @@ function layers(p: Palette): LayerSpecification[] {
     { id: LAYER.trails, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 0], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 1.6], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(160,178,220,0)', 1, chart ? 'rgba(27,37,64,0.55)' : 'rgba(160,178,220,0.42)'] } },
     { id: LAYER.trailGlow, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#7C5CFC', 'line-width': 11, 'line-opacity': 0.22, 'line-blur': 6 } },
     { id: LAYER.trail, type: 'line', source: SRC.trails, filter: ['==', ['get', 'sel'], 1], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.2, 15, 3.4], 'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(124,92,252,0.02)', 0.5, 'rgba(124,92,252,0.5)', 1, 'rgba(168,140,255,1)'] } },
-    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['get', 'icon'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#000000', 'icon-opacity': ['*', chart ? 0.22 : 0.34, ['get', 'o']], 'icon-halo-color': 'rgba(0,0,0,0.35)', 'icon-halo-width': 1.2, 'icon-halo-blur': 1.2 } },
+    { id: LAYER.shadow, type: 'symbol', source: SRC.shadows, layout: { 'icon-image': ['concat', ['get', 'icon'], '-sdf'], 'icon-size': iconScale(['get', 'scale']), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-color': '#000000', 'icon-opacity': ['*', chart ? 0.22 : 0.42, ['get', 'o']], 'icon-halo-color': 'rgba(0,0,0,0.4)', 'icon-halo-width': 1.6, 'icon-halo-blur': 1.6 } },
     { id: LAYER.event, type: 'circle', source: SRC.events, paint: { 'circle-radius': ['get', 'r'], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2, 'circle-stroke-opacity': ['get', 'o'], 'circle-pitch-alignment': 'map' } },
     { id: LAYER.ping, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'tx'], 1], paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#F5C518', 'circle-stroke-width': 2, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } },
     { id: LAYER.halo, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'hi'], 1], paint: { 'circle-radius': 16, 'circle-color': '#7C5CFC', 'circle-opacity': 0.3, 'circle-blur': 0.85, 'circle-pitch-alignment': 'map' } },
@@ -354,7 +375,7 @@ function layers(p: Palette): LayerSpecification[] {
       type: 'symbol',
       source: SRC.aircraft,
       layout: {
-        'icon-image': ['get', 'icon'],
+        'icon-image': ['case', ['==', ['get', 'hi'], 1], ['concat', ['get', 'icon'], '-hi'], ['get', 'icon']],
         'icon-size': iconScale(['*', ['get', 'scale'], ['case', ['==', ['get', 'hi'], 1], 1.25, 1]]),
         'icon-rotate': ['get', 'heading'],
         'icon-rotation-alignment': 'map',
@@ -363,12 +384,9 @@ function layers(p: Palette): LayerSpecification[] {
         'icon-ignore-placement': true,
         'symbol-sort-key': ['get', 'z'],
       },
+      // The silhouettes are shaded artwork (white, and yellow when highlighted), not tinted masks.
       paint: {
-        'icon-color': ['case', ['==', ['get', 'hi'], 1], '#F5C518', ['==', ['get', 'alert'], 1], '#FF5A5F', p.plane],
-        'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.62, 1, 0.94, 1]]],
-        'icon-halo-color': ['case', ['==', ['get', 'hi'], 1], '#5B3DF5', p.planeEdge],
-        'icon-halo-width': ['case', ['==', ['get', 'hi'], 1], 2.4, 1],
-        'icon-halo-blur': ['case', ['==', ['get', 'hi'], 1], 1, 0.4],
+        'icon-opacity': ['*', ['get', 'o'], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.72, 1]]],
       },
     },
     {
@@ -405,7 +423,7 @@ function layers(p: Palette): LayerSpecification[] {
 /**
  * Icon size by zoom, times a per-feature factor. Below z15 the silhouettes
  * are oversized so they can be seen and tapped; from there up they double with
- * each zoom level and so sit at roughly true scale on taxiways and gates.
+ * each zoom level, staying about 1.4× life size so they read clearly on the pavement.
  * (MapLibre only allows `zoom` at the top of an expression, so the per-feature
  * factor is multiplied into every stop.)
  */
@@ -413,10 +431,10 @@ function iconScale(factor: unknown): unknown[] {
   const stops: [number, number][] = [
     [9, 0.32],
     [12, 0.5],
-    [14, 0.74],
-    [15, 0.92],
-    [16, 1.3],
-    [19, 10.4],
+    [14, 0.9],
+    [15, 1.2],
+    [16, 1.8],
+    [19, 14.4],
   ]
   return ['interpolate', ['exponential', 2], ['zoom'], ...stops.flatMap(([z, v]) => [z, ['*', v, factor]])]
 }
@@ -480,6 +498,7 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.ends]: { type: 'geojson', data: empty },
       [SRC.approach]: { type: 'geojson', data: empty },
       [SRC.hold]: { type: 'geojson', data: empty },
+      [SRC.pads]: { type: 'geojson', data: empty },
       [SRC.aircraft]: { type: 'geojson', data: empty },
       [SRC.shadows]: { type: 'geojson', data: empty },
       [SRC.trails]: { type: 'geojson', data: empty, lineMetrics: true },

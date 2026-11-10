@@ -3,10 +3,9 @@
  * app ships no image assets:
  *
  *  - aircraft silhouettes (self-authored, CC0), one per broad airframe class,
- *    converted to signed distance fields so MapLibre can tint, outline and
- *    scale them crisply;
- *  - stretchable sign plates modelled on real airfield signage: yellow-on-black
- *    taxiway location signs and white-on-red runway signs;
+ *    as shaded artwork in white and in yellow, plus a signed-distance-field
+ *    mask of each for the soft shadow;
+ *  - the white-on-red runway sign plate, modelled on real airfield signage;
  *  - the callsign tag plates.
  */
 import type { Map as MapLibreMap } from 'maplibre-gl'
@@ -76,14 +75,14 @@ function airliner(o: { len: number; body: number; span: number; sweep: number; c
 
 const SHAPES: Record<string, Draw> = {
   // Narrow-body twin: 737, A320 family, 757.
-  'ac-jet': airliner({ len: 70, body: 7.4, span: 33, sweep: 15, chord: 9, wingY: -8, engines: [[12.5, -9]], engine: [5.4, 11], tail: 13 }),
+  'ac-jet': airliner({ len: 72, body: 9.2, span: 34, sweep: 14, chord: 11.5, wingY: -9, engines: [[13.5, -10]], engine: [6.6, 12], tail: 14.5 }),
   // Wide-body twin: 777, 787, A330, A350.
-  'ac-heavy': airliner({ len: 78, body: 9.4, span: 39, sweep: 18, chord: 11, wingY: -10, engines: [[14.5, -12]], engine: [7, 14], tail: 15.5 }),
+  'ac-heavy': airliner({ len: 80, body: 11, span: 40, sweep: 17, chord: 13.5, wingY: -11, engines: [[15.5, -13]], engine: [8, 15], tail: 17 }),
   // Four engines: 747, A380, A340.
-  'ac-quad': airliner({ len: 80, body: 10, span: 41, sweep: 19, chord: 12, wingY: -11, engines: [[13, -13], [25, -4]], engine: [6, 12], tail: 16 }),
+  'ac-quad': airliner({ len: 82, body: 11.6, span: 42, sweep: 18, chord: 14, wingY: -12, engines: [[14, -14], [26, -5]], engine: [6.8, 13], tail: 17.5 }),
   // Rear-engined regional and business jets: CRJ, ERJ-145, Citation, Gulfstream.
   'ac-regional': (ctx) => {
-    fuselage(ctx, 68, 6.2)
+    fuselage(ctx, 68, 7.6)
     mirrored(ctx, [
       [2.2, -1],
       [27, 11],
@@ -101,7 +100,7 @@ const SHAPES: Record<string, Draw> = {
   },
   // Twin turboprop: Dash 8, ATR, King Air.
   'ac-turboprop': (ctx) => {
-    fuselage(ctx, 62, 6.6)
+    fuselage(ctx, 62, 7.8)
     mirrored(ctx, [
       [2.4, -9],
       [31, -6.5],
@@ -261,19 +260,67 @@ function silhouette(draw: Draw): ImageData {
   return new ImageData(maskToSdf(mask.data, SIZE, SIZE) as Uint8ClampedArray<ArrayBuffer>, SIZE, SIZE)
 }
 
+/** Pixel size of the shaded artwork. Large, because close in the icons are drawn several times their base size. */
+const ART = 256
+
+const TONES = {
+  // Bright along the fuselage, falling to a cool grey at the wingtips.
+  white: { core: '#FFFFFF', edge: '#BFC8D8', rim: 'rgba(8,12,28,0.6)' },
+  // The highlighted aircraft: the same shading in signal yellow.
+  yellow: { core: '#FFE06A', edge: '#F0A400', rim: 'rgba(70,40,0,0.7)' },
+} as const
+
+/**
+ * The silhouette as shaded artwork: lit down the centreline, darker toward
+ * the wingtips, with a soft dark rim so it reads on any background.
+ */
+function artwork(draw: Draw, tone: keyof typeof TONES): ImageData {
+  const t = TONES[tone]
+  const canvas = document.createElement('canvas')
+  canvas.width = ART
+  canvas.height = ART
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(ART / SIZE, ART / SIZE)
+  ctx.translate(C, C)
+  ctx.fillStyle = '#fff'
+  draw(ctx)
+
+  // Shade only where the silhouette already is.
+  ctx.globalCompositeOperation = 'source-atop'
+  const across = ctx.createLinearGradient(-42, 0, 42, 0)
+  across.addColorStop(0, t.edge)
+  across.addColorStop(0.42, t.core)
+  across.addColorStop(0.58, t.core)
+  across.addColorStop(1, t.edge)
+  ctx.fillStyle = across
+  ctx.fillRect(-C, -C, SIZE, SIZE)
+  // A little weight toward the tail so the nose reads as the front.
+  const along = ctx.createLinearGradient(0, -40, 0, 40)
+  along.addColorStop(0, 'rgba(255,255,255,0.18)')
+  along.addColorStop(1, 'rgba(20,30,60,0.16)')
+  ctx.fillStyle = along
+  ctx.fillRect(-C, -C, SIZE, SIZE)
+
+  // Rim, drawn underneath.
+  ctx.globalCompositeOperation = 'destination-over'
+  ctx.shadowColor = t.rim
+  ctx.shadowBlur = 5
+  ctx.fillStyle = t.rim
+  draw(ctx)
+  return ctx.getImageData(0, 0, ART, ART)
+}
+
 // ---------------------------------------------------------------------------
 // Stretchable plates
 // ---------------------------------------------------------------------------
 
 type Plate = { fill: string; stroke?: string; strokeWidth?: number; radius: number }
 
-/** Sign and tag plates. Colours for the two signs follow FAA AC 150/5340-18. */
+/** Sign and tag plates. The runway sign's colours follow FAA AC 150/5340-18. */
 const PLATES: Record<string, Plate> = {
-  // Taxiway location sign: yellow legend on black, yellow border.
-  'sign-taxiway': { fill: '#0A0A0A', stroke: '#F5C518', strokeWidth: 2, radius: 5 },
   // Runway (mandatory instruction) sign: white legend on red.
   'sign-runway': { fill: '#C8102E', stroke: 'rgba(255,255,255,0.9)', strokeWidth: 1.5, radius: 5 },
-  tag: { fill: 'rgba(18,24,40,0.88)', stroke: 'rgba(255,255,255,0.14)', strokeWidth: 1, radius: 8 },
+  tag: { fill: 'rgba(58,66,90,0.92)', stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, radius: 8 },
   // The highlighted aircraft's tag takes the flight card's purple.
   'tag-active': { fill: '#5B3DF5', stroke: 'rgba(255,255,255,0.35)', strokeWidth: 1, radius: 8 },
 }
@@ -299,8 +346,13 @@ function plate(p: Plate): { data: ImageData; inset: number } {
 
 /** Register every image the style uses. Safe to call again (e.g. after a context restore). */
 export function ensureMapImages(map: MapLibreMap) {
+  const artRatio = (2 * ART) / SIZE
   for (const [id, draw] of Object.entries(SHAPES)) {
-    if (!map.hasImage(id)) map.addImage(id, silhouette(draw), { sdf: true, pixelRatio: 2 })
+    // Three versions of each: shaded white, shaded yellow for the highlighted
+    // aircraft, and a distance-field mask the shadow layer can tint and blur.
+    if (!map.hasImage(id)) map.addImage(id, artwork(draw, 'white'), { pixelRatio: artRatio })
+    if (!map.hasImage(`${id}-hi`)) map.addImage(`${id}-hi`, artwork(draw, 'yellow'), { pixelRatio: artRatio })
+    if (!map.hasImage(`${id}-sdf`)) map.addImage(`${id}-sdf`, silhouette(draw), { sdf: true, pixelRatio: 2 })
   }
   for (const [id, p] of Object.entries(PLATES)) {
     if (map.hasImage(id)) continue
