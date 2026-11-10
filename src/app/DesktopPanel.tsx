@@ -15,7 +15,6 @@
 import { MoreHorizontal, PanelRightClose, Search, X } from 'lucide-react'
 import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
-import { getAirport } from '../api/airports'
 import { FlightDetail } from '../flight/FlightSheet'
 import { BriefingCard } from '../insights/Briefing'
 import { useFlight } from '../flight/useFlight'
