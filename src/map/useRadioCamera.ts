@@ -9,11 +9,14 @@
  * Moves are long and eased so they read as one continuous camera, and every
  * one is interruptible (a drag stops it and hands the map to the user).
  */
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import type { AirportConfig } from '../api/airports'
 import { useRadio } from '../live/radio/radioStore'
 import { usePlayhead } from '../playback/playheadStore'
+import { reducedMotion } from '../ui/motion'
+import { driftAt, IDLE_MS } from './drift'
+import { metersPerDegLat, metersPerDegLon } from './geo'
 import type { LiveAircraft } from './livePositions'
 
 /** Length of the move onto an aircraft. */
@@ -43,30 +46,58 @@ export function focusZoom(a: Pick<LiveAircraft, 'onGround' | 'altitudeFt'>, airp
 type State = { key: string | null; settleAt: number; homeAt: number; zoom: number; retries: number; until: number }
 
 /**
+ * The idle drift in progress: where and when it began, and the camera it
+ * last set, so a move made by anything else is noticed and ends the drift.
+ */
+type Drift = { start: number; lng: number; lat: number; zoom: number; set: [number, number, number] | null }
+
+/**
  * Returns a per-frame function for `MapView`'s frame loop. It returns true
  * while the radio is steering the camera, so the map's own automatic camera
  * stays out of the way.
  */
 export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, goHome: (ms?: number) => void, reduceMotion: boolean) {
   const state = useRef<State>({ key: null, settleAt: 0, homeAt: 0, zoom: 0, retries: 0, until: 0 })
+  // Last time anything happened to the camera (input, or a move the drift didn't make).
+  const busyAt = useRef(0)
+  const drift = useRef<Drift | null>(null)
+
+  // Any touch, click, wheel or key, anywhere, ends the drift on the spot and restarts the idle wait.
+  useEffect(() => {
+    busyAt.current = performance.now()
+    const poke = () => {
+      busyAt.current = performance.now()
+      drift.current = null
+    }
+    const opts = { capture: true, passive: true }
+    const kinds = ['pointerdown', 'wheel', 'touchstart', 'keydown'] as const
+    for (const k of kinds) window.addEventListener(k, poke, opts)
+    return () => {
+      for (const k of kinds) window.removeEventListener(k, poke, opts)
+    }
+  }, [])
 
   return useCallback(
     (list: LiveAircraft[], dt: number): boolean => {
       const st = state.current
       if (!map) return false
       const s = usePlayhead.getState()
+      const now = performance.now()
       const auto = s.mode === 'live' && s.cameraMode === 'auto' && !s.selectedIcao && !s.following
       if (!auto) {
         // The user (or a selection) has the map; forget what we were doing.
         st.key = null
         st.homeAt = 0
+        busyAt.current = now
+        drift.current = null
         return false
       }
-      const now = performance.now()
       const focus = useRadio.getState().focus
       const targets = focus ? focus.ids.map((id) => list.find((a) => a.icao24 === id)).filter((a): a is LiveAircraft => !!a) : []
 
       if (targets.length) {
+        busyAt.current = now
+        drift.current = null
         st.homeAt = 0
         // Each new call in the exchange may nudge the layout (and cut a move short) again.
         if (focus && focus.until !== st.until) {
@@ -98,6 +129,7 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
         return true
       }
       if (st.homeAt) {
+        busyAt.current = now
         if (now >= st.homeAt) {
           st.homeAt = 0
           goHome(HOME_MS)
@@ -105,10 +137,12 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
         }
         return true
       }
+      idleDrift(map, s, now, reduceMotion, busyAt, drift)
       return false
     },
     [map, airport, goHome, reduceMotion],
   )
+
 }
 
 /**
@@ -178,4 +212,35 @@ function chase(map: MapLibreMap, targets: LiveAircraft[], dt: number, reduceMoti
   const lng = c.lng + (lon - c.lng) * k
   const la = c.lat + (lat - c.lat) * k
   if (Math.abs(lng - c.lng) > 1e-7 || Math.abs(la - c.lat) > 1e-7) map.jumpTo({ center: [lng, la] })
+}
+
+/**
+ * Nothing on the air and nobody touching the map: after a quiet spell, let
+ * the camera drift. Anything else moving the camera (the map's own
+ * automatic camera, a padding change, an animation) counts as activity.
+ */
+function idleDrift(map: MapLibreMap, s: ReturnType<typeof usePlayhead.getState>, now: number, reduceMotion: boolean, busyAt: { current: number }, drift: { current: Drift | null }) {
+  const talking = s.activeCallsign ?? s.caption?.icao24
+  if (reduceMotion || talking || map.isMoving() || reducedMotion()) {
+    busyAt.current = now
+    drift.current = null
+    return
+  }
+  const c = map.getCenter()
+  const z = map.getZoom()
+  let d = drift.current
+  if (d?.set && (Math.abs(d.set[0] - c.lng) > 1e-9 || Math.abs(d.set[1] - c.lat) > 1e-9 || Math.abs(d.set[2] - z) > 1e-6)) {
+    // Someone else moved the camera since the last drift frame.
+    busyAt.current = now
+    drift.current = d = null
+  }
+  if (now - busyAt.current < IDLE_MS) return
+  if (!d) d = drift.current = { start: now, lng: c.lng, lat: c.lat, zoom: z, set: null }
+  const off = driftAt(now - d.start, d.zoom)
+  const lng = d.lng + off.east / metersPerDegLon(d.lat)
+  const lat = d.lat + off.north / metersPerDegLat(d.lat)
+  map.jumpTo({ center: [lng, lat], zoom: d.zoom + off.zoom })
+  // Read back what the map made of it (it may round), to compare next frame.
+  const after = map.getCenter()
+  d.set = [after.lng, after.lat, map.getZoom()]
 }

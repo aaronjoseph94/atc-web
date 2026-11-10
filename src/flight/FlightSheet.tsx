@@ -12,7 +12,7 @@
  */
 import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
 import { AirlineLogo } from '../airline/AirlineLogo'
-import { useMemo } from 'react'
+import { useMemo, type CSSProperties, type ReactNode } from 'react'
 import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
 import { callsFor, useRadio, type Transmission } from '../live/radio/radioStore'
 import { distanceM } from '../map/geo'
@@ -20,7 +20,9 @@ import { FrequencyTuner } from '../station/FrequencyTuner'
 import { Waveform } from '../station/Waveform'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '../settings/settingsStore'
+import { CARD_BOTTOM, CARD_TOP, registerCardColors, useAirlineTint } from '../ui/airlineTint'
 import { Grabber, useDialog } from '../ui/Panel'
+import { Ticker } from '../ui/Ticker'
 import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
 import { AircraftPanel } from '../aircraft/AircraftPanel'
@@ -29,6 +31,25 @@ import { Sparkline } from './Sparkline'
 import { useFlight, useFlightInfo, type FlightView } from './useFlight'
 
 const code = (a: RouteAirport | null | undefined) => a?.iata ?? a?.icao ?? null
+
+registerCardColors()
+
+/**
+ * The card's gradient, leaning toward the airline's colour. The two stops are
+ * registered colour properties, so switching flights cross-fades the tint.
+ * Merged with the drag style, whose transform transition must survive.
+ */
+function cardStyle(tint: { top: string; bottom: string } | null, base: CSSProperties): CSSProperties {
+  const fade = '--card-top 700ms var(--ease-in-out), --card-bottom 700ms var(--ease-in-out)'
+  const drag = base.transition && base.transition !== 'none' ? `${base.transition}, ` : ''
+  return {
+    ...base,
+    ['--card-top' as string]: tint?.top ?? CARD_TOP,
+    ['--card-bottom' as string]: tint?.bottom ?? CARD_BOTTOM,
+    backgroundImage: 'linear-gradient(to bottom, var(--card-top), var(--card-bottom))',
+    transition: drag + fade,
+  }
+}
 
 /** Lock / unlock the camera on the aircraft. Reads "Following" while locked, "Re-center" once the map has been moved. */
 function FollowButton({ tone }: { tone: 'card' | 'dark' }) {
@@ -78,6 +99,7 @@ export function FlightCard() {
   const info = useFlightInfo(flight).data
   const { mounted, closing } = usePresence(sheet === 'card' && !!flight, 220)
   const drag = useSheetDrag({ onDown: () => select(null), onUp: () => setSheet('full') })
+  const tint = useAirlineTint(flight?.callsign, flight?.icao24)
 
   if (!mounted || !flight) return null
   const d = flight.detail
@@ -88,8 +110,9 @@ export function FlightCard() {
     <section
       aria-label={`Flight ${flight.callsign}`}
       {...drag.handlers}
-      style={drag.dragging || drag.style.transform ? drag.style : { touchAction: 'none' }}
-      className={`pointer-events-auto w-full cursor-grab overflow-hidden rounded-t-[1.75rem] bg-gradient-to-b from-atc-card to-atc-card-deep text-white shadow-[0_-12px_40px_rgba(0,0,0,0.5)] active:cursor-grabbing md:w-[min(92vw,40rem)] md:rounded-[1.75rem] ${
+      style={cardStyle(tint, drag.dragging || drag.style.transform ? drag.style : { touchAction: 'none' })}
+      data-tint={tint?.brand}
+      className={`pointer-events-auto w-full cursor-grab overflow-hidden rounded-t-[1.75rem] bg-atc-card text-white shadow-[0_-12px_40px_rgba(0,0,0,0.5)] active:cursor-grabbing md:w-[min(92vw,40rem)] md:rounded-[1.75rem] ${
         closing ? 'animate-sheet-out' : 'animate-sheet-in'
       }`}
     >
@@ -118,11 +141,11 @@ export function FlightCard() {
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums">
           <Sparkline values={flight.series.speedKt} className="h-4 w-10 text-white/70" />
-          {formatSpeed(d?.speedKt, speedUnit)}
+          <Ticker value={d?.speedKt} format={(v) => formatSpeed(v, speedUnit)} />
         </span>
         <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
           <Sparkline values={flight.series.altitudeFt} className="h-4 w-10 text-white/70" />
-          {d?.onGround ? 'GND' : formatAltitude(d?.altitudeFt, altitudeUnit)}
+          {d?.onGround ? 'GND' : <Ticker value={d?.altitudeFt} format={(v) => formatAltitude(v, altitudeUnit)} />}
         </span>
       </div>
 
@@ -243,7 +266,7 @@ function routeProgress(info: FlightInfo | undefined, flight: FlightView): number
   return flown + left > 0 ? Math.min(1, Math.max(0, flown / (flown + left))) : null
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string | null }) {
+function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string | null }) {
   return (
     <div className="min-w-0 rounded-2xl bg-white/[0.06] px-3 py-2.5">
       <div className="text-[11px] font-medium text-white/55">{label}</div>
@@ -358,11 +381,11 @@ export function FlightDetail() {
 
           {d && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              <Stat label="Speed" value={formatSpeed(d.speedKt, speedUnit)} hint={d.speedKt != null && speedUnit === 'kt' ? `${Math.round(d.speedKt * 1.15078)} mph` : null} />
-              <Stat label="Altitude" value={d.onGround ? 'On the ground' : formatAltitude(d.altitudeFt, altitudeUnit)} hint={comparison} />
+              <Stat label="Speed" value={<Ticker value={d.speedKt} format={(v) => formatSpeed(v, speedUnit)} />} hint={d.speedKt != null && speedUnit === 'kt' ? `${Math.round(d.speedKt * 1.15078)} mph` : null} />
+              <Stat label="Altitude" value={d.onGround ? 'On the ground' : <Ticker value={d.altitudeFt} format={(v) => formatAltitude(v, altitudeUnit)} />} hint={comparison} />
               <Stat
                 label="Climb"
-                value={d.onGround || vr == null ? '—' : formatVerticalRate(vr, altitudeUnit)}
+                value={d.onGround || vr == null ? '—' : <Ticker value={vr} format={(v) => formatVerticalRate(v, altitudeUnit)} />}
                 hint={vr != null && !d.onGround && Math.abs(vr) > 200 ? (vr > 0 ? 'climbing' : 'descending') : d.selectedAltitudeFt != null && !d.onGround ? `autopilot set to ${formatAltitude(Math.round(d.selectedAltitudeFt / 100) * 100, altitudeUnit)}` : null}
               />
               <Stat label="Heading" value={d.headingKnown === false ? '—' : `${Math.round(d.heading).toString().padStart(3, '0')}°`} hint={d.headingKnown === false ? null : `toward the ${compassDirection(d.heading)}`} />

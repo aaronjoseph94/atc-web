@@ -28,6 +28,8 @@ export type Settings = {
   trailLength: 24 | 48 | 96
   /** Disable pulse/camera easing for motion-sensitive users. */
   reduceMotion: boolean
+  /** Light vibration ticks on phones that can (dial detents, sheet snaps, selections, radio calls). */
+  haptics: boolean
   mapTheme: MapTheme
   /** Second label line with altitude, trend and type, like a controller's data block. */
   dataBlocks: boolean
@@ -67,6 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideGround: false,
   trailLength: 48,
   reduceMotion: false,
+  haptics: true,
   mapTheme: 'navy',
   dataBlocks: true,
   trails: true,

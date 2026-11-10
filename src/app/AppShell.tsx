@@ -11,6 +11,7 @@ import { FlightCard, FlightDetail } from '../flight/FlightSheet'
 import { useLiveCaptions } from '../hooks/useLiveCaptions'
 import { useShortcuts } from '../hooks/useShortcuts'
 import { useUrlSync } from '../hooks/useUrlSync'
+import { useRadio } from '../live/radio/radioStore'
 import { MapView } from '../map/MapView'
 import { AudioEngine } from '../playback/AudioEngine'
 import { getActiveCue } from '../playback/interpolate'
@@ -20,6 +21,7 @@ import { useSettings } from '../settings/settingsStore'
 import { StationBar } from '../station/StationBar'
 import { StationSheet } from '../station/StationSheet'
 import { Subtitles } from '../transcript/Subtitles'
+import { useHapticFeedback } from '../ui/useHapticFeedback'
 import { DURATION } from '../ui/motion'
 import { usePresence } from '../ui/usePresence'
 import { WeatherPanel } from '../weather/WeatherPanel'
@@ -46,6 +48,7 @@ export function AppShell() {
   useShortcuts()
   useUrlSync()
   useLiveCaptions()
+  useHapticFeedback()
 
   // Publish the bottom stack's height so the map attribution can sit above it.
   useEffect(() => {
@@ -173,10 +176,12 @@ function Hint() {
   const selected = usePlayhead((s) => !!s.selectedIcao)
   // Only when the screen is otherwise quiet: no caption, no other pill competing for attention.
   const ready = usePlayhead((s) => s.liveStatus === 'ok' && s.liveCount > 0 && s.mode === 'live' && !s.caption && s.cameraMode === 'auto' && !s.panel)
+  // The live radio has its own caption line (and an "On the air" row while someone talks); the hint must not sit on it.
+  const radioCaption = useRadio((s) => !!s.caption || s.speaking || (s.pending > 0 && s.transcripts !== 'unavailable'))
   useEffect(() => {
     if (selected && !seen) update('hintSeen', true)
   }, [selected, seen, update])
-  const { mounted, closing } = usePresence(!seen && ready && !selected, 200)
+  const { mounted, closing } = usePresence(!seen && ready && !radioCaption && !selected, 200)
   if (!mounted) return null
   return (
     <div className="mb-2 flex w-full justify-center px-4">

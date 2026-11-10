@@ -138,7 +138,7 @@ export function reducedMotion(): boolean {
 
 /** A tiny tap of the vibration motor where there is one (Android); silent elsewhere. */
 export function haptic(ms = 8) {
-  if (reducedMotion()) return
+  if (reducedMotion() || !useSettings.getState().haptics) return
   try {
     navigator.vibrate?.(ms)
   } catch {
