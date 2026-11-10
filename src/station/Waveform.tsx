@@ -1,16 +1,17 @@
 /**
- * The row of thin bars along the bottom of the station bar.
+ * The row of thin bars along the bottom of the station bar (and the flight
+ * card).
  *
- * In playback it is the real spectrum of the audio, read from the analyser
- * every frame. With no audio (live mode, or a silent replay) the bars rest
- * at their minimum height; nothing is faked.
+ * It is the real spectrum of whatever is playing, read from an analyser
+ * every frame: the replayed scene's audio, or the live radio stream. With no
+ * audio the bars rest at their minimum height; nothing is faked.
  */
 import { useEffect, useRef } from 'react'
-import { audioAnalyser } from '../playback/AudioEngine'
+import { analysers, type AnalyserSource } from '../live/radio/audioGraph'
 
 const BARS = 72
 
-export function Waveform({ active, color = 'rgba(40,26,0,0.78)' }: { active: boolean; color?: string }) {
+export function Waveform({ active, color = 'rgba(40,26,0,0.78)', source = 'replay' }: { active: boolean; color?: string; source?: AnalyserSource }) {
   const ref = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -34,9 +35,10 @@ export function Waveform({ active, color = 'rgba(40,26,0,0.78)' }: { active: boo
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, w, h)
 
-      const analyser = active ? audioAnalyser.node : null
+      // The analyser may appear after this effect ran (it is created on the first play).
+      const analyser = active ? analysers[source] : null
       if (analyser) {
-        bins ??= new Uint8Array(analyser.frequencyBinCount)
+        if (!bins || bins.length !== analyser.frequencyBinCount) bins = new Uint8Array(analyser.frequencyBinCount)
         analyser.getByteFrequencyData(bins)
       }
       let moving = false
@@ -62,12 +64,12 @@ export function Waveform({ active, color = 'rgba(40,26,0,0.78)' }: { active: boo
         const bar = Math.max(2, level * (h - 1))
         ctx.fillRect(x * pitch, h - bar, 2, bar)
       }
-      // Nothing left to animate: stop until the next change.
-      if (!analyser && !moving) cancelAnimationFrame(raf)
+      // Nothing left to animate and nothing to wait for: stop until the next change.
+      if (!active && !moving) cancelAnimationFrame(raf)
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [active, color])
+  }, [active, color, source])
 
   return <canvas ref={ref} className="block h-5 w-full" aria-hidden />
 }

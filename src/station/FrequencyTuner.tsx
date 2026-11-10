@@ -3,11 +3,12 @@
  * frequency at the airport, short ticks between, and a bright needle in the
  * middle on the channel you are listening to. Drag (or flick) the scale to
  * tune to a neighbouring channel, tap a frequency to jump to it, or use the
- * arrow keys.
+ * arrow keys. Tuning starts that channel's live audio when a feed carries it.
  */
 import { useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { formatMhz } from '../api/airportData'
 import { getAirport, resolveStation } from '../api/airports'
+import { tuneRadio } from '../live/radio/useLiveRadio'
 import { usePlayhead } from '../playback/playheadStore'
 import { GAP, settle, tunerStops } from './tuner'
 
@@ -34,7 +35,10 @@ export function FrequencyTuner() {
 
   const tune = (i: number) => {
     const s = stops[Math.max(0, Math.min(stops.length - 1, i))]
-    if (s && s.id !== current?.id) setStationId(s.id)
+    if (!s || s.id === current?.id) return
+    setStationId(s.id)
+    // Called from the pointer or key handler, so the browser allows the audio to start.
+    tuneRadio(s)
   }
 
   const down = (e: ReactPointerEvent) => {

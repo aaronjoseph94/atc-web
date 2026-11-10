@@ -1,3 +1,7 @@
 name = "atc-web"
 compatibility_date = "2025-11-01"
 pages_build_output_dir = "dist"
+
+# Workers AI, for live radio transcripts (functions/api/transcribe.ts).
+[ai]
+binding = "AI"

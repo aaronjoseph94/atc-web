@@ -13,7 +13,8 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 
 **Live traffic**
 - 37 airports (29 US, 8 Canada) from free ADS-B feeds, smoothly predicted between polls and faded in and out at the edge of coverage.
-- **Tower log.** Takeoffs, landings, go-arounds and line-ups are detected from positions, matched to a runway, and shown as captions. The free feeds carry no radio, so these are stated as facts, not quotes.
+- **Live radio.** Press play on the station bar (or pick a channel) to hear it live from LiveATC.net, where a feed carries that frequency (`src/api/liveatcFeeds.ts`). Each transmission is cut out of the stream in the browser, transcribed by Whisper on Cloudflare Workers AI (`/api/transcribe`), shown as a caption, in the transcript and in the flight's conversation, and the aircraft it names is highlighted while the automatic camera glides in and back out.
+- **Tower log.** Takeoffs, landings, go-arounds and line-ups are detected from positions, matched to a runway, and shown as captions when the radio is off. These are stated as facts, not quotes.
 - **Automatic map.** The camera moves to whoever is in the news and drifts back; drag the map to take over, tap "Back to automatic map" to hand it back.
 - **Flight card.** Tap a plane: the camera locks on (TRACK), and a card shows its scheduled route, speed and altitude trends, and what it is doing ("On final for runway 27R, 2.2 nm out"). Drag it up for a drawing of the aircraft type with its facts (engines, size, seats, range), route progress and every number.
 - **Channel switcher.** Every published position at the airport: one tower per runway, each ground sector, approach, departure, clearance, ATIS.
@@ -111,7 +112,7 @@ npx wrangler pages project create atc-web --production-branch master   # once
 npm run deploy
 ```
 
-Functions under `functions/` are picked up automatically; no environment variables or secrets are required.
+Functions under `functions/` are picked up automatically; no environment variables or secrets are required. Live transcripts use the Workers AI binding declared in `wrangler.toml` (`[ai] binding = "AI"`); without it, and in `npm run dev`, `/api/transcribe` answers 501 and the radio plays without captions.
 
 ## Data sources & credits
 
@@ -123,7 +124,8 @@ Functions under `functions/` are picked up automatically; no environment variabl
 - Routes and airframes: [adsbdb.com](https://www.adsbdb.com).
 - Aircraft drawings: outlines traced from public-domain [Openclipart](https://openclipart.org) silhouettes or drawn for this project; see `src/aircraft/CREDITS.md`.
 - Fonts: SF Pro where the system has it, otherwise Inter; Archivo for airport codes and callsigns (Google Fonts, OFL). Icons: Lucide (ISC). Sign plates: self-authored, drawn at runtime.
-- Replay audio is synthetic: voiced with [Piper](https://github.com/OHF-Voice/piper1-gpl) using the LibriTTS and Cori Samuel voices (CC BY 4.0) and the Joe voice (CC0), then run through a radio effect. No real ATC recordings are redistributed. LiveATC streams can't be embedded, so the channel switcher links out to them instead.
+- Replay audio is synthetic: voiced with [Piper](https://github.com/OHF-Voice/piper1-gpl) using the LibriTTS and Cori Samuel voices (CC BY 4.0) and the Joe voice (CC0), then run through a radio effect. No real ATC recordings are redistributed.
+- Live ATC audio: [LiveATC.net](https://www.liveatc.net), streamed straight from their servers to the browser. LiveATC's terms require their permission for public or commercial use of the streams.
 
 Everything here is shown for interest. It is not for navigation or flight planning.
 

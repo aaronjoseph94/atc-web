@@ -12,7 +12,9 @@
  */
 import { ArrowDown, ArrowUp, Check, ChevronRight, Crosshair, ExternalLink, Pause, Plane, Play, Radio, Sparkles, X } from 'lucide-react'
 import { AirlineLogo } from '../airline/AirlineLogo'
+import { useMemo } from 'react'
 import type { FlightInfo, RouteAirport, TranscriptCue } from '../api/types'
+import { callsFor, useRadio, type Transmission } from '../live/radio/radioStore'
 import { distanceM } from '../map/geo'
 import { FrequencyTuner } from '../station/FrequencyTuner'
 import { Waveform } from '../station/Waveform'
@@ -69,6 +71,7 @@ export function FlightCard() {
   const live = usePlayhead((s) => s.mode === 'live')
   const playing = usePlayhead((s) => s.playing)
   const hasAudio = usePlayhead((s) => !!s.clip?.audioUrl)
+  const radioLive = useRadio((s) => s.on && (s.status === 'live' || s.status === 'buffering'))
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
   const flight = useFlight()
@@ -155,7 +158,7 @@ export function FlightCard() {
       )}
       {/* The channel's audio, as on the station bar. */}
       <div className="pb-[var(--safe-bottom)] md:pb-1">
-        <Waveform active={!live && playing && hasAudio} color="rgba(255,255,255,0.5)" />
+        <Waveform active={live ? radioLive : playing && hasAudio} source={live ? 'live' : 'replay'} color="rgba(255,255,255,0.5)" />
       </div>
     </section>
   )
@@ -204,6 +207,27 @@ function CallBubble({ cue }: { cue: TranscriptCue }) {
   )
 }
 
+/**
+ * One live radio call in the conversation, styled like the replayed ones:
+ * grey on the left for the controller, blue on the right for the pilot.
+ */
+function LiveCallBubble({ call }: { call: Transmission }) {
+  const pilot = call.speaker === 'pilot'
+  const time = new Date(call.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+  return (
+    <li className={`max-w-[86%] animate-rise ${pilot ? 'self-end' : 'self-start'}`} aria-label={`${pilot ? 'Pilot' : call.speaker === 'controller' ? 'Controller' : 'Radio'} at ${time}: ${call.text}`}>
+      <p
+        className={`rounded-[1.35rem] px-4 py-3 text-[15px] leading-snug ${pilot ? 'bg-atc-blue text-white' : 'bg-white/[0.11] text-white/90'}`}
+      >
+        {call.text}
+      </p>
+      <p className={`mt-1 px-2 text-[11px] tabular-nums text-white/40 ${pilot ? 'text-right' : ''}`}>
+        {pilot ? 'Pilot' : call.speaker === 'controller' ? 'Controller' : 'Radio'} · {time}
+      </p>
+    </li>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Full view
 // ---------------------------------------------------------------------------
@@ -238,6 +262,10 @@ export function FlightDetail() {
   const speedUnit = useSettings((s) => s.speedUnit)
   const flight = useFlight()
   const info = useFlightInfo(flight).data
+  // Live radio calls that named this aircraft, on any channel at this airport.
+  const radioLog = useRadio((s) => s.log)
+  const selectedIcao = usePlayhead((s) => s.selectedIcao)
+  const liveCalls = useMemo(() => (mode === 'live' && selectedIcao ? callsFor(radioLog, selectedIcao) : []), [mode, selectedIcao, radioLog])
   const open = sheet === 'full' && !!flight
   const collapse = () => setSheet('card')
   const { mounted, closing } = usePresence(open, 240)
@@ -342,6 +370,22 @@ export function FlightDetail() {
             </div>
           )}
 
+          {/* The conversation so far: live radio calls naming this aircraft */}
+          {liveCalls.length > 0 && (
+            <section className="mt-6" aria-label="Live radio calls">
+              <h3 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-white/60">
+                <span className="rounded bg-atc-yellow px-1.5 py-0.5 font-display text-xs tracking-wide text-black">{flight.airportCode}</span>
+                Live radio
+              </h3>
+              <ol className="flex flex-col gap-2.5">
+                {liveCalls.map((c) => (
+                  <LiveCallBubble key={c.id} call={c} />
+                ))}
+              </ol>
+              <p className="mt-4 text-center text-xs text-white/40">New transmissions will appear here</p>
+            </section>
+          )}
+
           {/* The conversation so far */}
           {flight.calls.length > 0 ? (
             <section className="mt-6" aria-label="Radio calls">
@@ -356,7 +400,7 @@ export function FlightDetail() {
               </ol>
               <p className="mt-4 text-center text-xs text-white/40">New transmissions will appear here</p>
             </section>
-          ) : (
+          ) : liveCalls.length > 0 && flight.events.length === 0 ? null : (
             <section className="mt-6" aria-label="Tower log">
               <h3 className="mb-2 text-[13px] font-semibold text-white/60">Tower log</h3>
               {flight.events.length > 0 ? (
@@ -372,7 +416,7 @@ export function FlightDetail() {
               ) : (
                 <p className="rounded-2xl bg-white/[0.06] px-3.5 py-3 text-sm leading-relaxed text-white/65">
                   {mode === 'live'
-                    ? 'Nothing logged for this aircraft yet. Takeoffs, landings and go-arounds show up here as they happen. Free live feeds carry positions, not radio, so there are no transcripts for live traffic; try a replay from the menu to hear a scene.'
+                    ? 'Nothing logged for this aircraft yet. Takeoffs, landings and go-arounds show up here as they happen, and with the radio playing, every call that names this flight.'
                     : 'No radio calls for this flight yet. Keep listening.'}
                 </p>
               )}

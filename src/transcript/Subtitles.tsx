@@ -2,13 +2,16 @@
  * The running subtitle over the bottom of the map.
  *
  * Playback: the radio call being spoken, lit word by word, with the previous
- * call dimmed above it. Live: the latest tower-log event (there is no radio in
- * the live feeds). Tapping it opens the full transcript or log.
+ * call dimmed above it. Live with the radio on: the latest transcribed call
+ * from the stream, the same way. Live without radio: the latest tower-log
+ * event. Tapping it opens the full transcript or log.
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { TranscriptCue } from '../api/types'
+import { useRadio, type Transmission } from '../live/radio/radioStore'
 import { cueProgress, getActiveCue } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
+import { useSettings } from '../settings/settingsStore'
 
 /**
  * How many words of a cue have been spoken. Words are weighted by length, so
@@ -32,6 +35,83 @@ export function spokenWordCount(words: string[], progress: number): number {
 const SCRIM =
   'pointer-events-auto w-full bg-gradient-to-b from-transparent via-[rgba(16,20,30,0.55)] to-[rgba(16,20,30,0.82)] px-4 pb-3 pt-14 text-left md:w-[min(92vw,40rem)] md:rounded-b-none md:rounded-t-3xl md:px-5'
 
+/**
+ * How far through a live call the highlight has swept. Live transcripts
+ * arrive just after the call ends, so the words light up briskly (at about
+ * twice speaking pace) rather than pretending to be in sync.
+ */
+function useSweep(call: Transmission | null): number {
+  const reduceMotion = useSettings((s) => s.reduceMotion)
+  const [sweep, setSweep] = useState<{ id: string | null; p: number }>({ id: null, p: 1 })
+  const id = call?.id ?? null
+  const durationMs = call?.durationMs ?? 0
+  useEffect(() => {
+    if (!id || reduceMotion) return
+    const total = Math.min(3200, Math.max(700, durationMs * 0.5))
+    const start = performance.now()
+    let raf = 0
+    const tick = () => {
+      const p = Math.min(1, (performance.now() - start) / total)
+      setSweep({ id, p })
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [id, durationMs, reduceMotion])
+  if (!id || reduceMotion) return 1
+  return sweep.id === id ? sweep.p : 0
+}
+
+/** Three dots that breathe while somebody is transmitting and the words are on their way. */
+function Receiving({ label }: { label: string }) {
+  return (
+    <span className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-white/55" role="status">
+      <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70" />
+      <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.2s]" />
+      <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.4s]" />
+      <span className="ml-1">{label}</span>
+    </span>
+  )
+}
+
+/** The live radio caption: the latest transcribed call, with the one before it dimmed above. */
+function RadioCaption() {
+  const call = useRadio((s) => s.caption)
+  const speaking = useRadio((s) => s.speaking)
+  const pending = useRadio((s) => s.pending)
+  const transcripts = useRadio((s) => s.transcripts)
+  const previous = useRadio((s) => {
+    if (!s.caption) return null
+    const list = s.log[s.caption.stationId] ?? []
+    const i = list.findIndex((t) => t.id === s.caption?.id)
+    return i > 0 ? list[i - 1] : null
+  })
+  const setPanel = usePlayhead((s) => s.setPanel)
+  const progress = useSweep(call)
+  const canTranscribe = transcripts !== 'unavailable'
+  // Someone on the air is worth showing even where nothing will be written out.
+  const busy = speaking || (canTranscribe && pending > 0)
+  if (!call && !busy) return null
+  const words = call ? call.text.split(/\s+/) : []
+  const spoken = spokenWordCount(words, progress)
+
+  return (
+    <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the radio transcript">
+      {previous && <p className="line-clamp-1 text-[19px] font-semibold leading-snug text-white/35 [text-shadow:0_1px_8px_rgba(0,0,0,0.8)]">{previous.text}</p>}
+      {call && (
+        <p key={call.id} className="animate-caption line-clamp-4 text-[21px] font-semibold leading-snug [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]">
+          {words.map((w, i) => (
+            <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
+              {w}{' '}
+            </span>
+          ))}
+        </p>
+      )}
+      {busy && <Receiving label={speaking ? 'On the air' : 'Transcribing'} />}
+    </button>
+  )
+}
+
 export function Subtitles() {
   const mode = usePlayhead((s) => s.mode)
   const tMs = usePlayhead((s) => s.tMs)
@@ -47,7 +127,10 @@ export function Subtitles() {
     return cues.filter((c) => c.endMs <= tMs && c.id !== active?.id).slice(-2)
   }, [cues, tMs, active])
 
+  const radioOn = useRadio((s) => (s.on && s.status !== 'off' && s.status !== 'nofeed') || !!s.caption)
+
   if (mode === 'live') {
+    if (radioOn) return <RadioCaption />
     if (!caption) return null
     return (
       <button type="button" className={SCRIM} onClick={() => setPanel('transcripts')} aria-label="Open the tower log">

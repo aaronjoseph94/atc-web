@@ -14,6 +14,7 @@ import { fetchFlightDetails } from '../src/api/flightSources'
 import { buildHealth } from '../src/api/healthHandler'
 import { memoryCache } from '../src/api/sourceHealth'
 import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
+import { NOT_AVAILABLE } from '../src/api/transcribeHandler'
 import { fetchWeather } from '../src/api/weatherHandler'
 
 /** Stands in for the Cloudflare edge cache in dev. */
@@ -94,6 +95,12 @@ export function apiDevPlugin(): Plugin {
             } catch (err) {
               return await send(res, jsonResponse({ error: err instanceof Error ? err.message : 'bad request' }, 400, 'no-store'))
             }
+          }
+
+          // Speech to text runs on Workers AI, which only exists on the deployed site.
+          if (url.pathname === '/api/transcribe') {
+            req.resume()
+            return await send(res, jsonResponse({ error: NOT_AVAILABLE, code: 'no-ai' }, 501, 'no-store'))
           }
 
           if (url.pathname === '/api/stations') {

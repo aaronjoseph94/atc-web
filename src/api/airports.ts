@@ -4,6 +4,7 @@
  * and the list of controller stations shown in the station bar.
  */
 import { FREQUENCY_LABEL, FREQUENCY_ORDER, getElevationFt, getFrequencies, getReferencePoint, getRunwayBounds, type Frequency } from './airportData'
+import { feedFor } from './radioFeeds'
 import type { Station, StationKind } from './types'
 
 export type AirportGroup = 'US' | 'Canada'
@@ -310,7 +311,15 @@ export function resolveStation(airport: AirportConfig, stationId: string | null 
   return byRunway ?? ofKind[0] ?? airport.stations[0]
 }
 
-/** Station shown when an airport is first opened: its (first) tower. */
+/**
+ * Station shown when an airport is first opened: a tower you can listen to
+ * live if there is one (one with a feed of its own before one sharing a
+ * scanner feed), else the first tower that isn't the helicopter position,
+ * else whatever comes first.
+ */
 export function defaultStation(airport: AirportConfig): Station | undefined {
-  return airport.stations.find((s) => s.kind === 'TWR') ?? airport.stations[0]
+  const towers = airport.stations.filter((s) => s.kind === 'TWR')
+  const audible = towers.map((s) => ({ s, feed: feedFor(s) })).filter((x) => x.feed)
+  audible.sort((a, b) => a.feed!.mhz.length - b.feed!.mhz.length)
+  return audible[0]?.s ?? towers.find((s) => !/helicopter/i.test(s.position)) ?? towers[0] ?? airport.stations[0]
 }
