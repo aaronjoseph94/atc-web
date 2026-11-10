@@ -22,7 +22,6 @@ import {
   mergeAircraft,
   normalizeOpenSkyStates,
   normalizeReadsb,
-  stripTiming,
   type OpenSkyState,
   type ReadsbAircraft,
   type TimedAircraft,
@@ -242,7 +241,7 @@ export async function fetchAircraftForAirport(icao: string, opts: FetchAircraftO
       if (good.length) {
         good.sort((a, b) => a.rank - b.rank)
         const { aircraft } = mergeAircraft(good.map((g) => ({ source: g.source.name, aircraft: g.aircraft })))
-        resolve(result(stripTiming(aircraft), good.map((g) => g.source), failures))
+        resolve(result(aircraft, good.map((g) => g.source), failures))
       } else if (empty.length) {
         resolve(result([], [empty[0]], failures))
       } else {

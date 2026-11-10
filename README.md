@@ -123,7 +123,7 @@ Functions under `functions/` are picked up automatically; no environment variabl
 - Weather: [aviationweather.gov](https://aviationweather.gov) (US National Weather Service). ATIS text: [atis.info](https://atis.info). Radar: NOAA NEXRAD via the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/).
 - Routes and airframes: [adsbdb.com](https://www.adsbdb.com).
 - Aircraft drawings: outlines traced from public-domain [Openclipart](https://openclipart.org) silhouettes or drawn for this project; see `src/aircraft/CREDITS.md`.
-- Fonts: SF Pro where the system has it, otherwise Inter; Archivo for airport codes and callsigns (Google Fonts, OFL). Icons: Lucide (ISC). Sign plates: self-authored, drawn at runtime.
+- Fonts: SF Pro where the system has it, otherwise Inter; Archivo for airport codes and callsigns (Google Fonts, OFL). Icons: Lucide (ISC); runway takeoff and landing pictograms from Google Material Icons (Apache 2.0). Sign plates: self-authored, drawn at runtime.
 - Replay audio is synthetic: voiced with [Piper](https://github.com/OHF-Voice/piper1-gpl) using the LibriTTS and Cori Samuel voices (CC BY 4.0) and the Joe voice (CC0), then run through a radio effect. No real ATC recordings are redistributed.
 - Live ATC audio: [LiveATC.net](https://www.liveatc.net), streamed straight from their servers to the browser. LiveATC's terms require their permission for public or commercial use of the streams.
 

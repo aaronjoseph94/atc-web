@@ -55,7 +55,7 @@ export function Menu() {
         ) : (
           <Item icon={History} label="Replay" shortcut="R" onClick={go('replay')} />
         )}
-        <Item icon={FileText} label={mode === 'playback' ? 'Transcript' : 'Tower log'} shortcut="T" onClick={go('transcripts')} />
+        <Item icon={FileText} label="Transcript" shortcut="T" onClick={go('transcripts')} />
         <Item icon={List} label="Traffic" shortcut="/" onClick={go('traffic')} />
         <Item icon={CloudSun} label="Weather and ATIS" shortcut="W" onClick={go('weather')} />
         <Divider />

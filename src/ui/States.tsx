@@ -185,32 +185,43 @@ export function ListSkeleton({ rows = 6 }: { rows?: number }) {
   )
 }
 
-/** The weather panel's layout: wind rose card, four facts, an ATIS card. */
+/** The weather panel's layout: summary card, wind dial with runways, the tiles, an ATIS card. */
 export function WeatherSkeleton() {
+  const card = 'rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/[0.04]'
   return (
     <div role="status" aria-label="Loading weather">
-      <div className="flex items-center gap-4 rounded-2xl bg-white/[0.04] p-3.5">
-        <Bone className="size-36 shrink-0 rounded-full" />
-        <span className="flex min-w-0 flex-1 flex-col gap-2.5">
-          <Bone className="h-5 w-14 rounded-full" />
-          <Bone className="h-3.5 w-11/12" />
-          <Bone className="h-6 w-3/4" />
-          <Bone className="h-3 w-1/2" />
+      <div className={`${card} flex flex-col gap-3 rounded-[1.375rem] p-4`}>
+        <span className="flex items-center justify-between">
+          <Bone className="h-6 w-28 rounded-full" />
+          <Bone className="h-3 w-14" />
+        </span>
+        <span className="flex items-center justify-between">
+          <Bone className="h-12 w-24 rounded-xl" />
+          <Bone className="size-12 rounded-full" />
+        </span>
+        <Bone className="h-4.5 w-3/4" />
+      </div>
+      <div className={`${card} mt-2 flex items-center gap-4 p-3.5`}>
+        <Bone className="size-[7.25rem] shrink-0 rounded-full" />
+        <span className="flex min-w-0 flex-1 flex-col gap-2">
+          <Bone className="h-3 w-10" />
+          <Bone className="h-6 w-32" />
+          <Bone className="h-3 w-28" />
         </span>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 @xl:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex flex-col gap-1.5 rounded-2xl bg-white/[0.04] px-3 py-2.5">
+          <div key={i} className={`${card} flex flex-col gap-1.5 px-3 py-2.5 ${i === 1 ? 'row-span-2' : ''}`}>
             <Bone className="h-3 w-16" />
-            <Bone className="h-4.5 w-20" />
+            <Bone className="h-5 w-20" />
           </div>
         ))}
       </div>
-      <Bone className="mb-2 ml-1 mt-6 h-3 w-24" />
-      <div className="flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3.5">
-        <Bone className="size-12 rounded-xl" />
+      <Bone className="mb-2 ml-1 mt-6 h-3 w-12" />
+      <div className={`${card} flex items-center gap-3 p-3.5`}>
+        <Bone className="size-11 rounded-xl" />
         <span className="flex flex-1 flex-col gap-1.5">
-          <Bone className="h-4 w-40" />
+          <Bone className="h-4 w-36" />
           <Bone className="h-3 w-24" />
         </span>
       </div>

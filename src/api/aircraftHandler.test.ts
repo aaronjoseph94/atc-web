@@ -208,8 +208,8 @@ describe('fetchAircraftForAirport: merging', () => {
     expect(abc.lat).toBe(2) // b's fix is newer
     expect(abc.type).toBe('B738') // filled from a
     expect(r.aircraft.map((x) => x.icao24).sort()).toEqual(['abc', 'only-a', 'only-b'])
-    // The server-only timestamp never leaves the API.
-    expect(r.aircraft.some((x) => 'positionTime' in x)).toBe(false)
+    // Each aircraft keeps when its position was measured: the map dates reports by it.
+    expect(r.aircraft.every((x) => typeof x.positionTime === 'number')).toBe(true)
   })
 
   it('leaves a feed inside its request spacing out of the next round', async () => {

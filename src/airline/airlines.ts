@@ -246,3 +246,36 @@ export function logoCandidates(callsign: string | null | undefined): string[] {
   if (!b) return []
   return b.brand === b.operator ? [b.brand] : [b.brand, b.operator]
 }
+
+export type FlightDesignator = {
+  /** IATA airline code of the brand the flight is sold under, e.g. `DL`. */
+  iata: string
+  /** Flight number without leading zeros, e.g. `189`, `12A`. */
+  number: string
+  /** `DL 189`, as printed on tickets and departure boards. */
+  text: string
+  /** Who sells the flight, and who flies it (the same for mainline flights). */
+  brand: AirlineInfo
+  operator: AirlineInfo | null
+}
+
+/**
+ * The flight number passengers know, from the radio callsign: `DAL189` →
+ * `DL 189`, `UAL0012` → `UA 12`. Regional flights take their brand's code
+ * (a SkyWest `SKW5432` flown for United is `UA 5432`). Null for private
+ * callsigns, airlines we don't know the IATA code of, and alphanumeric
+ * callsigns (`BAW9GE`, `ETD8NY`), which don't spell out the flight number.
+ */
+export function flightDesignator(callsign: string | null | undefined): FlightDesignator | null {
+  const cs = (callsign ?? '').trim().toUpperCase()
+  const b = brandFor(cs)
+  if (!b) return null
+  const m = /^\d{1,4}[A-Z]?$/.exec(cs.slice(3))
+  if (!m) return null
+  const operator = airlineInfo(b.operator)
+  const brand = airlineInfo(b.brand) ?? operator
+  const iata = brand?.iata ?? operator?.iata
+  if (!brand || !iata) return null
+  const number = m[0].replace(/^0+(?=\d)/, '')
+  return { iata, number, text: `${iata} ${number}`, brand, operator }
+}

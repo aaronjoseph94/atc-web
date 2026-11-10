@@ -1,5 +1,6 @@
 /**
- * Everything currently in view, searchable. Hovering a row lights the
+ * Everything currently in view, searchable, under a short list of recent
+ * activity (takeoffs, landings, go-arounds). Hovering a row lights the
  * aircraft up on the map; tapping selects it and closes the list.
  */
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
@@ -18,6 +19,7 @@ import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, useSettings } from '../settings/settingsStore'
 import { PanelFrame, SectionLabel } from '../ui/Panel'
 import { EmptyState, ListSkeleton, OfflineArt, QuietArt, StateAction } from '../ui/States'
+import { ActivityList } from './ActivityList'
 
 type Group = 'Arriving' | 'Departing' | 'Passing through' | 'Taxiing' | 'Parked'
 const ORDER: Group[] = ['Arriving', 'Departing', 'Taxiing', 'Passing through', 'Parked']
@@ -103,6 +105,9 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
         />
         <span className="shrink-0 text-caption tabular-nums text-atc-muted">{total}</span>
       </label>
+
+      {/* What the traffic has been doing: takeoffs, landings, go-arounds. Live only, and out of the way of a search. */}
+      {mode === 'live' && !q && <ActivityList onPick={close} />}
 
       {total === 0 ? (
         q ? (

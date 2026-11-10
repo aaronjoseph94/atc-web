@@ -25,7 +25,7 @@ import { CloseButton } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
 import { buildAirportDiagram, runwayEnds, widthScale } from './airportDiagram'
 import { distanceM, offset, type LngLat } from './geo'
-import { LAYER, RUNWAY_USE_COLOR, SRC } from './mapStyle'
+import { LAYER, SRC } from './mapStyle'
 
 const TICK_MS = 2000
 /** Gates further than this from the airport's centre belong to someone else's map. */
@@ -41,43 +41,58 @@ function setData(map: MapLibreMap, id: string, data: FeatureCollection) {
 
 // ---- images ---------------------------------------------------------------
 
-/** Round badge with an arrow: down for arrivals, up for departures; both side by side for both. */
+/** Badge colours: the runway-use hues, a shade muted so the badge stays quiet on the map. */
+const BADGE_COLOR = { arrivals: '#3BB56A', departures: '#4A8FE0' } as const
+
+/**
+ * Runway-in-use badge (style 7 of the options the owner picked from): a solid,
+ * slightly translucent disc in a muted green for arrivals or blue for
+ * departures, a white arrow (down: landing, up: takeoff) and a thin white
+ * border. Two overlapping discs when the runway does both.
+ */
 function badge(role: 'arrivals' | 'departures' | 'both'): ImageData {
   const s = 2 // drawn at 2× for sharpness
-  const d = 13 * s
-  const w = role === 'both' ? d * 2 - 3 * s : d
+  const r = 7 * s // disc radius: 14 px across on screen
+  const pad = 2 * s // room for the soft shadow
+  const step = r * 1.6 // centre-to-centre when two discs share a badge
+  const roles: ('arrivals' | 'departures')[] = role === 'both' ? ['arrivals', 'departures'] : [role]
   const canvas = document.createElement('canvas')
-  canvas.width = w + 4 * s
-  canvas.height = d + 4 * s
+  canvas.width = Math.ceil(pad * 2 + r * 2 + (roles.length - 1) * step)
+  canvas.height = Math.ceil(pad * 2 + r * 2)
   const ctx = canvas.getContext('2d')!
-  const disc = (cx: number, color: string, up: boolean) => {
-    const cy = canvas.height / 2
+  const cy = canvas.height / 2
+  roles.forEach((kind, i) => {
+    const cx = pad + r + i * step
+    // Disc, with a faint shadow so it lifts off grass and pavement alike.
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.35)'
+    ctx.shadowBlur = 2 * s
     ctx.beginPath()
-    ctx.arc(cx, cy, d / 2, 0, Math.PI * 2)
-    ctx.fillStyle = color
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fillStyle = BADGE_COLOR[kind] + 'D9'
     ctx.fill()
-    ctx.lineWidth = 1.5 * s
-    ctx.strokeStyle = 'rgba(12,16,34,0.9)'
+    ctx.restore()
+    // Thin white border.
+    const ring = 0.12 * r
+    ctx.beginPath()
+    ctx.arc(cx, cy, r - ring / 2, 0, Math.PI * 2)
+    ctx.lineWidth = ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'
     ctx.stroke()
-    // Arrow: a short shaft and an open head.
-    const dir = up ? -1 : 1
+    // White arrow: up for takeoff, down for landing.
+    const d = kind === 'departures' ? -1 : 1
     ctx.strokeStyle = '#FFFFFF'
-    ctx.lineWidth = 1.7 * s
+    ctx.lineWidth = 0.18 * r
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.beginPath()
-    ctx.moveTo(cx, cy - dir * 3.6 * s)
-    ctx.lineTo(cx, cy + dir * 3.6 * s)
-    ctx.moveTo(cx - 3 * s, cy + dir * 0.8 * s)
-    ctx.lineTo(cx, cy + dir * 3.8 * s)
-    ctx.lineTo(cx + 3 * s, cy + dir * 0.8 * s)
+    ctx.moveTo(cx, cy - d * r * 0.45)
+    ctx.lineTo(cx, cy + d * r * 0.45)
+    ctx.moveTo(cx - r * 0.36, cy + d * r * 0.1)
+    ctx.lineTo(cx, cy + d * r * 0.47)
+    ctx.lineTo(cx + r * 0.36, cy + d * r * 0.1)
     ctx.stroke()
-  }
-  const x0 = 2 * s + d / 2
-  if (role === 'both') {
-    disc(x0 + d - 3 * s, RUNWAY_USE_COLOR.departures, true)
-    disc(x0, RUNWAY_USE_COLOR.arrivals, false)
-  } else disc(x0, RUNWAY_USE_COLOR[role], role === 'departures')
+  })
   return ctx.getImageData(0, 0, canvas.width, canvas.height)
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { airlineInfo, brandFor, logoCandidates, parseCallsign } from './airlines'
+import { airlineInfo, brandFor, flightDesignator, logoCandidates, parseCallsign } from './airlines'
 
 describe('parseCallsign', () => {
   it('splits airline callsigns into prefix and flight number', () => {
@@ -75,5 +75,34 @@ describe('airlineInfo', () => {
     expect(airlineInfo('SHT')?.iata).toBeNull()
     expect(airlineInfo('ZZZ')).toBeNull()
     expect(airlineInfo(null)).toBeNull()
+  })
+})
+
+describe('flightDesignator', () => {
+  it('turns radio callsigns into the flight numbers on tickets', () => {
+    expect(flightDesignator('DAL189')?.text).toBe('DL 189')
+    expect(flightDesignator('UAL0012')?.text).toBe('UA 12')
+    expect(flightDesignator('KLM678')?.text).toBe('KL 678')
+    expect(flightDesignator(' baw12a ')?.text).toBe('BA 12A')
+    expect(flightDesignator('DAL189')?.brand.name).toBe('Delta')
+  })
+
+  it('sells regional flights under their brand', () => {
+    const d = flightDesignator('EDV5394')!
+    expect(d.text).toBe('DL 5394')
+    expect(d.operator?.icao).toBe('EDV')
+    expect(d.brand.icao).toBe('DAL')
+    expect(flightDesignator('SKW5432')?.text).toBe('UA 5432')
+    // SkyWest numbers that don't say whose flight it is keep SkyWest's own code.
+    expect(flightDesignator('SKW3101')?.text).toBe('OO 3101')
+  })
+
+  it('says nothing when the callsign does not spell a flight number', () => {
+    expect(flightDesignator('ETD8NY')).toBeNull()
+    expect(flightDesignator('BAW9GE')).toBeNull()
+    expect(flightDesignator('N1818C')).toBeNull()
+    expect(flightDesignator('ZZZ123')).toBeNull()
+    expect(flightDesignator('')).toBeNull()
+    expect(flightDesignator(null)).toBeNull()
   })
 })

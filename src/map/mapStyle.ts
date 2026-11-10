@@ -468,7 +468,7 @@ function layers(p: Palette): LayerSpecification[] {
     // Placed first (top layer), they win the collision and hide the plain chip underneath.
     { id: LAYER.gateBusyDot, type: 'symbol', source: SRC.gateUse, minzoom: 14.4, maxzoom: 15.8, layout: { 'icon-image': ['get', 'chip'], 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.36, 15.8, 0.6], 'icon-allow-overlap': false, 'icon-padding': 0 }, paint: {} },
     { id: LAYER.gateBusy, type: 'symbol', source: SRC.gateUse, minzoom: 15.8, filter: ['!=', ['get', 'ref'], ''], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.8, 10.5, 18.5, 14], 'icon-image': ['get', 'chip'], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 2, 4], 'text-padding': 2 }, paint: { 'text-color': ['get', 'tc'] } },
-    // Arrival / departure badge just right of an active runway's designator chip.
+    // Arrival / departure badge above an active runway's number.
     {
       id: LAYER.runwayUseMark,
       type: 'symbol',
@@ -477,14 +477,16 @@ function layers(p: Palette): LayerSpecification[] {
       filter: ['==', ['get', 'kind'], 'mark'],
       layout: {
         'icon-image': ['get', 'icon'],
-        'icon-anchor': 'left',
-        // Clear of the designator, whose width depends on its length and the zoom (text 9 → 12 px).
-        'icon-offset': ['interpolate', ['linear'], ['zoom'], 11.2, ['match', ['get', 'len'], 1, ['literal', [6, 0]], 2, ['literal', [9, 0]], ['literal', [12, 0]]], 14, ['match', ['get', 'len'], 1, ['literal', [7, 0]], 2, ['literal', [11, 0]], ['literal', [15, 0]]]],
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 11.2, 0.8, 14, 1],
+        // Same place at every runway and every zoom: centred just above the runway
+        // number (the number sits on the extended centreline beyond the runway end),
+        // so the badge never depends on the number's length or the runway's direction.
+        'icon-anchor': 'bottom',
+        'icon-offset': ['literal', [0, -8]],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 11.2, 0.85, 14, 1],
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
       },
-      paint: {},
+      paint: { 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 11.2, 0.85, 14, 0.95] },
     },
 
     // ---- aircraft ----------------------------------------------------------------
