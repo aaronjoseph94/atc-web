@@ -64,6 +64,13 @@ describe('feedFor', () => {
     expect(feedFor(station('ORD', 128.15))?.mount).toBe('kord1n2_twr_n')
   })
 
+  it('opens airports on a tower with live audio where there is one', () => {
+    expect(feedFor(defaultStation(getAirport('LAX')))).not.toBeNull()
+    expect(defaultStation(getAirport('LAX'))?.position).not.toMatch(/helicopter/i)
+    expect(feedFor(defaultStation(getAirport('JFK')))?.mount).toBe('kjfk_twr')
+    expect(defaultStation(getAirport('SEA'))?.kind).toBe('TWR')
+  })
+
   it('says no when nothing carries the channel', () => {
     expect(feedFor(station('ORD', 133))).toBeNull()
     expect(feedFor(undefined)).toBeNull()

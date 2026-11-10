@@ -18,6 +18,8 @@ import type { LiveAircraft } from './livePositions'
 
 /** Length of the move onto an aircraft. */
 const FLY_MS = 1700
+/** Length of the rest of a move that something cut short. */
+const RESUME_MS = 1100
 /** Length of the move back to the airfield. */
 const HOME_MS = 1900
 /** Pause after the exchange ends before easing back out. */
@@ -37,7 +39,8 @@ export function focusZoom(a: Pick<LiveAircraft, 'onGround' | 'altitudeFt'>, airp
   return Math.min(16, Math.max(airport.zoom + 0.8, z))
 }
 
-type State = { key: string | null; settleAt: number; homeAt: number }
+/** `key`: who is framed. `zoom`: where the move was headed. `retries`: times a cut-short move was resumed. */
+type State = { key: string | null; settleAt: number; homeAt: number; zoom: number; retries: number }
 
 /**
  * Returns a per-frame function for `MapView`'s frame loop. It returns true
@@ -45,7 +48,7 @@ type State = { key: string | null; settleAt: number; homeAt: number }
  * stays out of the way.
  */
 export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, goHome: (ms?: number) => void, reduceMotion: boolean) {
-  const state = useRef<State>({ key: null, settleAt: 0, homeAt: 0 })
+  const state = useRef<State>({ key: null, settleAt: 0, homeAt: 0, zoom: 0, retries: 0 })
 
   return useCallback(
     (list: LiveAircraft[], dt: number): boolean => {
@@ -68,10 +71,17 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
         const key = targets.map((a) => a.icao24).join(',')
         if (key !== st.key) {
           st.key = key
+          st.retries = 0
           st.settleAt = now + (reduceMotion ? 0 : FLY_MS)
-          frame(map, targets, airport, reduceMotion)
-        } else if (now >= st.settleAt && !map.isMoving()) {
-          chase(map, targets, dt, reduceMotion)
+          st.zoom = frame(map, targets, airport, reduceMotion, FLY_MS)
+        } else if (!map.isMoving()) {
+          // Something stopped the move halfway (the map's padding changes as the
+          // caption appears, which cancels camera animations): carry on from here.
+          if (Math.abs(map.getZoom() - st.zoom) > 0.08 && st.retries < 3) {
+            st.retries++
+            st.settleAt = now + (reduceMotion ? 0 : RESUME_MS)
+            st.zoom = frame(map, targets, airport, reduceMotion, RESUME_MS)
+          } else if (now >= st.settleAt) chase(map, targets, dt, reduceMotion)
         }
         return true
       }
@@ -96,22 +106,25 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
   )
 }
 
-/** Move onto the aircraft: a flight for a long way, a glide for a short one, a cut with reduced motion. */
-function frame(map: MapLibreMap, targets: LiveAircraft[], airport: AirportConfig, reduceMotion: boolean) {
+/**
+ * Move onto the aircraft: a flight for a long way, a glide for a short one, a
+ * cut with reduced motion. Returns the zoom it is heading for.
+ */
+function frame(map: MapLibreMap, targets: LiveAircraft[], airport: AirportConfig, reduceMotion: boolean, duration: number): number {
   if (targets.length === 1) {
     const a = targets[0]
     const zoom = focusZoom(a, airport)
     if (reduceMotion) {
       map.jumpTo({ center: [a.lon, a.lat], zoom })
-      return
+      return zoom
     }
     const here = map.project(map.getCenter())
     const there = map.project([a.lon, a.lat])
     const far = Math.hypot(there.x - here.x, there.y - here.y) > map.getCanvas().clientWidth * 0.6 || Math.abs(map.getZoom() - zoom) > 1.6
-    const opts = { center: [a.lon, a.lat] as [number, number], zoom, bearing: map.getBearing(), duration: FLY_MS, easing: easeInOutCubic, essential: true }
+    const opts = { center: [a.lon, a.lat] as [number, number], zoom, bearing: map.getBearing(), duration, easing: easeInOutCubic, essential: true }
     if (far) map.flyTo({ ...opts, curve: 1.25 })
     else map.easeTo(opts)
-    return
+    return zoom
   }
   // Two parties (a traffic call): frame both.
   let w = Infinity
@@ -125,9 +138,10 @@ function frame(map: MapLibreMap, targets: LiveAircraft[], airport: AirportConfig
     n = Math.max(n, a.lat)
   }
   const cam = map.cameraForBounds([[w, so], [e, n]], { padding: PAIR_PADDING, maxZoom: 15.3 })
-  if (!cam) return
+  if (!cam) return map.getZoom()
   if (reduceMotion) map.jumpTo(cam)
-  else map.flyTo({ ...cam, duration: FLY_MS, easing: easeInOutCubic, curve: 1.25, essential: true })
+  else map.flyTo({ ...cam, duration, easing: easeInOutCubic, curve: 1.25, essential: true })
+  return cam.zoom ?? map.getZoom()
 }
 
 /** Keep a moving aircraft (or the middle of a pair) in frame without jerks. */
