@@ -11,6 +11,7 @@ import { handleAircraftRequest, jsonResponse } from '../src/api/aircraftHandler'
 import { allStations } from '../src/api/airports'
 import { parseFlightQuery } from '../src/api/flightInfoHandler'
 import { fetchFlightDetails } from '../src/api/flightSources'
+import { handleFeedback, MAX_BODY } from '../src/api/feedbackHandler'
 import { buildHealth } from '../src/api/healthHandler'
 import { memoryCache } from '../src/api/sourceHealth'
 import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
@@ -35,12 +36,12 @@ const aiEnv = () => ({
   AI_MODEL: process.env.AI_MODEL,
 })
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, limit = 64_000): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = ''
     req.on('data', (c: Buffer) => {
       data += c.toString('utf8')
-      if (data.length > 64_000) reject(new Error('body too large'))
+      if (data.length > limit) reject(new Error('body too large'))
     })
     req.on('end', () => resolve(data))
     req.on('error', reject)
@@ -101,6 +102,12 @@ export function apiDevPlugin(): Plugin {
             }
             const out = await handleAiRun(body, env, opts)
             return await send(res, jsonResponse(out, out.ok ? 200 : out.status, 'no-store'))
+          }
+
+          if (url.pathname === '/api/feedback' && req.method === 'POST') {
+            const env = { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY, GITHUB_FEEDBACK_TOKEN: process.env.GITHUB_FEEDBACK_TOKEN, GITHUB_FEEDBACK_REPO: process.env.GITHUB_FEEDBACK_REPO, GITHUB_FEEDBACK_SCREENSHOT_BRANCH: process.env.GITHUB_FEEDBACK_SCREENSHOT_BRANCH }
+            const out = await handleFeedback(await readBody(req, MAX_BODY), env, req.socket.remoteAddress ?? 'local')
+            return await send(res, jsonResponse(out.body, out.status, 'no-store'))
           }
 
           if (url.pathname === '/api/summarize') {

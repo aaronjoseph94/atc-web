@@ -8,7 +8,9 @@
  * list it in `TASKS` below.
  */
 import type { RunAiArgs } from './run'
+import { explainSighting } from './tasks/explainSighting'
 import { ping } from './tasks/ping'
+import { triageFeedback } from './tasks/triageFeedback'
 
 export type AiTask<In = unknown> = {
   name: string
@@ -28,5 +30,7 @@ export type AiTask<In = unknown> = {
 }
 
 export const TASKS: Record<string, AiTask<never>> = {
+  [explainSighting.name]: explainSighting as AiTask<never>,
   [ping.name]: ping as AiTask<never>,
+  [triageFeedback.name]: triageFeedback as AiTask<never>,
 }

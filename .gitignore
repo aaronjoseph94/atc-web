@@ -34,3 +34,6 @@ playwright-report
 *.njsproj
 *.sln
 *.sw?
+
+# Data cleanup reports (scripts/ai-cleanup.mjs)
+/reports/

@@ -1,6 +1,7 @@
 /** The "⋯" menu: a popover under the button, like a native context menu. */
-import { CircleHelp, CloudSun, FileText, History, Layers, List, Pin, PinOff, Radio, Settings, type LucideIcon } from 'lucide-react'
+import { CircleHelp, CloudSun, FileText, History, Layers, List, MessageSquareText, Pin, PinOff, Radio, Settings, type LucideIcon } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { openFeedback } from '../feedback/store'
 import { usePlayhead, type Panel } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
 import { Kbd, useDialog } from '../ui/Panel'
@@ -71,6 +72,7 @@ export function Menu() {
         <Item icon={Layers} label="Map" shortcut="L" onClick={go('layers')} />
         <Item icon={Settings} label="Settings" onClick={go('settings')} />
         <Item icon={CircleHelp} label="Help" shortcut="?" onClick={go('help')} />
+        <Item icon={MessageSquareText} label="Send feedback" onClick={openFeedback} />
       </div>
     </div>
   )

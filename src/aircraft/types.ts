@@ -164,6 +164,23 @@ export const TYPES: Record<string, TypeFacts> = {
   B407: { name: '407', manufacturer: 'Bell', kind: 'Light helicopter', engines: shaft(1), spanM: 10.7, lengthM: 12.7, seats: 'up to 7' },
   S76: { name: 'S-76', manufacturer: 'Sikorsky', kind: 'Medium helicopter', engines: shaft(2), spanM: 13.4, lengthM: 16.0, seats: '12', firstFlight: 1977 },
   A139: { name: 'AW139', manufacturer: 'Leonardo', kind: 'Medium helicopter', engines: shaft(2), spanM: 13.8, lengthM: 16.7, seats: 'up to 15', firstFlight: 2001 },
+
+  // ---- Rare visitors: outsize freighters, classics, military (src/discovery spots these) ----
+  A124: { name: 'An-124 Ruslan', manufacturer: 'Antonov', kind: 'Outsize cargo aircraft', engines: jet(4), spanM: 73.3, lengthM: 69.1, firstFlight: 1982 },
+  BLCF: { name: '747 Dreamlifter', manufacturer: 'Boeing', kind: 'Outsize cargo aircraft', engines: jet(4), spanM: 64.4, lengthM: 71.7, firstFlight: 2006 },
+  A337: { name: 'BelugaXL', manufacturer: 'Airbus', kind: 'Outsize cargo aircraft', engines: jet(2), spanM: 60.3, lengthM: 63.1, firstFlight: 2018 },
+  A306: { name: 'A300-600', manufacturer: 'Airbus', kind: WIDE, engines: jet(2), spanM: 44.8, lengthM: 54.1, firstFlight: 1983 },
+  B742: { name: '747-200', manufacturer: 'Boeing', kind: WIDE, engines: jet(4), spanM: 59.6, lengthM: 70.6, firstFlight: 1970 },
+  DC10: { name: 'DC-10', manufacturer: 'McDonnell Douglas', kind: 'Wide-body trijet', engines: jet(3), spanM: 50.4, lengthM: 55.5, firstFlight: 1970 },
+  MD11: { name: 'MD-11', manufacturer: 'McDonnell Douglas', kind: 'Wide-body trijet', engines: jet(3), spanM: 52.0, lengthM: 61.6, firstFlight: 1990 },
+  IL76: { name: 'Il-76', manufacturer: 'Ilyushin', kind: 'Heavy transport', engines: jet(4), spanM: 50.5, lengthM: 46.6, firstFlight: 1971 },
+  C17: { name: 'C-17 Globemaster III', manufacturer: 'Boeing', kind: 'Military transport', engines: jet(4), spanM: 51.8, lengthM: 53.0, firstFlight: 1991 },
+  C5M: { name: 'C-5M Super Galaxy', manufacturer: 'Lockheed', kind: 'Military transport', engines: jet(4), spanM: 67.9, lengthM: 75.3 },
+  C130: { name: 'C-130 Hercules', manufacturer: 'Lockheed', kind: 'Military transport', engines: prop(4), spanM: 40.4, lengthM: 29.8, firstFlight: 1954 },
+  C30J: { name: 'C-130J Super Hercules', manufacturer: 'Lockheed Martin', kind: 'Military transport', engines: prop(4), spanM: 40.4, firstFlight: 1996 },
+  K35R: { name: 'KC-135 Stratotanker', manufacturer: 'Boeing', kind: 'Aerial refuelling tanker', engines: jet(4), spanM: 39.9, lengthM: 41.5, firstFlight: 1956 },
+  KC46: { name: 'KC-46 Pegasus', manufacturer: 'Boeing', kind: 'Aerial refuelling tanker', engines: jet(2), spanM: 48.1, lengthM: 50.4, firstFlight: 2015 },
+  E3TF: { name: 'E-3 Sentry', manufacturer: 'Boeing', kind: 'Airborne early warning aircraft', engines: jet(4), spanM: 44.4, lengthM: 46.6 },
 }
 
 /** Facts for a designator, or null. */

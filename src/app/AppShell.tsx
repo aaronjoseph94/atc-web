@@ -12,6 +12,8 @@
  * a box that stops where the panel starts, so nothing hides behind it.
  */
 import { memo, useEffect, useRef, useState } from 'react'
+import { useSpotter } from '../discovery/useSpotter'
+import { FeedbackSheet } from '../feedback/FeedbackSheet'
 import { FlightCard, FlightDetail } from '../flight/FlightSheet'
 import { useLiveCaptions } from '../hooks/useLiveCaptions'
 import { useShortcuts } from '../hooks/useShortcuts'
@@ -69,6 +71,7 @@ export function AppShell() {
   useUrlSync()
   useLiveCaptions()
   useHapticFeedback()
+  useSpotter()
 
   // Publish the bottom stack's height so the map attribution can sit above it.
   useEffect(() => {
@@ -191,6 +194,7 @@ const Modals = memo(function Modals() {
       <LayersPanel />
       <SettingsView />
       <HelpPanel />
+      <FeedbackSheet />
     </>
   )
 })

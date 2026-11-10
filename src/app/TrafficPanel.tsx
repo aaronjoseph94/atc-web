@@ -10,6 +10,7 @@ import { AirlineLogo } from '../airline/AirlineLogo'
 import { airlineInfo, brandFor } from '../airline/airlines'
 import { getAirport } from '../api/airports'
 import type { Aircraft } from '../api/types'
+import { SpottedList } from '../discovery/SpottedList'
 import { aircraftTypeName, flightPhase, friendlyFlightName, PHASE_LABEL, type Phase } from '../flight/describe'
 import { runwayRelation } from '../live/events'
 import { liveBuffer } from '../live/session'
@@ -108,6 +109,8 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
 
       {/* What the traffic has been doing: takeoffs, landings, go-arounds. Live only, and out of the way of a search. */}
       {mode === 'live' && !q && <ActivityList onPick={close} />}
+      {/* Unusual visitors this session (src/discovery). */}
+      {mode === 'live' && !q && <SpottedList onPick={close} />}
 
       {total === 0 ? (
         q ? (

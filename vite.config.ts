@@ -14,7 +14,7 @@ export default defineConfig({
     // Pure modules run in node; component tests opt into jsdom via a
     // `// @vitest-environment jsdom` docblock.
     environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
