@@ -13,7 +13,8 @@
  */
 import { MAX_TELEPHONY_WORDS, SPOKEN_TO_PREFIX, TELEPHONY, telephonyKey } from './telephony'
 
-export type MentionKind = 'airline' | 'tail' | 'partial-tail'
+/** `flight-number`: an unrecognised airline word before a flight number; only the digits are trusted. */
+export type MentionKind = 'airline' | 'tail' | 'partial-tail' | 'flight-number'
 
 export type CallsignMention = {
   kind: MentionKind
@@ -275,10 +276,36 @@ export function findCallsigns(text: string): CallsignMention[] {
         continue
       }
     }
+
+    // A misheard airline name and a clean flight number ("Spire 7721" for Volaris 7721), where
+    // callsigns sit: opening the call, or closing a readback. Only the number is trusted.
+    if (/^[a-z]{3,}$/.test(t.w) && !NOT_A_CALLSIGN.has(t.w) && !DIGIT[t.w] && !TEEN[t.w] && !TENS[t.w] && !PHONETIC[t.w]) {
+      const num = readNumber(tokens, i + 1, 4, 0)
+      if (num && num.digits.length >= 3 && num.digits[0] !== '0') {
+        const w = skipWeight(tokens, num.next)
+        let lead = 0
+        while (lead < tokens.length && (tokens[lead].punct || FILLER.has(tokens[lead].w) || FACILITY.has(tokens[lead].w))) lead++
+        const atEnd = tokens.slice(w.next).every((x) => x.punct)
+        if (i <= lead || atEnd) {
+          out.push({ kind: 'flight-number', callsign: num.digits, digits: num.digits, ...span(i, num.next), heavy: w.heavy, doubt: 0 })
+          i = w.next
+          continue
+        }
+      }
+    }
     i++
   }
   return out
 }
+
+/** Words that come before numbers that are not flight numbers. */
+const NOT_A_CALLSIGN = new Set([
+  'runway', 'wind', 'winds', 'heading', 'altitude', 'maintain', 'climb', 'descend', 'squawk', 'point', 'level', 'flight', 'information',
+  'gate', 'stand', 'taxiway', 'at', 'to', 'and', 'for', 'via', 'contact', 'monitor', 'frequency', 'speed', 'knots', 'feet', 'miles',
+  'mile', 'traffic', 'number', 'altimeter', 'visibility', 'ceiling', 'expect', 'reduce', 'increase', 'turn', 'left', 'right', 'center',
+  'cleared', 'hold', 'short', 'cross', 'until', 'then', 'with', 'the', 'a', 'of', 'on', 'is', 'are', 'your', 'you', 'we', 'one', 'time',
+  'zulu', 'minutes', 'seconds', 'degrees', 'heavy', 'super', 'ground', 'tower', 'approach', 'departure', 'clearance', 'delivery',
+])
 
 // ---------------------------------------------------------------------------
 // Who is speaking

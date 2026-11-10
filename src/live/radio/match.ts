@@ -58,6 +58,11 @@ export function fit(mention: CallsignMention, a: Candidate): number {
     if (heard.length >= 3 && f.digits.length >= 3 && oneEditApart(f.digits, heard)) return f.suffix === said ? 0.62 : 0.56
     return 0
   }
+  if (mention.kind === 'flight-number') {
+    // The airline word was garbled; an exact flight number is still a fair clue.
+    const f = splitFlight(cs)
+    return f && f.digits === mention.digits ? 0.6 : 0
+  }
   if (mention.kind === 'tail') {
     const want = clean(mention.callsign)
     if (want === cs || want === reg) return 0.97

@@ -82,6 +82,18 @@ describe('matchMentions', () => {
     expect(matchMentions(findCallsigns('turn right on Delta 3'), taxi)).toEqual([])
   })
 
+  it('falls back to a clean flight number when the airline name is misheard', () => {
+    const lax = [ac('v1', 'VOI7721', true), ac('u1', 'UAL580', true), ac('s1', 'SWA2518', true)]
+    const heardAt = (text: string) => matchMentions(findCallsigns(text), lax, { stationKind: 'TWR' }).map((m) => m.icao24)
+    expect(heardAt('Spire 7721, contact departure, good day')).toEqual(['v1'])
+    expect(heardAt('Nova Tire, runway 24 left, line up and wait, Southwist 2518')).toEqual(['s1'])
+    // Numbers in the middle of an instruction are not callsigns.
+    expect(heardAt('United 580, runway 25 right, wind 0804, descend and maintain 7721')).toEqual(['u1'])
+    expect(heardAt('Taxi via Charlie, gate 2518')).toEqual([])
+    // Two aircraft share the number: too risky.
+    expect(matchMentions(findCallsigns('Spire 7721, contact departure'), [ac('a', 'VOI7721'), ac('b', 'DAL7721')])).toEqual([])
+  })
+
   it('scores suffix letters', () => {
     const [m] = findCallsigns('Speedbird 14')
     expect(fit(m, ac('b1', 'BAW14K'))).toBeGreaterThan(0.8)
