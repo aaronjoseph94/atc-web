@@ -14,6 +14,7 @@ import { usePlayhead } from '../playback/playheadStore'
 import { supportsHaptics } from '../ui/haptics'
 import { Group, Row, SectionLabel, Segmented, Sheet, Toggle } from '../ui/Panel'
 import { AiSettingsGroup } from './AiSettingsGroup'
+import { PerformanceSettings } from '../perf/PerformanceSettings'
 import { DEFAULT_SETTINGS, useSettings, type Settings } from './settingsStore'
 
 export function SettingsView() {
@@ -154,6 +155,7 @@ export function SettingsView() {
               </button>
             </Row>
           </Group>
+          <PerformanceSettings />
           <BackendStatus />
           <AiStatus />
           <UnrecognisedDataGroup />
