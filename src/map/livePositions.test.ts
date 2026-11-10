@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Aircraft } from '../api/types'
-import { headingEase, lerpAngle, LivePositionBuffer, measureTurn } from './livePositions'
+import { handOver, lerpAngle, LivePositionBuffer, measureTurn } from './livePositions'
 
 const ac = (
   icao24: string,
@@ -167,10 +167,44 @@ describe('measureTurn', () => {
   })
 })
 
-describe('headingEase', () => {
-  it('starts flat at 1 and settles to 0', () => {
-    expect(headingEase(0)).toBe(1)
-    expect(headingEase(30)).toBeGreaterThan(0.99)
-    expect(headingEase(4000)).toBeLessThan(0.02)
+describe('handOver', () => {
+  it('starts and ends flat', () => {
+    expect(handOver(0)).toBe(0)
+    expect(handOver(30)).toBeLessThan(0.001)
+    expect(handOver(1000)).toBeCloseTo(0.5)
+    expect(handOver(1970)).toBeGreaterThan(0.999)
+    expect(handOver(5000)).toBe(1)
+  })
+})
+
+describe('smooth motion through a new fix', () => {
+  // A jet at 150 kt heading east; the next report puts it a little off the forecast, on a new heading.
+  const ac = (lon: number, heading: number) => ({ icao24: 'abc', callsign: 'TST1', lat: 40, lon, heading, altitudeFt: 2000, speedKt: 150, onGround: false }) as never
+  const at = (b: LivePositionBuffer, t: number) => b.get('abc', t)!
+
+  it('keeps position and velocity continuous when a fix lands', () => {
+    const b = new LivePositionBuffer()
+    b.push([ac(-74, 90)], 0)
+    b.push([ac(-73.995, 100)], 5000)
+    const before = at(b, 4999.9)
+    const after = at(b, 5000.1)
+    expect(Math.abs(after.lon - before.lon)).toBeLessThan(1e-6)
+    expect(Math.abs(after.lat - before.lat)).toBeLessThan(1e-6)
+    // Velocity just before and just after the fix (degrees per ms) match closely.
+    const v = (t0: number, t1: number) => [(at(b, t1).lon - at(b, t0).lon) / (t1 - t0), (at(b, t1).lat - at(b, t0).lat) / (t1 - t0)]
+    const vBefore = v(4980, 4999)
+    const vAfter = v(5001, 5020)
+    const speed = Math.hypot(...vBefore)
+    expect(Math.hypot(vAfter[0] - vBefore[0], vAfter[1] - vBefore[1])).toBeLessThan(speed * 0.05)
+  })
+
+  it('ends up on the new forecast once the hand-over is done', () => {
+    const b = new LivePositionBuffer()
+    b.push([ac(-74, 90)], 0)
+    b.push([ac(-73.99, 90)], 5000)
+    const later = at(b, 9000)
+    const fresh = new LivePositionBuffer()
+    fresh.push([ac(-73.99, 90)], 5000)
+    expect(later.lon).toBeCloseTo(at(fresh, 9000).lon, 7)
   })
 })

@@ -4,8 +4,9 @@
  * A new ADS-B fix arrives only every several seconds, and by then any blend
  * between the previous two fixes is already over, so planes used to freeze,
  * then teleport. Instead each aircraft keeps a short forecast: it coasts on
- * its reported speed and heading, and when a new fix arrives the position
- * error decays over a couple of seconds instead of snapping.
+ * its reported speed and heading, and when a new fix arrives the drawn path
+ * hands over to the new forecast along an S-curve: position, speed and
+ * direction all stay continuous, so there is no lurch when a report lands.
  *
  * The buffer also remembers where each aircraft has been (for trails) and
  * fades aircraft in and out as they enter and leave coverage.
@@ -14,6 +15,17 @@ import type { Aircraft } from '../api/types'
 
 /** A sampled aircraft: the fix, moved to "now", with a fade level for drawing. */
 export type LiveAircraft = Aircraft & { opacity: number }
+
+/** The motion a forecast is built from; kept for the old forecast while a new one takes over. */
+type Forecast = {
+  fix: Aircraft
+  fixAt: number
+  coastKt: number
+  coastHdg: number
+  turnRate: number
+  /** The forecast this one is taking over from, while the hand-over lasts. */
+  from: Forecast | null
+}
 
 type Track = {
   fix: Aircraft
@@ -24,11 +36,8 @@ type Track = {
   coastHdg: number
   /** Whether `coastHdg` is real (reported or derived from movement). */
   hdgKnown: boolean
-  /** Shown position minus the fix, at `fixAt`. Multiplied by a decay each frame. */
-  errLat: number
-  errLon: number
-  /** Signed heading error in degrees (−180..180) at `fixAt`. */
-  errHdg: number
+  /** The previous forecast, blended out over `BLEND_MS` after a new fix. */
+  from: Forecast | null
   /** Degrees per second the aircraft was turning between its last two fixes; the icon keeps turning at this rate between fixes. */
   turnRate: number
   /** Polls missed since this aircraft was last seen. Fades out after two. */
@@ -40,14 +49,15 @@ type Track = {
   history: [number, number][]
 }
 
-/** e^-1 of the correction is gone after this long (~1.6s to settle onto a new fix). */
-const EASE_MS = 1600
 /**
- * Heading corrections settle with a critically damped ease over about this
- * time constant: unlike a plain exponential, it starts at zero speed, so a
- * new fix never makes the icon twitch, it just leans into the new heading.
+ * How long the drawn path takes to hand over from the old forecast to the one
+ * from a new fix. The weight follows a smoothstep, which starts and ends flat,
+ * so the aircraft keeps its current velocity at the moment a report lands and
+ * arrives on the new path already moving with it.
  */
-const HDG_EASE_MS = 650
+const BLEND_MS = 2000
+/** Older hand-overs still in progress are kept to this depth (fixes rarely come faster than one a second). */
+const MAX_BLEND_DEPTH = 3
 /** Keep turning at the measured rate for at most this long after a fix (about one poll); after that, hold the heading. */
 const TURN_COAST_MS = 7000
 /** Turn rates (degrees per second) worth acting on, and the most believed: a steep airliner turn is ~3°/s, taxi turns are quicker. */
@@ -88,9 +98,7 @@ export class LivePositionBuffer {
           coastKt: movingSpeed(ac, null),
           coastHdg: ac.heading,
           hdgKnown: ac.headingKnown !== false,
-          errLat: 0,
-          errLon: 0,
-          errHdg: 0,
+          from: null,
           turnRate: 0,
           misses: 0,
           bornAt: now,
@@ -119,15 +127,16 @@ export class LivePositionBuffer {
       // How fast it was turning: from two reported tracks only (derived ones are too noisy), and never for parked aircraft.
       const turnRate = pin || snap || !reportedHdg || prev.fix.headingKnown === false || parked ? 0 : measureTurn(prev.coastHdg, coastHdg, dt, ac.onGround, prev.turnRate)
 
+      // The forecast being drawn until now becomes the one blended away from.
+      const handOver: Forecast | null = snap ? null : freeze(prev, now)
+
       prev.fix = fix
       prev.fixAt = now
+      prev.from = handOver
       prev.turnRate = turnRate
       prev.coastKt = coastKt
       prev.coastHdg = coastHdg
       prev.hdgKnown = hdgKnown
-      prev.errLat = snap ? 0 : shown.lat - fix.lat
-      prev.errLon = snap ? 0 : shown.lon - fix.lon
-      prev.errHdg = snap ? 0 : shortestDelta(coastHdg, shown.heading)
       prev.misses = 0
       prev.goneAt = null
 
@@ -200,14 +209,47 @@ function fade(tr: Track, now: number): number {
   return Math.max(0, Math.min(1, 0.25 + 0.75 * fadeIn) * fadeOut)
 }
 
+/** The forecast currently drawn for a track, frozen as it is at `now`, for a new forecast to take over from. */
+function freeze(tr: Forecast, now: number, depth = 0): Forecast {
+  const blending = tr.from != null && now - tr.fixAt < BLEND_MS && depth < MAX_BLEND_DEPTH
+  return {
+    fix: tr.fix,
+    fixAt: tr.fixAt,
+    coastKt: tr.coastKt,
+    coastHdg: tr.coastHdg,
+    turnRate: tr.turnRate,
+    from: blending && tr.from ? freeze(tr.from, now, depth + 1) : null,
+  }
+}
+
+/** Share of the new forecast in the drawn path `dt` ms after its fix: a smoothstep, flat at both ends. */
+export function handOver(dt: number): number {
+  const u = Math.max(0, Math.min(1, dt / BLEND_MS))
+  return u * u * (3 - 2 * u)
+}
+
 /**
- * Where this track should be drawn at `now`. Pure function of the last fix.
- * A turning aircraft keeps turning between fixes (along an arc, for about one
- * poll), so turns read as one continuous motion instead of a hold-then-swing.
+ * Where this track should be drawn at `now`. A turning aircraft keeps turning
+ * between fixes (along an arc, for about one poll), so turns read as one
+ * continuous motion instead of a hold-then-swing; after a new fix the drawn
+ * path slides from the old forecast onto the new one.
  */
-function pose(tr: Track, now: number): { lat: number; lon: number; heading: number } {
+function pose(tr: Forecast, now: number): { lat: number; lon: number; heading: number } {
+  const next = forecast(tr, now)
+  if (!tr.from) return next
+  const w = handOver(now - tr.fixAt)
+  if (w >= 1) return next
+  const was = pose(tr.from, now)
+  return {
+    lat: was.lat + (next.lat - was.lat) * w,
+    lon: was.lon + (next.lon - was.lon) * w,
+    heading: lerpAngle(was.heading, next.heading, w),
+  }
+}
+
+/** Dead reckoning from one fix: coast on its speed and heading, turning at the measured rate for a while. */
+function forecast(tr: Forecast, now: number): { lat: number; lon: number; heading: number } {
   const dt = Math.max(0, now - tr.fixAt)
-  const decay = Math.exp(-dt / EASE_MS)
   const coastMs = Math.min(dt, MAX_COAST_MS)
   const turnMs = Math.min(coastMs, TURN_COAST_MS)
   const turned = (tr.turnRate * turnMs) / 1000
@@ -217,17 +259,7 @@ function pose(tr: Track, now: number): { lat: number; lon: number; heading: numb
     const arc = projectArc(tr.fix.lat, tr.fix.lon, tr.coastHdg, tr.turnRate, tr.coastKt, turnMs)
     coast = project(arc.lat, arc.lon, tr.coastHdg + turned, tr.coastKt, coastMs - turnMs)
   }
-  return {
-    lat: coast.lat + tr.errLat * decay,
-    lon: coast.lon + tr.errLon * decay,
-    heading: (((tr.coastHdg + turned + tr.errHdg * headingEase(dt)) % 360) + 360) % 360,
-  }
-}
-
-/** Share of a heading correction still left `dt` ms after a fix: critically damped, so it starts flat and has no corner. */
-export function headingEase(dt: number): number {
-  const x = Math.max(0, dt) / HDG_EASE_MS
-  return (1 + x) * Math.exp(-x)
+  return { lat: coast.lat, lon: coast.lon, heading: (((tr.coastHdg + turned) % 360) + 360) % 360 }
 }
 
 /**

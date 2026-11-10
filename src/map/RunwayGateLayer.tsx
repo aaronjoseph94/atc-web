@@ -41,56 +41,55 @@ function setData(map: MapLibreMap, id: string, data: FeatureCollection) {
 
 // ---- images ---------------------------------------------------------------
 
-// Takeoff and landing pictograms from Lucide (ISC licence, already the app's icon set):
-// an aircraft climbing away from, or settling onto, a ground line.
-const GROUND = 'M2 22h20'
-const TAKEOFF =
-  'M6.36 17.4 4 17l-2-4 1.1-.55a2 2 0 0 1 1.8 0l.17.1a2 2 0 0 0 1.8 0L8 12 5 6l.9-.45a2 2 0 0 1 2.09.2l4.02 3a2 2 0 0 0 2.1.2l4.19-2.06a2.41 2.41 0 0 1 1.73-.17L21 7a1.4 1.4 0 0 1 .87 1.99l-.38.76c-.23.46-.6.84-1.07 1.08L7.58 17.2a2 2 0 0 1-1.22.18Z'
-const LANDING =
-  'M3.77 10.77 2 9l2-4.5 1.1.55c.55.28.9.84.9 1.45s.35 1.17.9 1.45L8 8.5l3-6 1.05.53a2 2 0 0 1 1.09 1.52l.72 5.4a2 2 0 0 0 1.09 1.52l4.4 2.2c.42.22.78.55 1.01.96l.6 1.03c.49.88-.06 1.98-1.06 2.1l-1.18.15c-.47.06-.95-.02-1.37-.24L4.29 11.15a2 2 0 0 1-.52-.38Z'
-
 /**
- * Runway-in-use badge: a small dark chip, like the callsign tags, with a
- * landing pictogram in green for arrivals and a takeoff pictogram in blue for
- * departures; both pictograms side by side when the runway does both.
+ * Runway-in-use badge: a small, quiet disc beside the runway's designator. A
+ * dark centre with a thin ring and a fine arrow in the runway's colour, down
+ * for arrivals and up for departures; both discs, slightly overlapped, when
+ * the runway does both. Kept small and translucent so it reads as a hint,
+ * not as a marker competing with the aircraft.
  */
 function badge(role: 'arrivals' | 'departures' | 'both'): ImageData {
   const s = 2 // drawn at 2× for sharpness
-  const icon = 13 * s
-  const pad = 4 * s
-  const gap = 3 * s
-  const icons: ('arrivals' | 'departures')[] = role === 'both' ? ['arrivals', 'departures'] : [role]
-  const h = icon + pad * 2 - 2 * s
-  const w = pad * 2 + icons.length * icon + (icons.length - 1) * gap
+  const r = 5.5 * s // disc radius: 11 px across on screen
+  const pad = 2 * s // room for the soft shadow
+  const step = r * 1.55 // centre-to-centre when two discs share a badge
+  const roles: ('arrivals' | 'departures')[] = role === 'both' ? ['arrivals', 'departures'] : [role]
   const canvas = document.createElement('canvas')
-  canvas.width = w + 2 * s
-  canvas.height = h + 2 * s
+  canvas.width = Math.ceil(pad * 2 + r * 2 + (roles.length - 1) * step)
+  canvas.height = Math.ceil(pad * 2 + r * 2)
   const ctx = canvas.getContext('2d')!
-  // The chip: dark plate, soft rim in the runway's colour.
-  ctx.beginPath()
-  ctx.roundRect(s, s, w, h, 5.5 * s)
-  ctx.fillStyle = 'rgba(24,28,42,0.92)'
-  ctx.fill()
-  ctx.lineWidth = 1.2 * s
-  ctx.strokeStyle = role === 'both' ? 'rgba(255,255,255,0.28)' : RUNWAY_USE_COLOR[role] + '99'
-  ctx.stroke()
-  icons.forEach((r, i) => {
-    const x = s + pad + i * (icon + gap)
-    const y = s + (h - icon) / 2
+  const cy = canvas.height / 2
+  roles.forEach((kind, i) => {
+    const cx = pad + r + i * step
+    const colour = RUNWAY_USE_COLOR[kind]
+    // Dark centre with a faint shadow, so it sits on grass or pavement alike.
     ctx.save()
-    ctx.translate(x, y)
-    ctx.scale(icon / 24, icon / 24)
-    const colour = RUNWAY_USE_COLOR[r]
-    const plane = new Path2D(r === 'arrivals' ? LANDING : TAKEOFF)
-    ctx.fillStyle = colour + '55'
-    ctx.fill(plane)
+    ctx.shadowColor = 'rgba(0,0,0,0.35)'
+    ctx.shadowBlur = 2 * s
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(16,20,34,0.82)'
+    ctx.fill()
+    ctx.restore()
+    // Thin ring in the runway's colour.
+    ctx.beginPath()
+    ctx.arc(cx, cy, r - 0.6 * s, 0, Math.PI * 2)
+    ctx.lineWidth = 1.1 * s
+    ctx.strokeStyle = colour + 'B3'
+    ctx.stroke()
+    // A fine arrow: short shaft and an open head.
+    const dir = kind === 'departures' ? -1 : 1
     ctx.strokeStyle = colour
-    ctx.lineWidth = 2.1
+    ctx.lineWidth = 1.25 * s
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
-    ctx.stroke(plane)
-    ctx.stroke(new Path2D(GROUND))
-    ctx.restore()
+    ctx.beginPath()
+    ctx.moveTo(cx, cy - dir * 2.6 * s)
+    ctx.lineTo(cx, cy + dir * 2.6 * s)
+    ctx.moveTo(cx - 2.1 * s, cy + dir * 0.6 * s)
+    ctx.lineTo(cx, cy + dir * 2.7 * s)
+    ctx.lineTo(cx + 2.1 * s, cy + dir * 0.6 * s)
+    ctx.stroke()
   })
   return ctx.getImageData(0, 0, canvas.width, canvas.height)
 }

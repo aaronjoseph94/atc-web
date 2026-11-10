@@ -480,11 +480,12 @@ function layers(p: Palette): LayerSpecification[] {
         'icon-anchor': 'left',
         // Clear of the designator, whose width depends on its length and the zoom (text 9 → 12 px).
         'icon-offset': ['interpolate', ['linear'], ['zoom'], 11.2, ['match', ['get', 'len'], 1, ['literal', [6, 0]], 2, ['literal', [9, 0]], ['literal', [12, 0]]], 14, ['match', ['get', 'len'], 1, ['literal', [7, 0]], 2, ['literal', [11, 0]], ['literal', [15, 0]]]],
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 11.2, 0.8, 14, 1],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 11.2, 0.85, 14, 1],
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
       },
-      paint: {},
+      // Subtle: a hint beside the runway number, not a marker.
+      paint: { 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 11.2, 0.7, 14, 0.85] },
     },
 
     // ---- aircraft ----------------------------------------------------------------
