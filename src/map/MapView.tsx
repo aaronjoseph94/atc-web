@@ -16,7 +16,7 @@ import { AircraftLayer } from './AircraftLayer'
 import { runwayEnds } from './airportDiagram'
 import { AirportDiagramLayer } from './AirportDiagramLayer'
 import type { LiveAircraft } from './livePositions'
-import { applyTheme, buildStyle, effectiveTheme, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
+import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
 
 /** Extra zoom applied when the camera closes in on a talking/selected aircraft. */
 const FOCUS_ZOOM_BOOST = 1.5
@@ -246,7 +246,8 @@ export function MapView() {
   useEffect(() => {
     if (!map) return
     applyTheme(map, theme)
-  }, [map, theme])
+    applyGroundCover(map, theme, airport.arid)
+  }, [map, theme, airport.arid])
 
   useEffect(() => {
     if (!map) return

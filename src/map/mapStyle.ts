@@ -116,9 +116,9 @@ const NAVY: Palette = {
   paintDim: '#8D93A8',
   paintFaint: '#6F7790',
   taxiLine: '#9A852E',
-  building: '#262C44',
-  buildingEdge: '#343C58',
-  buildingTop: '#2E3550',
+  building: '#2A2D3B',
+  buildingEdge: '#3A3E4F',
+  buildingTop: '#32364A',
   roadMinor: '#1D2640',
   roadMajor: '#212A45',
   motorway: '#252F4C',
@@ -252,12 +252,14 @@ function layers(p: Palette): LayerSpecification[] {
     // ---- land and water ---------------------------------------------------
     { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', layout: vis(base), paint: { 'fill-color': p.water } },
     { id: 'landuse-residential', type: 'fill', source: 'omt', 'source-layer': 'landuse', filter: ['in', ['get', 'class'], ['literal', ['residential', 'commercial', 'industrial', 'retail']]], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 10, p.farLand, 12.5, p.land] } },
+    // Airfield ground is slate; only land the map data marks as grass is painted green on top,
+    // so a desert field like Phoenix reads as gravel and O'Hare as lawn, as in the reference.
+    { id: 'aero-infield', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['==', ['get', 'class'], 'aerodrome'], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.shoulder], 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.55, 12, 1] } },
     { id: 'landcover-wood', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'wood'], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.wood] } },
-    { id: 'landcover-grass', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland', 'wetland']]], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.grass] } },
+    { id: 'landcover-grass', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland', 'wetland']]], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.infield] } },
     { id: 'waterway', type: 'line', source: 'omt', 'source-layer': 'waterway', layout: vis(base), paint: { 'line-color': p.water, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.6, 16, 3] } },
 
     // ---- airfield (OpenStreetMap geometry) ----------------------------------
-    { id: 'aero-infield', type: 'fill', source: 'omt', 'source-layer': 'aeroway', filter: ['==', ['get', 'class'], 'aerodrome'], layout: vis(base), paint: { 'fill-color': ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, p.infield] } },
     // Pavement is drawn twice: a wide, lighter "shoulder" pass first, then the dark
     // pavement on top. What shows of the first pass is the band that rings every
     // grass island, and round joins give the islands their rounded corners.
@@ -532,4 +534,14 @@ export function applyTheme(map: MapLibreMap, theme: MapTheme) {
 /** Does this theme draw the vector base map (land, water, flat buildings)? */
 export function themeHasVectorBase(theme: MapTheme): boolean {
   return !PALETTES[theme].hideBase
+}
+
+/**
+ * Paint grass the way the current airport needs: green, or slate on a desert
+ * field where the "grass" in the data is really gravel. Call after `applyTheme`.
+ */
+export function applyGroundCover(map: MapLibreMap, theme: MapTheme, arid: boolean) {
+  if (!map.getLayer('landcover-grass')) return
+  const p = PALETTES[theme]
+  map.setPaintProperty('landcover-grass', 'fill-color', ['interpolate', ['linear'], ['zoom'], 11, p.far, 13.5, arid ? p.shoulder : p.infield] as never)
 }

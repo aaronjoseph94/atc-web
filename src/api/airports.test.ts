@@ -34,6 +34,10 @@ describe('airports catalog', () => {
     expect(bos.stations.find((s) => s.kind === 'TWR')?.frequencyMhz).toBeGreaterThan(118)
   })
 
+  it('marks the desert airports as arid', () => {
+    expect(AIRPORTS.filter((a) => a.arid).map((a) => a.icao).sort()).toEqual(['LAS', 'PHX', 'SLC'])
+  })
+
   it('each airport has bbox, center, zoom, and ≥1 station', () => {
     for (const a of AIRPORTS) {
       expect(a.bounds[1][0]).toBeGreaterThan(a.bounds[0][0])
