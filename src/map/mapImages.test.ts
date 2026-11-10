@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ICON_SCALE, iconFor, iconImage, maskToSdf } from './mapImages'
+import { bankOfImage, ICON_SCALE, iconFor, iconImage, maskToSdf, shapeOfImage } from './mapImages'
+import { artImage, artTierPx, artTiersFor, iconZoomFactor } from './mapStyle'
 
 describe('ICON_SCALE', () => {
   it('sizes classes by real size, compressed, with a floor for small aircraft', () => {
@@ -43,5 +44,40 @@ describe('maskToSdf', () => {
     expect(at(0, 0)).toBe(0)
     expect(at(13, 8)).toBeLessThan(0.75)
     expect(at(13, 8)).toBeCloseTo(0.25, 1)
+  })
+})
+
+describe('iconZoomFactor', () => {
+  it('matches the style stops and grows smoothly between them', () => {
+    expect(iconZoomFactor(5)).toBe(0.5)
+    expect(iconZoomFactor(14)).toBeCloseTo(0.9)
+    expect(iconZoomFactor(16)).toBeCloseTo(1.8)
+    expect(iconZoomFactor(25)).toBe(14.4)
+    expect(iconZoomFactor(14.5)).toBeGreaterThan(0.9)
+    expect(iconZoomFactor(14.5)).toBeLessThan(1.2)
+  })
+})
+
+describe('reduced artwork copies', () => {
+  it('are sized to the drawn size on the screen, never above full size', () => {
+    expect(artTierPx(15, 1, 1)).toBe(80)
+    expect(artTierPx(15, 1, 3)).toBeGreaterThan(artTierPx(15, 1, 2))
+    expect(artTierPx(16, 1.5, 3)).toBe(384)
+  })
+
+  it('leave out a tier that would be about full size anyway', () => {
+    expect(artTiersFor(1).map((t) => t.suffix)).toEqual(['~s', '~m'])
+    expect(artTiersFor(3).map((t) => t.suffix)).toEqual(['~s'])
+  })
+
+  it('pick the copy by zoom in the style', () => {
+    expect(JSON.stringify(artImage(['get', 'icon']))).toContain('"step",["zoom"],["concat",["get","icon"],"~s"]')
+  })
+
+  it('still name their class and bank', () => {
+    expect(shapeOfImage('ac-jet-hi~s')).toBe('ac-jet')
+    expect(shapeOfImage('ac-heli-r2~m')).toBe('ac-heli')
+    expect(shapeOfImage('ac-jet-bL2-hi~s')).toBe('ac-jet')
+    expect(bankOfImage('ac-jet-bL2-hi~s')).toEqual({ dir: 'L', level: 2 })
   })
 })

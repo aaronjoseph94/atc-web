@@ -9,6 +9,7 @@
  * ignored rather than highlighting the wrong aeroplane.
  */
 import type { Aircraft, StationKind } from '../../api/types'
+import { distanceM, M_PER_NM, type LngLat } from '../../map/geo'
 import type { CallsignMention } from './callsigns'
 
 /** Weaker matches than this are dropped. */
@@ -21,7 +22,48 @@ export type RadioMatch = {
   mention: CallsignMention
 }
 
-type Candidate = Pick<Aircraft, 'icao24' | 'callsign' | 'onGround' | 'altitudeFt'> & { registration?: string | null }
+type Candidate = Pick<Aircraft, 'icao24' | 'callsign' | 'onGround' | 'altitudeFt'> & { registration?: string | null; lat?: number; lon?: number }
+
+/** The airport whose frequency is playing: where its traffic is. */
+export type Field = { center: LngLat; elevationFt: number }
+
+/** Aircraft within this distance of the field are its own traffic. */
+export const LOCAL_NM = 6
+/**
+ * On the ground further than this from the field's centre is on the ground at
+ * another airport: the feed's circle round JFK takes in LaGuardia, 9 nm away,
+ * and the biggest fields are about 4 nm across.
+ */
+export const OTHER_FIELD_NM = 4
+
+/** Nautical miles from the field's centre, or null for a candidate without a position. */
+function nmFrom(a: { lat?: number; lon?: number }, field: Field): number | null {
+  if (a.lat == null || a.lon == null) return null
+  return distanceM(field.center, [a.lon, a.lat]) / M_PER_NM
+}
+
+/**
+ * On the ground at another airport. Such an aircraft can still be named on
+ * this frequency (an exact callsign keeps its highlight), but the camera
+ * doesn't fly over there for it.
+ */
+export function atOtherField(a: { lat?: number; lon?: number; onGround: boolean }, field: Field): boolean {
+  if (!a.onGround) return false
+  const d = nmFrom(a, field)
+  return d != null && d > OTHER_FIELD_NM
+}
+
+/** Nudge for where the aircraft is: this field's traffic, or someone else's. */
+export function placeBonus(a: Candidate, field: Field | undefined): number {
+  if (!field) return 0
+  const d = nmFrom(a, field)
+  if (d == null) return 0
+  if (atOtherField(a, field)) return -0.3
+  if (d <= LOCAL_NM) return 0.04
+  // Further out and low (below a 3° approach path): in another airport's circuit, not on this one's approach or departure.
+  const agl = a.altitudeFt == null ? 0 : a.altitudeFt - field.elevationFt
+  return agl < 1500 ? -0.15 : 0
+}
 
 const clean = (s: string | null | undefined) => (s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 
@@ -100,14 +142,14 @@ export function roleBonus(kind: StationKind | undefined, a: Candidate, elevation
  * mention and no aircraft twice. A near-tie between two aircraft costs
  * confidence: better to highlight nothing than the wrong one.
  */
-export function matchMentions(mentions: CallsignMention[], aircraft: Candidate[], opts: { stationKind?: StationKind; elevationFt?: number } = {}): RadioMatch[] {
+export function matchMentions(mentions: CallsignMention[], aircraft: Candidate[], opts: { stationKind?: StationKind; elevationFt?: number; field?: Field } = {}): RadioMatch[] {
   const out: RadioMatch[] = []
   const used = new Set<string>()
   for (const mention of mentions) {
     const scored = aircraft
       .map((a) => {
         const base = fit(mention, a)
-        return { a, score: base > 0 ? Math.min(1, base + roleBonus(opts.stationKind, a, opts.elevationFt)) - mention.doubt : 0 }
+        return { a, score: base > 0 ? Math.min(1, base + roleBonus(opts.stationKind, a, opts.elevationFt) + placeBonus(a, opts.field)) - mention.doubt : 0 }
       })
       .filter((x) => x.score > 0 && !used.has(x.a.icao24))
       .sort((x, y) => y.score - x.score)

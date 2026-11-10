@@ -130,12 +130,15 @@ export function drawLights(a: Anchors, bits: string, band: LightBand, bankDeg = 
   return pixels(ctx)
 }
 
+/** The landing-light pool is nothing but soft gradients, so one pixel per box pixel is plenty (it is uploaded again every frame, see `FIN_RATIO`). */
+const LANDING_RATIO = 1
+
 /** The landing lights: a soft pool of light thrown ahead of the nose. */
 export function drawLanding(a: Anchors): { data: ImageData; size: number } {
   const [, noseY] = toIconPx(a, a.nose)
   const reach = BOX * FILL * 1.05
   const size = Math.ceil(2 * (Math.abs(noseY) + reach + 4))
-  const ctx = canvas(size, size, 2)
+  const ctx = canvas(size, size, LANDING_RATIO)
   const cy = noseY - reach * 0.48
   ctx.save()
   ctx.translate(0, cy)
@@ -190,7 +193,12 @@ export function drawExhaust(a: Anchors, frame: 0 | 1): ImageData {
   return pixels(ctx)
 }
 
-const FIN_RATIO = 4
+/**
+ * Pixels per icon-box pixel for the fin. A distance field stays crisp when
+ * scaled up, and every sprite the aircraft use is uploaded again each frame
+ * (see `ART_TIERS` in mapStyle), so it is kept small.
+ */
+const FIN_RATIO = 2
 
 /** The fin patch as a distance field, so one image takes any airline's colour. */
 export function drawFin(a: Anchors): ImageData | null {
@@ -207,7 +215,8 @@ export function drawFin(a: Anchors): ImageData | null {
   ctx.closePath()
   ctx.fill()
   const img = pixels(ctx)
-  return new ImageData(maskToSdf(img.data, img.width, img.height, 8) as Uint8ClampedArray<ArrayBuffer>, img.width, img.height)
+  // The falloff spans the same 2 box pixels whatever the resolution, so the edge renders the same.
+  return new ImageData(maskToSdf(img.data, img.width, img.height, 2 * FIN_RATIO) as Uint8ClampedArray<ArrayBuffer>, img.width, img.height)
 }
 
 const BLUR_RATIO = 2
@@ -265,7 +274,7 @@ export function ensureFxImage(map: MapLibreMap, id: string): boolean {
     }
     case 'land': {
       const { data } = drawLanding(a)
-      map.addImage(id, data, { pixelRatio: 2 })
+      map.addImage(id, data, { pixelRatio: LANDING_RATIO })
       return true
     }
     case 'exhaust':

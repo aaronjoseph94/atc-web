@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import type { AirportConfig } from '../api/airports'
+import { atOtherField } from '../live/radio/match'
 import { useRadio } from '../live/radio/radioStore'
 import { usePlayhead } from '../playback/playheadStore'
 import { reducedMotion } from '../ui/motion'
@@ -93,7 +94,7 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
         return false
       }
       const focus = useRadio.getState().focus
-      const targets = focus ? focus.ids.map((id) => list.find((a) => a.icao24 === id)).filter((a): a is LiveAircraft => !!a) : []
+      const targets = focus ? cameraTargets(list, focus.ids, airport) : []
 
       if (targets.length) {
         busyAt.current = now
@@ -143,6 +144,21 @@ export function useRadioCamera(map: MapLibreMap | null, airport: AirportConfig, 
     [map, airport, goHome, reduceMotion],
   )
 
+}
+
+/**
+ * The aircraft a call is about that the camera should go to: those on the
+ * map, leaving out any on the ground at another airport (they keep their
+ * highlight, but flying the camera across to LaGuardia for a JFK frequency
+ * would lose the airfield the user is watching).
+ */
+export function cameraTargets(list: LiveAircraft[], ids: string[], airport: Pick<AirportConfig, 'center' | 'elevationFt'>): LiveAircraft[] {
+  const out: LiveAircraft[] = []
+  for (const id of ids) {
+    const a = list.find((x) => x.icao24 === id)
+    if (a && !atOtherField(a, airport)) out.push(a)
+  }
+  return out
 }
 
 /**

@@ -154,6 +154,24 @@ export function addWaterSheen(map: MapLibreMap, sheen: WaterSheen) {
   map.addImage(SHEEN_IMAGE, sheen, { pixelRatio: SHEEN_SCALE })
 }
 
+const sheens = new WeakMap<MapLibreMap, WaterSheen>()
+
+/** The map's water sheen, made on first use (the style's water asks for it before the atmosphere layer mounts). */
+export function waterSheenFor(map: MapLibreMap): WaterSheen {
+  let s = sheens.get(map)
+  if (!s) {
+    s = new WaterSheen()
+    sheens.set(map, s)
+  }
+  return s
+}
+
+/** Draw the surface pattern images on request (see `imageResolver`). */
+export function surfaceImage(map: MapLibreMap, id: string) {
+  if (id === NOISE_IMAGE) addPavementGrain(map)
+  else if (id === SHEEN_IMAGE && !map.hasImage(SHEEN_IMAGE)) map.addImage(SHEEN_IMAGE, waterSheenFor(map), { pixelRatio: SHEEN_SCALE })
+}
+
 /** A soft round blob (opaque black centre fading to nothing) to stamp cloud shadows with. */
 export function blobSprite(size = 64): HTMLCanvasElement {
   const c = document.createElement('canvas')

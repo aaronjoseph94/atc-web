@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findCallsigns } from './callsigns'
-import { fit, matchMentions, oneEditApart, splitFlight } from './match'
+import { atOtherField, fit, matchMentions, oneEditApart, placeBonus, splitFlight } from './match'
 
 type A = { icao24: string; callsign: string; onGround: boolean; altitudeFt: number | null; registration?: string | null }
 const ac = (icao24: string, callsign: string, onGround = true, altitudeFt: number | null = null, registration: string | null = null): A => ({ icao24, callsign, onGround, altitudeFt, registration })
@@ -99,5 +99,43 @@ describe('matchMentions', () => {
     expect(fit(m, ac('b1', 'BAW14K'))).toBeGreaterThan(0.8)
     const [k] = findCallsigns('Speedbird 14 Kilo')
     expect(fit(k, ac('b1', 'BAW14K'))).toBe(1)
+  })
+})
+
+describe('the field the frequency belongs to', () => {
+  // JFK, with LaGuardia 9 nm to the north-west inside the same feed circle.
+  const jfk = { center: [-73.7781, 40.6413] as [number, number], elevationFt: 13 }
+  const at = (icao24: string, callsign: string, lon: number, lat: number, onGround = true, altitudeFt: number | null = null) => ({ ...ac(icao24, callsign, onGround, altitudeFt), lon, lat })
+  const atJfk = at('j1', 'DAL288', -73.785, 40.645)
+  const atLga = at('l1', 'DAL287', -73.874, 40.7769)
+
+  it('knows an aircraft on the ground at another airport', () => {
+    expect(atOtherField(atJfk, jfk)).toBe(false)
+    expect(atOtherField(atLga, jfk)).toBe(true)
+    // In the air over LaGuardia it may well be on its way here.
+    expect(atOtherField({ ...atLga, onGround: false }, jfk)).toBe(false)
+    // Without a position nothing can be said.
+    expect(atOtherField(ac('x', 'DAL1'), jfk)).toBe(false)
+  })
+
+  it('prefers this field\'s traffic', () => {
+    expect(placeBonus(atJfk, jfk)).toBeGreaterThan(0)
+    expect(placeBonus(atLga, jfk)).toBeLessThan(0)
+    // Low and far out: someone else's circuit. Higher on the way in: fine.
+    expect(placeBonus(at('c1', 'N1', -73.6, 40.75, false, 900), jfk)).toBeLessThan(0)
+    expect(placeBonus(at('c2', 'N2', -73.6, 40.75, false, 4000), jfk)).toBe(0)
+    expect(placeBonus(atJfk, undefined)).toBe(0)
+  })
+
+  it('settles a near-miss between two airports for the one being listened to', () => {
+    const slip = findCallsigns('Delta 289, taxi via Alpha')
+    // Without knowing where the field is, the two one-digit slips tie and nothing is matched.
+    expect(matchMentions(slip, [atJfk, atLga], { stationKind: 'GND' })).toEqual([])
+    expect(matchMentions(slip, [atJfk, atLga], { stationKind: 'GND', field: jfk }).map((m) => m.icao24)).toEqual(['j1'])
+  })
+
+  it('still matches an exact callsign at the other airport, but not a slip', () => {
+    expect(matchMentions(findCallsigns('Delta 287, taxi via Alpha'), [atLga], { stationKind: 'GND', field: jfk }).map((m) => m.icao24)).toEqual(['l1'])
+    expect(matchMentions(findCallsigns('Delta 286, taxi via Alpha'), [atLga], { stationKind: 'GND', field: jfk })).toEqual([])
   })
 })

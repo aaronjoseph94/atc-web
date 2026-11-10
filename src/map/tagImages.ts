@@ -14,6 +14,7 @@
  */
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { loadedPicture, logoFor, logoPicture, logosVersion, type Logo } from '../airline/logos'
+import { addImageHandler } from './imageResolver'
 
 const PREFIX = 'tag|'
 
@@ -240,6 +241,7 @@ export function attachTagImages(map: MapLibreMap): () => void {
     if (!fontsReady) drewEarly = true
   }
   map.on('styleimagemissing', onMissing)
+  const detachHandler = addImageHandler(map, (_, id) => onMissing({ id }))
 
   if (!fontsReady) {
     const family = readStyle().family
@@ -272,6 +274,7 @@ export function attachTagImages(map: MapLibreMap): () => void {
 
   return () => {
     map.off('styleimagemissing', onMissing)
+    detachHandler()
     window.clearInterval(sweep)
     removeAll()
   }

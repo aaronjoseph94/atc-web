@@ -16,10 +16,12 @@ import { playbackInstant, usePlayhead } from '../playback/playheadStore'
 import type { LabelMode } from '../settings/settingsStore'
 import { ATC_COLORS, speakerColors, type SpeakerColors } from '../ui/speaker'
 import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
-import { AircraftFx } from './fx/aircraftFx'
+import { AircraftFx, hideCoveredFins, LIVERY_MIN_ZOOM } from './fx/aircraftFx'
 import type { LiveAircraft, LivePositionBuffer } from './livePositions'
-import { ensureMapImages, ICON_SCALE, iconFor, iconImage } from './mapImages'
-import { LAYER, SRC } from './mapStyle'
+import { addImageHandler } from './imageResolver'
+import { ensureMapImages, ICON_REACH_PX, ICON_SCALE, iconFor, iconImage } from './mapImages'
+import { iconZoomFactor, LAYER, SRC } from './mapStyle'
+import { ParkedHeadings } from './parkedHeading'
 import { attachTagImages, tagKey } from './tagImages'
 
 type Props = {
@@ -49,6 +51,8 @@ const LABEL_PARKED_ZOOM = 15.2
 const WAKE_INTERVAL_MS = 220
 /** Points kept in the faint wake behind non-selected aircraft. */
 const WAKE_POINTS = 7
+/** The plain marker (a parked aircraft whose heading nobody knows) stops growing past this zoom, so close in it stays a small dot rather than a disc the size of an airliner. */
+const DOT_MAX_ZOOM = 14
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
@@ -67,6 +71,7 @@ export function AircraftLayer(props: Props) {
     // Aircraft artwork is drawn per class when a feature first asks for it.
     const onMissing = (e: { id: string }) => ensureMapImages(map, e.id)
     map.on('styleimagemissing', onMissing)
+    const detachImages = addImageHandler(map, (m, id) => ensureMapImages(m, id))
     // Callsign tags are bitmaps drawn on demand.
     const detachTags = attachTagImages(map)
 
@@ -106,11 +111,16 @@ export function AircraftLayer(props: Props) {
 
     // Lights, banking, contrails and the other aircraft effects (src/map/fx).
     const fx = new AircraftFx(map)
+    // Nose-in headings for parked aircraft that don't report one.
+    const parkedHeadings = new ParkedHeadings()
 
     const wakes = new Map<string, Feature<LineString>>()
     let wakesAt = 0
     // Speaker colours last pushed to the halo layers (only re-sent when they change).
     let haloTalk: SpeakerColors | null = null
+    // What the trail and shadow sources last held, so unchanged data isn't sent again (each send re-tiles the source in the worker).
+    let trailsMoving = false
+    let shadowsOff = false
     let last = performance.now()
     let raf = 0
 
@@ -145,11 +155,20 @@ export function AircraftLayer(props: Props) {
       const sy = Math.sin(br) * 0.55 - Math.cos(br) * 0.83
       const canvas = map.getCanvas()
       fx.begin({ t, zoom, reduceMotion: L.reduceMotion, width: canvas.clientWidth, height: canvas.clientHeight })
+      if (!playing) parkedHeadings.update(map, list, t)
+      const dotCap = Math.min(1, iconZoomFactor(DOT_MAX_ZOOM) / iconZoomFactor(zoom))
 
-      for (const a of list) {
+      let anyHi = false
+      let anyTx = false
+      for (let a of list) {
         const isSelected = a.icao24 === selected
         const transmitting = a.icao24 === active
         const hi = isSelected || transmitting
+        anyHi ||= hi
+        anyTx ||= transmitting
+        // A parked aircraft with no reported heading is drawn nose-in to its terminal when there is one.
+        const guess = !playing && a.headingKnown === false ? parkedHeadings.get(a.icao24) : null
+        if (guess != null) a = { ...a, heading: guess, headingKnown: true }
         const icon = iconFor(a)
         // Image for this frame (airborne helicopters cycle rotor frames).
         const image = iconImage(icon, !a.onGround, t, L.reduceMotion)
@@ -172,7 +191,7 @@ export function AircraftLayer(props: Props) {
             sub,
             tag: wantLabel ? tagKey(a.callsign, a.icao24, hi, sub, t) : '',
             icon: fxa.image,
-            scale: ICON_SCALE[icon] * fxa.scale,
+            scale: ICON_SCALE[icon] * fxa.scale * (icon === 'ac-dot' ? dotCap : 1),
             heading: icon === 'ac-dot' ? 0 : a.heading,
             hi: hi ? 1 : 0,
             tx: transmitting ? 1 : 0,
@@ -204,14 +223,22 @@ export function AircraftLayer(props: Props) {
           })
         }
       }
+      // The fin colour layer sits over all the artwork: leave it off aircraft another one is drawn over.
+      if (zoom >= LIVERY_MIN_ZOOM - 0.5) {
+        const k = ICON_REACH_PX * iconZoomFactor(zoom)
+        hideCoveredFins(features, (f) => k * Number(f.properties?.scale) * (f.properties?.hi ? 1.25 : 1), mpp)
+      }
       acSrc.setData({ type: 'FeatureCollection', features })
-      shadowSrc.setData(L.shadows ? { type: 'FeatureCollection', features: shadows } : EMPTY)
+      if (L.shadows) shadowSrc.setData({ type: 'FeatureCollection', features: shadows })
+      else if (!shadowsOff) shadowSrc.setData(EMPTY)
+      shadowsOff = !L.shadows
 
       // ---- trails ----------------------------------------------------------
       // Faint wakes behind everything airborne are rebuilt a few times a
       // second; the highlighted aircraft's trail is rebuilt every frame so it
       // stays glued to the icon.
-      if (t - wakesAt > WAKE_INTERVAL_MS) {
+      const rebuilt = t - wakesAt > WAKE_INTERVAL_MS
+      if (rebuilt) {
         wakesAt = t
         wakes.clear()
         if (L.trails) {
@@ -226,18 +253,23 @@ export function AircraftLayer(props: Props) {
       const focus = selected ?? active
       // A contrail replaces the wake of an aircraft that leaves one.
       for (const [id, f] of wakes) if (id !== focus && !fx.hasContrail(id)) lines.push(f)
+      const wakeCount = lines.length
       if (focus) {
         const coords = playing ? trailAt(playing.tracks[trackKeyFor(playing, focus) ?? ''] ?? [], tMs, L.trailLength * 4) : liveBuffer.trail(focus, L.trailLength, t)
         if (coords.length >= 2) lines.push(line(coords, 1))
       }
       // Contrails behind anything cruising high overhead, rebuilt every frame so they stay attached.
       for (const c of fx.contrails(list, (id) => (playing ? trailAt(playing.tracks[trackKeyFor(playing, id) ?? ''] ?? [], tMs, 16) : liveBuffer.trail(id, 16, t)))) lines.push(c)
-      trailSrc.setData({ type: 'FeatureCollection', features: lines })
+      // The wakes alone only change when they are rebuilt; the focus trail and contrails follow their aircraft every frame.
+      const moving = lines.length > wakeCount
+      if (rebuilt || moving || trailsMoving) trailSrc.setData({ type: 'FeatureCollection', features: lines })
+      trailsMoving = moving
 
       // ---- highlight rings ---------------------------------------------------
       // The aircraft being talked about wears the speaker's colour (purple while
       // ATC talks to it, blue while its pilot talks); a selected aircraft that
       // nobody is talking to keeps the plain purple selection look.
+      // Only animated while someone wears them: each paint change re-evaluates the layer.
       const wave = L.reduceMotion ? 0 : Math.sin(t / 620)
       const talk = speakerColors(st.activeSpeaker)
       if (talk !== haloTalk) {
@@ -247,14 +279,18 @@ export function AircraftLayer(props: Props) {
         map.setPaintProperty(LAYER.haloOuter, 'circle-color', color as never)
         map.setPaintProperty(LAYER.ping, 'circle-stroke-color', talk.light)
       }
-      map.setPaintProperty(LAYER.halo, 'circle-opacity', 0.36 + 0.06 * wave)
-      map.setPaintProperty(LAYER.halo, 'circle-radius', 20 + 2 * wave)
-      map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', 0.2 + 0.05 * wave)
-      map.setPaintProperty(LAYER.haloOuter, 'circle-radius', 36 + 5 * wave)
-      // Radar-style ping expanding from whoever is transmitting.
-      const phase = L.reduceMotion ? 0.4 : (t % 1500) / 1500
-      map.setPaintProperty(LAYER.ping, 'circle-radius', 12 + 34 * phase)
-      map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6)
+      if (anyHi) {
+        map.setPaintProperty(LAYER.halo, 'circle-opacity', fading(0.36 + 0.06 * wave))
+        map.setPaintProperty(LAYER.halo, 'circle-radius', 20 + 2 * wave)
+        map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', fading(0.2 + 0.05 * wave))
+        map.setPaintProperty(LAYER.haloOuter, 'circle-radius', 36 + 5 * wave)
+      }
+      if (anyTx) {
+        // Radar-style ping expanding from whoever is transmitting.
+        const phase = L.reduceMotion ? 0.4 : (t % 1500) / 1500
+        map.setPaintProperty(LAYER.ping, 'circle-radius', 12 + 34 * phase)
+        map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', fading(L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6))
+      }
 
       L.onFrame?.(list, dt)
     }
@@ -263,8 +299,10 @@ export function AircraftLayer(props: Props) {
     return () => {
       cancelAnimationFrame(raf)
       fx.clear()
+      parkedHeadings.clear()
       detachTags()
       map.off('styleimagemissing', onMissing)
+      detachImages()
       map.off('click', LAYER.hit, click)
       map.off('click', mapClick)
       map.off('mousemove', LAYER.hit, move)
@@ -284,6 +322,11 @@ function replayed(clip: ClipPack, tMs: number): LiveAircraft[] {
   const list = positionsAt(clip, tMs) as LiveAircraft[]
   for (const a of list) a.opacity = 1
   return list
+}
+
+/** A ring's opacity scaled by its aircraft's own fade, so the halo leaves with an aircraft that drops out of the feed instead of pulsing on over empty ground. */
+function fading(v: number): never {
+  return ['*', v, ['get', 'o']] as never
 }
 
 function line(coordinates: [number, number][], sel: 0 | 1): Feature<LineString> {

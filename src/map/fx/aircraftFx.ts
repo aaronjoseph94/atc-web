@@ -9,7 +9,7 @@
  * `mapStyle.ts` with sprites from `sprites.ts`. Blinking is part of that
  * per-frame data (which sprite is lit), so it costs no paint updates either.
  */
-import type { Feature, LineString } from 'geojson'
+import type { Feature, LineString, Point } from 'geojson'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import type { LiveAircraft } from '../livePositions'
 import { bankedImage, type AircraftIcon } from '../mapImages'
@@ -241,4 +241,44 @@ export function clipToLength(coords: [number, number][], maxM: number): [number,
     left -= seg
   }
   return out.reverse()
+}
+
+/**
+ * The airline colour on the fin is its own layer drawn over all the aircraft
+ * artwork, so where one aircraft is drawn over another (a parked row seen from
+ * further out, an arrival passing over the apron) the lower one's fin would
+ * show through the upper one. Clear `lv` on any aircraft another one is drawn
+ * over: higher `z` draws on top, and at the same `z` the later feature does.
+ * `reachPx(f)` is how far a feature's artwork reaches from its point, and
+ * `mPerPx` the ground metres per pixel. Mutates the features' properties.
+ */
+export function hideCoveredFins(features: Feature<Point>[], reachPx: (f: Feature<Point>) => number, mPerPx: number) {
+  const n = features.length
+  let any = false
+  for (const f of features) if (f.properties?.lv) any = true
+  if (!any) return
+  const xs = new Float64Array(n)
+  const ys = new Float64Array(n)
+  const rs = new Float64Array(n)
+  for (let i = 0; i < n; i++) {
+    const [lon, lat] = features[i].geometry.coordinates
+    xs[i] = (lon * 111_320 * Math.cos((lat * Math.PI) / 180)) / mPerPx
+    ys[i] = (lat * 110_540) / mPerPx
+    rs[i] = reachPx(features[i])
+  }
+  for (let i = 0; i < n; i++) {
+    const p = features[i].properties
+    if (!p?.lv) continue
+    const zi = Number(p.z) || 0
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue
+      const zj = Number(features[j].properties?.z) || 0
+      if (zj < zi || (zj === zi && j < i)) continue
+      // Artwork boxes overlapping by a fair margin: the upper one covers some of this one.
+      if (Math.hypot(xs[i] - xs[j], ys[i] - ys[j]) < 0.85 * (rs[i] + rs[j])) {
+        p.lv = ''
+        break
+      }
+    }
+  }
 }

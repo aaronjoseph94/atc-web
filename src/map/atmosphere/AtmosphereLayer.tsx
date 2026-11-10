@@ -25,7 +25,7 @@ import { nightFactor, sunElevation } from '../lighting/sun'
 import { ATMO_SRC, effectiveTheme } from '../mapStyle'
 import { AtmosphereOverlay, type OverlayState } from './overlay'
 import { isJetBridge, standPose } from './stands'
-import { addPavementGrain, addWaterSheen, WaterSheen } from './textures'
+import { addPavementGrain, SHEEN_IMAGE, surfaceImage, waterSheenFor, type WaterSheen } from './textures'
 import { screenWashes } from './washes'
 import { weatherFx } from './weatherFx'
 import { windsockSites } from './windsocks'
@@ -79,9 +79,9 @@ export function AtmosphereLayer({ map, airportIcao }: { map: MapLibreMap | null;
   useEffect(() => {
     if (!map) return
     addPavementGrain(map)
-    const s = new WaterSheen()
+    const s = waterSheenFor(map)
     sheen.current = s
-    addWaterSheen(map, s)
+    surfaceImage(map, SHEEN_IMAGE)
   }, [map])
 
   // The sheen is sunlight on water: full on a clear day, faint under cloud, haze or at night; still under reduced motion.

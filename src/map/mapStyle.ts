@@ -263,12 +263,12 @@ const FONT_BOLD = ['Noto Sans Bold']
  * Line width that tracks a real-world width in metres (doubles every zoom
  * level), worked out at 40°N. `m` may be an expression, so generated features
  * can carry their own width and latitude factor (`k`, see `widthScale`).
- * `minPx` keeps small marks visible when zoomed out.
+ * `minPx` keeps small marks visible when zoomed out; `topZoom` is the last stop.
  */
-function metres(m: number | unknown[], minPx = 0): unknown[] {
+function metres(m: number | unknown[], minPx = 0, topZoom = 22): unknown[] {
   // Pixels at z10, then ×2 per zoom: with 512 px tiles one pixel is 76.44 m at the equator at z10.
   const px10 = 1 / (76.437 * Math.cos((40 * Math.PI) / 180))
-  const stops = [10, 13, 14, 15, 16, 22].flatMap((z) => {
+  const stops = [10, 13, 14, 15, 16, topZoom].flatMap((z) => {
     const f = px10 * 2 ** (z - 10)
     const v = typeof m === 'number' ? m * f : ['*', m, f]
     return [z, minPx ? (typeof v === 'number' ? Math.max(minPx, v) : ['max', minPx, v]) : v]
@@ -378,7 +378,7 @@ function layers(p: Palette): LayerSpecification[] {
 
     // Gate numbers and taxiway location signs straight from OpenStreetMap.
     // Gates: small yellow chips at terminal scale, numbered from about 15.8 (as in the reference's gate views).
-    { id: 'aero-gate-dot', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 14.4, maxzoom: 15.8, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate']], layout: { 'icon-image': 'gate-chip', 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.3, 15.8, 0.5], 'icon-allow-overlap': true }, paint: {} },
+    { id: 'aero-gate-dot', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 14.4, maxzoom: 15.8, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate']], layout: { 'icon-image': 'gate-chip', 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.3, 15.8, 0.5], 'icon-allow-overlap': false, 'icon-padding': 0 }, paint: {} },
     { id: 'aero-gate', type: 'symbol', source: 'omt', 'source-layer': 'aeroway', minzoom: 15.8, filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'class'], 'gate'], ['has', 'ref']], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.8, 10.5, 18.5, 14], 'icon-image': 'gate-chip', 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 2, 4], 'text-padding': 2 }, paint: { 'text-color': '#1C1503' } },
     // Taxiway letters, laid along the pavement beside the centreline.
     {
@@ -416,7 +416,9 @@ function layers(p: Palette): LayerSpecification[] {
         'symbol-placement': 'line',
         'symbol-spacing': metres(40, 1) as never,
         'icon-image': KEEPOUT_IMAGE,
-        'icon-size': metres(['/', ownWidth(45), KEEPOUT_PX], 0.1) as never,
+        // Topped out at z20 (past the map's deepest zoom): MapLibre evaluates icon sizes at the
+        // surrounding stops, and the z22 one would pass its 255 limit and fill the console with warnings.
+        'icon-size': metres(['/', ownWidth(45), KEEPOUT_PX], 0.1, 20) as never,
         'icon-rotation-alignment': 'map',
         'icon-allow-overlap': true,
         'icon-padding': 0,
@@ -461,7 +463,7 @@ function layers(p: Palette): LayerSpecification[] {
     },
     // Occupied gates: the same chips as `aero-gate`, filled with the parked airline's colour.
     // Placed first (top layer), they win the collision and hide the plain chip underneath.
-    { id: LAYER.gateBusyDot, type: 'symbol', source: SRC.gateUse, minzoom: 14.4, maxzoom: 15.8, layout: { 'icon-image': ['get', 'chip'], 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.36, 15.8, 0.6], 'icon-allow-overlap': true }, paint: {} },
+    { id: LAYER.gateBusyDot, type: 'symbol', source: SRC.gateUse, minzoom: 14.4, maxzoom: 15.8, layout: { 'icon-image': ['get', 'chip'], 'icon-size': ['interpolate', ['linear'], ['zoom'], 14.4, 0.36, 15.8, 0.6], 'icon-allow-overlap': false, 'icon-padding': 0 }, paint: {} },
     { id: LAYER.gateBusy, type: 'symbol', source: SRC.gateUse, minzoom: 15.8, filter: ['!=', ['get', 'ref'], ''], layout: { 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': ['interpolate', ['linear'], ['zoom'], 15.8, 10.5, 18.5, 14], 'icon-image': ['get', 'chip'], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 2, 4], 'text-padding': 2 }, paint: { 'text-color': ['get', 'tc'] } },
     // Arrival / departure badge just right of an active runway's designator chip.
     {
@@ -511,7 +513,7 @@ function layers(p: Palette): LayerSpecification[] {
       type: 'symbol',
       source: SRC.aircraft,
       layout: {
-        'icon-image': ['case', ['==', ['get', 'hi'], 1], ['concat', ['get', 'icon'], '-hi'], ['get', 'icon']],
+        'icon-image': artImage(['case', ['==', ['get', 'hi'], 1], ['concat', ['get', 'icon'], '-hi'], ['get', 'icon']]),
         'icon-size': iconScale(acSize),
         'icon-rotate': ['get', 'heading'],
         'icon-rotation-alignment': 'map',
@@ -554,30 +556,92 @@ function layers(p: Palette): LayerSpecification[] {
       },
       paint: { 'icon-opacity': ['*', ['get', 'o'], ['get', 'lo'], chart ? 0.5 : 1] },
     },
-    {
-      id: LAYER.label,
-      type: 'symbol',
-      source: SRC.aircraft,
-      filter: ['==', ['get', 'lbl'], 1],
-      layout: {
-        // The whole tag (plate, airline logo, callsign, data block) is one
-        // bitmap drawn in the UI font by `tagImages.ts`; `tag` is its image id.
-        'icon-image': ['get', 'tag'],
-        // Fixed anchor and no collision pass: positions update every frame, and
-        // collision-driven placement would make the tags hop between anchors.
-        // The tag floats centred above the aircraft, as in the reference.
-        'icon-anchor': 'bottom',
-        'icon-offset': ['interpolate', ['linear'], ['zoom'], 9, ['literal', [0, -12]], 14, ['literal', [0, -17.5]], 16, ['literal', [0, -26]], 18, ['literal', [0, -49]]],
-        'icon-allow-overlap': true,
-        'icon-ignore-placement': true,
-        'symbol-sort-key': ['get', 'z'],
-      },
-      // Parked aircraft carry a faded tag, as their silhouettes are faded.
-      // Tags toward the screen edges are fainter (`eo`), keeping the eye on the middle.
-      paint: { 'icon-opacity': ['*', ['get', 'o'], ['coalesce', ['get', 'eo'], 1], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.7, 1]]] },
-    },
+    // Callsign tags. The whole tag (plate, airline logo, callsign, data block) is one
+    // bitmap drawn in the UI font by `tagImages.ts`; `tag` is its image id. The tag
+    // floats centred above the aircraft, as in the reference.
+    // Tags take part in symbol collision, so the gate chips, gate numbers and taxiway
+    // letters under them give way instead of showing through. Symbols are placed top
+    // layer first: moving and highlighted aircraft (always shown, never pushed around,
+    // as their positions change every frame) claim their space, then parked aircraft's
+    // tags, which give way to those and to each other rather than piling up along a pier.
+    tagLayer('ac-label-parked', ['all', ['==', ['get', 'lbl'], 1], ['==', ['get', 'state'], 0], ['==', ['get', 'hi'], 0]], false),
+    tagLayer(LAYER.label, ['all', ['==', ['get', 'lbl'], 1], ['any', ['!=', ['get', 'state'], 0], ['==', ['get', 'hi'], 1]]], true),
   ]
   return withAtmosphere(list as LayerSpecification[], p)
+}
+
+/**
+ * Reduced copies of the aircraft artwork, each used below its zoom (image
+ * ids carry the tier's suffix). MapLibre packs every image a symbol tile uses
+ * into that tile's atlas and uploads it again whenever the tile's data
+ * changes, which for the aircraft is every frame; with full-size artwork
+ * that was several megabytes uploaded (and premultiplied in JavaScript) per
+ * frame. A copy only needs to be as big as the aircraft is drawn on this
+ * screen at its top zoom; the style picks the copy with a `step` on zoom.
+ * Layout properties are evaluated at the tile's whole zoom level (a map at
+ * 14.9 lays out z14 tiles), so the thresholds are whole numbers and each copy
+ * is sized for the very top of its range.
+ */
+const ART_TIERS = [
+  { below: 15, suffix: '~s' },
+  { below: 16, suffix: '~m' },
+] as const
+
+/** Full-size artwork in pixels (see `mapImages`). */
+export const ART_PX = 384
+const ART_BOX = 48
+
+export type ArtTier = { below: number; suffix: string }
+
+/** Pixels a tier's copy needs for a class drawn at `scale`: its drawn box at the tier's top zoom, highlighted (a quarter bigger), on a `dpr` screen. */
+export function artTierPx(below: number, scale: number, dpr: number): number {
+  const need = ART_BOX * iconZoomFactor(below) * scale * 1.25 * Math.max(1, dpr)
+  return Math.min(ART_PX, Math.max(32, Math.ceil(need / 16) * 16))
+}
+
+/** The tiers worth having on a `dpr` screen: one whose airliner copy would be near full size anyway is left out. */
+export function artTiersFor(dpr: number): ArtTier[] {
+  return ART_TIERS.filter((t) => artTierPx(t.below, 1, dpr) < 0.8 * ART_PX)
+}
+
+let tiersHere: ArtTier[] | null = null
+/** This screen's tiers, decided once so the style and the images always agree. */
+export function artTiers(): ArtTier[] {
+  tiersHere ??= artTiersFor(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1)
+  return tiersHere
+}
+
+/** An aircraft artwork id, switched to the reduced copies on the wider views. */
+export function artImage(id: unknown): unknown {
+  const tiers = artTiers()
+  if (!tiers.length) return id
+  const out: unknown[] = ['step', ['zoom'], ['concat', id, tiers[0].suffix]]
+  for (let i = 1; i < tiers.length; i++) out.push(tiers[i - 1].below, ['concat', id, tiers[i].suffix])
+  out.push(tiers[tiers.length - 1].below, id)
+  return out
+}
+
+/** A callsign tag layer; `overlap` lets its tags draw over anything already placed (but still keep later layers' symbols off them). */
+function tagLayer(id: string, filter: unknown[], overlap: boolean): LayerSpecification {
+  return {
+    id,
+    type: 'symbol',
+    source: SRC.aircraft,
+    filter,
+    layout: {
+      'icon-image': ['get', 'tag'],
+      // Fixed anchor: collision-driven anchor changes would make the tags hop around.
+      'icon-anchor': 'bottom',
+      'icon-offset': ['interpolate', ['linear'], ['zoom'], 9, ['literal', [0, -12]], 14, ['literal', [0, -17.5]], 16, ['literal', [0, -26]], 18, ['literal', [0, -49]]],
+      'icon-allow-overlap': overlap,
+      'icon-ignore-placement': false,
+      'icon-padding': 1,
+      'symbol-sort-key': ['get', 'z'],
+    },
+    // Parked aircraft carry a faded tag, as their silhouettes are faded.
+    // Tags toward the screen edges are fainter (`eo`), keeping the eye on the middle.
+    paint: { 'icon-opacity': ['*', ['get', 'o'], ['coalesce', ['get', 'eo'], 1], ['case', ['==', ['get', 'hi'], 1], 1, ['match', ['get', 'state'], 0, 0.7, 1]]] },
+  } as unknown as LayerSpecification
 }
 
 /** Drawn size of an aircraft feature relative to the class's base: the highlighted one is a quarter bigger. Effects drawn over or under the aircraft use it too, so they stay registered. */
@@ -590,16 +654,31 @@ const acSize: unknown[] = ['*', ['get', 'scale'], ['case', ['==', ['get', 'hi'],
  * (MapLibre only allows `zoom` at the top of an expression, so the per-feature
  * factor is multiplied into every stop.)
  */
+const ICON_ZOOM_STOPS: [number, number][] = [
+  [9, 0.5],
+  [12, 0.64],
+  [14, 0.9],
+  [15, 1.2],
+  [16, 1.8],
+  [19, 14.4],
+]
+
 function iconScale(factor: unknown): unknown[] {
-  const stops: [number, number][] = [
-    [9, 0.5],
-    [12, 0.64],
-    [14, 0.9],
-    [15, 1.2],
-    [16, 1.8],
-    [19, 14.4],
-  ]
-  return ['interpolate', ['exponential', 2], ['zoom'], ...stops.flatMap(([z, v]) => [z, ['*', v, factor]])]
+  return ['interpolate', ['exponential', 2], ['zoom'], ...ICON_ZOOM_STOPS.flatMap(([z, v]) => [z, ['*', v, factor]])]
+}
+
+/** The zoom part of `iconScale` worked out in JS (same stops, same base-2 exponential interpolation), for sizing against it per frame. */
+export function iconZoomFactor(zoom: number): number {
+  const s = ICON_ZOOM_STOPS
+  if (zoom <= s[0][0]) return s[0][1]
+  for (let i = 1; i < s.length; i++) {
+    const [z1, v1] = s[i]
+    if (zoom > z1) continue
+    const [z0, v0] = s[i - 1]
+    const t = (2 ** (zoom - z0) - 1) / (2 ** (z1 - z0) - 1)
+    return v0 + (v1 - v0) * t
+  }
+  return s[s.length - 1][1]
 }
 
 const USGS_ATTR = 'Imagery: <a href="https://www.usgs.gov/programs/national-geospatial-program/national-map" target="_blank" rel="noreferrer">USGS The National Map</a>'
