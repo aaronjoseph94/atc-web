@@ -1,6 +1,6 @@
 /**
  * Full-bleed MapLibre map. Owns the live traffic query, the camera and the
- * map-level toggles (theme, radar); delegates per-frame drawing to
+ * map-level toggles (radar, trails); delegates per-frame drawing to
  * `AircraftLayer` and the painted airfield to `AirportDiagramLayer`.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
@@ -27,11 +27,10 @@ import { AtmosphereLayer } from './atmosphere/AtmosphereLayer'
 import { surfaceImage } from './atmosphere/textures'
 import { installImageResolver, type ImageHandler } from './imageResolver'
 import { ensureMapImages } from './mapImages'
-import { LightingLayer } from './lighting/LightingLayer'
 import { RunwayGateLayer } from './RunwayGateLayer'
 import type { LiveAircraft } from './livePositions'
 import { ProceduresLayer } from './ProceduresLayer'
-import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, KEEPOUT_IMAGE, KEEPOUT_PX, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
+import { applyGroundCover, applyTheme, buildStyle, KEEPOUT_IMAGE, KEEPOUT_PX, LAYER, radarTiles } from './mapStyle'
 import { useRadioCamera } from './useRadioCamera'
 
 /**
@@ -113,7 +112,6 @@ export function MapView() {
   const approachPaths = useSettings((s) => s.approachPaths)
   const weatherRadar = useSettings((s) => s.weatherRadar)
   const reduceMotion = useReducedMotion()
-  const mapTheme = useSettings((s) => s.mapTheme)
   const performanceMode = useSettings((s) => s.performance)
 
   // Rendering quality: Settings' choice (or the governor's, in auto), and the map's pixel ratio under it.
@@ -124,8 +122,6 @@ export function MapView() {
   }, [map])
 
   const airport = useMemo(() => getAirport(airportIcao), [airportIcao])
-  const isUs = airport.group === 'US'
-  const theme = effectiveTheme(mapTheme, isUs)
   const ends = useMemo(() => runwayEnds(airportIcao), [airportIcao])
 
   // ---- live traffic polling --------------------------------------------
@@ -306,27 +302,25 @@ export function MapView() {
     [map, airport, duration, reduceMotion, goHome, radioCamera],
   )
 
-  // ---- theme and toggles -------------------------------------------------------
-  // The style is built once for the starting theme; later changes repaint in place.
-  const [style] = useState(() => buildStyle(theme))
+  // ---- toggles -------------------------------------------------------
+  const [style] = useState(() => buildStyle())
 
   useEffect(() => {
     if (!map) return
-    applyTheme(map, theme)
-    applyGroundCover(map, theme, airport.arid)
-  }, [map, theme, airport.arid])
+    applyTheme(map)
+    applyGroundCover(map, airport.arid)
+  }, [map, airport.arid])
 
   useEffect(() => {
     if (!map) return
     const show = (id: string, on: boolean) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none')
-    show(LAYER.buildings, themeHasVectorBase(theme))
     show(LAYER.approach, approachPaths)
     show(LAYER.approachTick, approachPaths)
     show(LAYER.trails, trails)
     show(LAYER.shadow, shadows)
     show(LAYER.parkedShadow, shadows)
     show(LAYER.radar, weatherRadar)
-  }, [map, theme, approachPaths, trails, shadows, weatherRadar])
+  }, [map, approachPaths, trails, shadows, weatherRadar])
 
   // Radar mosaics are republished every five minutes.
   useEffect(() => {
@@ -387,7 +381,6 @@ export function MapView() {
           }}
         >
           <AirportDiagramLayer map={map} airportIcao={airportIcao} />
-          <LightingLayer map={map} airportIcao={airportIcao} />
           <ProceduresLayer map={map} airportIcao={airportIcao} />
           <RunwayGateLayer map={map} airportIcao={airportIcao} />
           <TaxiRouteLayer map={map} />

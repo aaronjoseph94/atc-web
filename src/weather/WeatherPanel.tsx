@@ -344,7 +344,7 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
               ))}
             </div>
           ) : (
-            <Hint>{airport.group === 'US' ? 'No digital ATIS is published for this airport right now.' : 'Digital ATIS text is only published for US airports. The observation above is current.'}</Hint>
+            <Hint>{airport.group === 'US' ? 'No digital ATIS right now.' : 'Digital ATIS: US airports only.'}</Hint>
           )}
 
           {taf && (
@@ -361,7 +361,7 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
             </>
           )}
 
-          <p className="mt-4 px-1 text-caption text-atc-muted">Weather from aviationweather.gov (US National Weather Service); ATIS text via atis.info. For interest only, not for flight planning.</p>
+          <p className="mt-4 px-1 text-caption text-atc-muted">Not for flight planning.</p>
         </>
       )}
     </PanelFrame>

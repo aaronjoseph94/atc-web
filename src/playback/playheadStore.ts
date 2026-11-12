@@ -18,7 +18,7 @@ export type PlayMode = 'live' | 'playback'
 export type LiveStatus = 'idle' | 'loading' | 'ok' | 'error'
 
 /** Which overlay panel is showing. Only one at a time. */
-export type Panel = 'menu' | 'airports' | 'stations' | 'transcripts' | 'settings' | 'replay' | 'traffic' | 'weather' | 'layers' | 'help' | null
+export type Panel = 'menu' | 'airports' | 'stations' | 'transcripts' | 'settings' | 'replay' | 'traffic' | 'weather' | 'help' | null
 
 /** The flight card: hidden, the compact card above the station bar, or the full-screen detail. */
 export type SheetState = 'closed' | 'card' | 'full'

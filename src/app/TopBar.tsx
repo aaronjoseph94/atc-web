@@ -14,7 +14,7 @@ import { ChevronLeft, MoreHorizontal, PanelRightOpen, RotateCw, WifiOff, X } fro
 import { useNow } from '../hooks/useNow'
 import { agoLabel } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
-import { useDock, useIsWide } from '../ui/layout'
+import { useDock, useDockActive, useIsWide } from '../ui/layout'
 import { GlassButton } from '../ui/Panel'
 
 function StatusPill() {
@@ -90,6 +90,7 @@ export function TopBar() {
   const wide = useIsWide()
   const collapsed = useDock((s) => s.collapsed)
   const setCollapsed = useDock((s) => s.setCollapsed)
+  const docked = useDockActive()
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-[max(0.75rem,var(--safe-top))] md:px-4">
@@ -119,8 +120,7 @@ export function TopBar() {
             <PanelRightOpen className="size-5" />
           </GlassButton>
         )}
-        {/* Beside the side panel the menu button lives in the panel's header instead. */}
-        {!(wide && !collapsed) && (
+        {!docked && (
           <GlassButton label="Menu" shortcut="M" tooltip={panel === 'menu' ? 'none' : 'left'} onClick={() => setPanel(panel === 'menu' ? null : 'menu')} active={panel === 'menu'}>
             <MoreHorizontal className="size-5" />
           </GlassButton>

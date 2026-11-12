@@ -2,15 +2,18 @@
  * Server-side aircraft fetching, shared by the Cloudflare Pages Function
  * (`functions/api/aircraft.ts`) and the Vite dev middleware.
  *
- * Several free, key-less ADS-B feeds give the same normalized output:
+ * Several free ADS-B aggregators give the same normalized output. Each one
+ * carries ADS-B, MLAT (multilateration of Mode S from several receivers),
+ * TIS-B/ADS-R rebroadcasts and ADS-C positions, marked per aircraft:
  *  - adsb.fi open data (readsb JSON, 1 req/s, cite + link required)
  *  - adsb.lol (readsb JSON, ODbL 1.0, dynamic rate limit)
+ *  - adsb.one (readsb JSON, 1 req/s)
  *  - airplanes.live (readsb JSON, 1 req/s, non-commercial): used with the
  *    owner's permission from airplanes.live; set ATC_ENABLE_AIRPLANES_LIVE=0
  *    to turn it off. See docs/data-sources.md
- *  - OpenSky Network (anonymous: 400 credits a day, 10 s resolution) as the
- *    last resort only, so its small daily allowance is there when the
- *    community feeds are all down
+ *  - OpenSky Network as the last resort only. Anonymous it has 400 credits a
+ *    day at 10 s resolution; with OPENSKY_CLIENT_ID / OPENSKY_CLIENT_SECRET
+ *    (a free account's API client) it gets 4,000 credits and 5 s resolution.
  *
  * The healthiest two feeds are asked at once and their answers merged
  * (freshest position per aircraft), a slow or failing feed is hedged with the
@@ -126,23 +129,60 @@ export const airplanesLive: AircraftProvider = {
   },
 }
 
-/** OpenSky Network — anonymous bbox query, 1 credit per call for an airport-sized box. */
-export const openSky: AircraftProvider = {
-  name: 'opensky',
-  credit: { label: 'The OpenSky Network', url: 'https://opensky-network.org' },
-  lastResort: true,
-  async fetch(apt, signal) {
-    const b = apt.bbox
-    const data = await getJson<{ time?: number; states?: OpenSkyState[] | null }>(
-      `https://opensky-network.org/api/states/all?lamin=${b.lamin}&lomin=${b.lomin}&lamax=${b.lamax}&lomax=${b.lomax}`,
-      signal,
-    )
-    return normalizeOpenSkyStates(data.states, data.time)
+/** adsb.one — readsb shape, free, 1 req/s. */
+export const adsbOne: AircraftProvider = {
+  name: 'adsb.one',
+  credit: { label: 'adsb.one', url: 'https://adsb.one' },
+  minIntervalMs: 1100,
+  fetch(apt, signal) {
+    const [lon, lat] = apt.center
+    return readsb(`https://api.adsb.one/v2/point/${lat}/${lon}/${apt.radiusNm}`, signal)
   },
 }
 
+const OPENSKY_TOKEN_URL = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'
+/** One bearer token per isolate; refreshed a minute before it expires. */
+let openSkyToken: { value: string; until: number } | null = null
+
+/** OpenSky OAuth2 client-credentials token (an account's API client). */
+async function openSkyBearer(id: string, secret: string, signal: AbortSignal): Promise<string> {
+  if (openSkyToken && Date.now() < openSkyToken.until) return openSkyToken.value
+  const res = await fetch(OPENSKY_TOKEN_URL, {
+    method: 'POST',
+    signal,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: id, client_secret: secret }),
+  })
+  if (!res.ok) throw new UpstreamError(`token HTTP ${res.status}`, res.status)
+  const tok = (await res.json()) as { access_token?: string; expires_in?: number }
+  if (!tok.access_token) throw new UpstreamError('token missing', 502)
+  openSkyToken = { value: tok.access_token, until: Date.now() + Math.max(60, (tok.expires_in ?? 1800) - 60) * 1000 }
+  return tok.access_token
+}
+
+/** OpenSky Network — bbox query, 1 credit per call for an airport-sized box; anonymous unless given an API client. */
+export function openSkyProvider(auth?: { id: string; secret: string }): AircraftProvider {
+  return {
+    name: 'opensky',
+    credit: { label: 'The OpenSky Network', url: 'https://opensky-network.org' },
+    lastResort: true,
+    async fetch(apt, signal) {
+      const b = apt.bbox
+      const url = `https://opensky-network.org/api/states/all?lamin=${b.lamin}&lomin=${b.lomin}&lamax=${b.lamax}&lomax=${b.lomax}`
+      const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': USER_AGENT }
+      if (auth) headers.Authorization = `Bearer ${await openSkyBearer(auth.id, auth.secret, signal)}`
+      const res = await fetch(url, { signal, headers })
+      if (!res.ok) throw new UpstreamError(`HTTP ${res.status}`, res.status)
+      const data = (await res.json()) as { time?: number; states?: OpenSkyState[] | null }
+      return normalizeOpenSkyStates(data.states, data.time)
+    },
+  }
+}
+
+export const openSky: AircraftProvider = openSkyProvider()
+
 /** Every feed the app knows, in preference order. */
-export const ALL_PROVIDERS: AircraftProvider[] = [adsbFi, adsbLol, airplanesLive, openSky]
+export const ALL_PROVIDERS: AircraftProvider[] = [adsbFi, adsbLol, adsbOne, airplanesLive, openSky]
 
 /** Settings read from the environment (Pages env bindings or `process.env` in dev). */
 export type SourceEnv = {
@@ -150,11 +190,16 @@ export type SourceEnv = {
   ATC_ENABLE_AIRPLANES_LIVE?: string
   /** Comma list of feed names to point at a dead URL, to rehearse failover. */
   ATC_FAIL_SOURCES?: string
+  /** OpenSky API client (free account): 4,000 credits a day instead of 400. */
+  OPENSKY_CLIENT_ID?: string
+  OPENSKY_CLIENT_SECRET?: string
 }
 
-/** The feeds in use for this environment (opt-ins added, rehearsal failures wired in). */
+/** The feeds in use for this environment (opt-ins added, credentials applied, rehearsal failures wired in). */
 export function providersFor(env: SourceEnv = {}): AircraftProvider[] {
-  const enabled = ALL_PROVIDERS.filter((p) => p !== airplanesLive || env.ATC_ENABLE_AIRPLANES_LIVE !== '0')
+  const enabled = ALL_PROVIDERS.filter((p) => p !== airplanesLive || env.ATC_ENABLE_AIRPLANES_LIVE !== '0').map((p) =>
+    p === openSky && env.OPENSKY_CLIENT_ID && env.OPENSKY_CLIENT_SECRET ? openSkyProvider({ id: env.OPENSKY_CLIENT_ID, secret: env.OPENSKY_CLIENT_SECRET }) : p,
+  )
   const broken = new Set((env.ATC_FAIL_SOURCES ?? '').split(',').map((s) => s.trim()).filter(Boolean))
   return enabled.map((p) => (broken.has(p.name) ? rehearsedFailure(p) : p))
 }

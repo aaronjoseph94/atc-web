@@ -33,7 +33,7 @@ export function RadioButton({ label }: { label: string }) {
   )
 }
 
-/** "● Live · KJFK Tower 119.1 via LiveATC.net", plus transcript trouble when there is any. */
+/** "● Live · KJFK Tower 119.1", plus transcript trouble when there is any. */
 export function RadioStatusLine() {
   const on = useRadio((s) => s.on)
   const status = useRadio((s) => s.status)
@@ -44,11 +44,11 @@ export function RadioStatusLine() {
   const text = statusText(status, retryInS)
   const note =
     transcripts === 'unavailable'
-      ? 'Live transcripts need the deployed site'
+      ? 'Transcripts need the deployed site'
       : transcripts === 'limited'
-        ? 'Transcripts paused for a moment'
+        ? 'Transcripts paused'
         : transcripts === 'error'
-          ? 'Transcripts unavailable right now'
+          ? 'Transcripts unavailable'
           : null
   return (
     <p className="flex min-w-0 items-center gap-1.5 px-4 pb-0.5 text-[11px] font-semibold leading-4 text-black/70" role="status" aria-live="polite">
@@ -58,7 +58,7 @@ export function RadioStatusLine() {
       {note && status === 'live' ? (
         <span className="min-w-0 truncate font-medium text-black/55">· {note}</span>
       ) : (
-        feed && status !== 'nofeed' && <span className="min-w-0 truncate font-medium text-black/55">· {feed.name} via LiveATC.net</span>
+        feed && status !== 'nofeed' && <span className="min-w-0 truncate font-medium text-black/55">· {feed.name}</span>
       )}
     </p>
   )

@@ -10,7 +10,7 @@
  * feeds can be merged by keeping the freshest position per aircraft. The
  * handler strips it before the list goes to the browser.
  */
-import type { Aircraft } from './types'
+import type { Aircraft, PositionSource } from './types'
 
 /** A normalized aircraft plus when its position was measured (server-side only). */
 export type TimedAircraft = Aircraft & { positionTime?: number }
@@ -54,6 +54,20 @@ export type ReadsbAircraft = {
   geom_rate?: number
   /** Seconds since the last position update. */
   seen_pos?: number
+  /** Message type the position came from: `adsb_icao`, `mlat`, `tisb_icao`, `adsr_icao`, `adsc`, `mode_s`… */
+  type?: string
+}
+
+/** readsb's message type as a position source (null for unknown kinds). */
+export function positionSource(type: string | undefined): PositionSource | null {
+  if (!type) return null
+  if (type.startsWith('adsb')) return 'adsb'
+  if (type.startsWith('mlat')) return 'mlat'
+  if (type.startsWith('tisb')) return 'tisb'
+  if (type.startsWith('adsr')) return 'adsr'
+  if (type.startsWith('adsc')) return 'adsc'
+  if (type === 'mode_s') return 'modes'
+  return null
 }
 
 /**
@@ -101,6 +115,8 @@ export function normalizeReadsb(list: ReadsbAircraft[] | null | undefined, nowMs
     if (emergency) ac.emergency = emergency
     const sel = num(a.nav_altitude_mcp)
     if (sel != null) ac.selectedAltitudeFt = Math.round(sel)
+    const src = positionSource(a.type)
+    if (src) ac.source = src
     ac.positionTime = Math.round(nowMs - (num(a.seen_pos) ?? 0) * 1000)
     out.push(ac)
   }
@@ -125,7 +141,11 @@ const IDX = {
   trueTrack: 10,
   verticalRate: 11,
   geoAlt: 13,
+  /** 0 ADS-B, 1 ASTERIX, 2 MLAT, 3 FLARM. */
+  positionSource: 16,
 } as const
+
+const OPENSKY_SOURCE: Record<number, PositionSource> = { 0: 'adsb', 2: 'mlat' }
 
 export type OpenSkyState = (string | number | boolean | null)[]
 
@@ -166,6 +186,7 @@ export function normalizeOpenSkyStates(states: OpenSkyState[] | null | undefined
       onGround: Boolean(s[IDX.onGround]),
       verticalRateFpm: vr == null ? null : Math.round(vr * M_TO_FT * 60),
       ...(posSec == null ? {} : { positionTime: posSec * 1000 }),
+      ...(OPENSKY_SOURCE[num(s[IDX.positionSource]) ?? -1] ? { source: OPENSKY_SOURCE[num(s[IDX.positionSource]) ?? -1] } : {}),
     })
   }
   return out

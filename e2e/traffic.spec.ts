@@ -30,7 +30,7 @@ test('the traffic list searches and selects', async ({ app, page }) => {
 
   // Nothing found says so.
   await search.fill('zzzz')
-  await expect(panel.getByText('Nothing in view matches “zzzz”.')).toBeVisible()
+  await expect(panel.getByText('Nothing matches “zzzz”.')).toBeVisible()
 
   // A tap selects the flight.
   await search.fill(JFK.helicopter.callsign)

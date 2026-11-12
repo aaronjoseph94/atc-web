@@ -295,8 +295,8 @@ describe('provider endpoints', () => {
 
 describe('providersFor', () => {
   it('uses airplanes.live unless switched off, with OpenSky last', () => {
-    expect(providersFor().map((p) => p.name)).toEqual(['adsb.fi', 'adsb.lol', 'airplanes.live', 'opensky'])
-    expect(providersFor({ ATC_ENABLE_AIRPLANES_LIVE: '0' }).map((p) => p.name)).toEqual(['adsb.fi', 'adsb.lol', 'opensky'])
+    expect(providersFor().map((p) => p.name)).toEqual(['adsb.fi', 'adsb.lol', 'adsb.one', 'airplanes.live', 'opensky'])
+    expect(providersFor({ ATC_ENABLE_AIRPLANES_LIVE: '0' }).map((p) => p.name)).toEqual(['adsb.fi', 'adsb.lol', 'adsb.one', 'opensky'])
   })
 
   it('points rehearsed failures at a dead URL', async () => {

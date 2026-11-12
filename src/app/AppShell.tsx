@@ -1,7 +1,7 @@
 /**
  * Root layout. The map fills the viewport; everything else is layered on top:
  *
- *   top chrome   — clear/back, status pill, menu; map controls down the right edge
+ *   top chrome   — clear/back, status pill, menu (on narrow screens)
  *   bottom stack — "back to automatic map", subtitles, then the flight card
  *                  or the yellow station bar (mobile: edge-to-edge, desktop: floating)
  *   overlays     — channel switcher, flight detail, panels, menu, toast
@@ -23,7 +23,7 @@ import { MapView } from '../map/MapView'
 import { AudioEngine } from '../playback/AudioEngine'
 import { getActiveCue } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
-import { HelpPanel, LayersPanel, SettingsView } from './lazyPanels'
+import { HelpPanel, SettingsView } from './lazyPanels'
 import { useSettings } from '../settings/settingsStore'
 import { StationBar } from '../station/StationBar'
 import { StationSheet } from '../station/StationSheet'
@@ -40,7 +40,7 @@ import { usePresence } from '../ui/usePresence'
 import { WeatherPanel } from '../weather/WeatherPanel'
 import { AirportPicker } from './AirportPicker'
 import { DesktopPanel } from './DesktopPanel'
-import { AutoMapPill, MapControls } from './MapControls'
+import { AutoMapPill } from './MapControls'
 import { MapGestures } from './MapGestures'
 import { Menu } from './Menu'
 import { ReplayPanel } from './ReplayPanel'
@@ -128,6 +128,8 @@ export function AppShell() {
       </div>
 
       {wide && <DesktopPanel />}
+      {/* Over the whole window: its button lives in the side panel on wide screens, the top bar otherwise. */}
+      <Menu />
       <Modals />
     </div>
   )
@@ -149,12 +151,7 @@ const MapLayer = memo(function MapLayer() {
 })
 
 const Chrome = memo(function Chrome() {
-  return (
-    <>
-      <TopBar />
-      <MapControls />
-    </>
-  )
+  return <TopBar />
 })
 
 /** Things anchored to the map area: runway callouts, gesture ripples, the menu popover and toasts. */
@@ -164,10 +161,6 @@ const MapOverlays = memo(function MapOverlays() {
       <RunwayInfo />
       <MapGestures />
       <InsightsOverlay />
-      {/* The chrome box lets clicks through to the map; the menu's own backdrop needs them back. */}
-      <div className="pointer-events-auto contents">
-        <Menu />
-      </div>
       <Toast />
     </>
   )
@@ -184,7 +177,6 @@ const Modals = memo(function Modals() {
       <ReplayPanel />
       <TrafficPanel />
       <WeatherPanel />
-      <LayersPanel />
       <SettingsView />
       <HelpPanel />
       <FeedbackSheet />

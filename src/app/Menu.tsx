@@ -22,6 +22,7 @@ export function Menu() {
   const setToast = usePlayhead((s) => s.setToast)
   const pinned = useSettings((s) => s.favourites.includes(airportIcao))
   const toggleFavourite = useSettings((s) => s.toggleFavourite)
+  const docked = useDockActive()
 
   const docked = useDockActive()
   const close = () => setPanel(null)
@@ -56,7 +57,7 @@ export function Menu() {
         tabIndex={-1}
         onKeyDown={onKeyDown}
         data-closing={closing ? '' : undefined}
-        className={`motion-pop absolute ${docked ? 'right-[1.6rem] top-[4.1rem]' : 'right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] md:right-4'} w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none`}
+        className={`motion-pop absolute w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none ${docked ? 'right-6 top-[calc(max(0.75rem,var(--safe-top))+3.5rem)]' : 'right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] md:right-4'}`}
       >
         {mode === 'playback' ? (
           <Item icon={Radio} label="Back to live" onClick={exitPlayback} />
@@ -65,7 +66,7 @@ export function Menu() {
         )}
         <Item icon={FileText} label="Transcript" shortcut="T" onClick={go('transcripts')} />
         <Item icon={List} label="Traffic" shortcut="/" onClick={go('traffic')} />
-        <Item icon={CloudSun} label="Weather and ATIS" shortcut="W" onClick={go('weather')} />
+        <Item icon={CloudSun} label="Weather" shortcut="W" onClick={go('weather')} />
         {mode === 'live' && (
           <Item
             icon={Sunrise}
@@ -90,11 +91,10 @@ export function Menu() {
           label={pinned ? `Unpin ${airportIcao}` : `Pin ${airportIcao}`}
           onClick={() => {
             toggleFavourite(airportIcao)
-            setToast(pinned ? `${airportIcao} unpinned` : `${airportIcao} pinned to the top of the airport list`)
+            setToast(pinned ? `${airportIcao} unpinned` : `${airportIcao} pinned`)
             close()
           }}
         />
-        <Item icon={Layers} label="Map" shortcut="L" onClick={go('layers')} />
         <Item icon={Settings} label="Settings" onClick={go('settings')} />
         <Item icon={CircleHelp} label="Help" shortcut="?" onClick={go('help')} />
         <Item icon={MessageSquareText} label="Send feedback" onClick={openFeedback} />

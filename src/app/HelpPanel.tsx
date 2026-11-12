@@ -9,15 +9,13 @@ import { Group, Kbd, SectionLabel, Sheet } from '../ui/Panel'
 import { CREDITS_ID, takeHelpSection, wantedHelpSection } from './helpSection'
 
 const GESTURES: [string, string][] = [
-  ['Tap an aircraft', 'Open its card and follow it'],
-  ['Tap the map', 'Let the aircraft go'],
-  ['Tap a runway', 'Its length, headings and wind'],
-  ['Tap a procedure line', 'Which arrival, departure or approach it is (turn on Procedures in the Map sheet)'],
-  ['Press and hold, or right-click', 'Centre the map there'],
-  ['Drag a card or sheet', 'Up for more, down to close'],
-  ['Drag the map', 'Take over the camera; “Back to automatic map” hands it back'],
-  ['Two fingers, or right-drag', 'Turn the map'],
-  ['Drag the replay timeline', 'Scrub through time'],
+  ['Tap aircraft', 'Follow it'],
+  ['Tap map', 'Let go'],
+  ['Tap runway', 'Details'],
+  ['Hold or right-click', 'Centre map'],
+  ['Drag card', 'Up: more. Down: close'],
+  ['Drag map', 'Manual camera'],
+  ['Two fingers or right-drag', 'Rotate'],
 ]
 
 /**

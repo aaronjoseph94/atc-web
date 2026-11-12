@@ -8,11 +8,11 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 
 **Map**
 - **Painted airfield.** Runway pavement and FAA-standard markings (threshold stripes, designators, centreline, aiming points, touchdown-zone bars, displaced-threshold arrows) are generated from surveyed runway ends, so they stay sharp at any zoom. Taxiway centrelines, holding-position bars, taxiway signs and gate numbers come from OpenStreetMap.
-- **Four looks:** night (navy with green infield), graphite, USGS aerial photos, and the FAA's VFR charts. Plus an optional NEXRAD weather-radar overlay. The US-government layers cover US airports.
+- **One look:** navy with a green infield, plus an optional NEXRAD weather-radar overlay (US).
 - **Aircraft** drawn by airframe class (narrow-body, wide-body, four-engine, regional jet, turboprop, light, helicopter, ground vehicle), with shadows that grow with height, a wake behind everything airborne, and a controller-style data block (`045↑ B738` = 4,500 ft, climbing, 737-800).
 
 **Live traffic**
-- 37 airports (29 US, 8 Canada) from free ADS-B feeds, smoothly predicted between polls and faded in and out at the edge of coverage.
+- 37 airports (29 US, 8 Canada) from free ADS-B/MLAT aggregators (adsb.fi, adsb.lol, adsb.one, airplanes.live; OpenSky as a last resort), merged, smoothly predicted between polls and faded in and out at the edge of coverage. Each aircraft says how it was positioned (ADS-B, MLAT, TIS-B…).
 - **Live radio.** Press play on the station bar (or pick a channel) to hear it live from LiveATC.net, where a feed carries that frequency (`src/api/liveatcFeeds.ts`). Each transmission is cut out of the stream in the browser, transcribed by Whisper on Cloudflare Workers AI (`/api/transcribe`), shown as a caption, in the transcript and in the flight's conversation, and the aircraft it names is highlighted while the automatic camera glides in and back out.
 - **Tower log.** Takeoffs, landings, go-arounds and line-ups are detected from positions, matched to a runway, and shown as captions when the radio is off. These are stated as facts, not quotes.
 - **Automatic map.** The camera moves to whoever is in the news and drifts back; drag the map to take over, tap "Back to automatic map" to hand it back.
@@ -39,7 +39,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 | Map | MapLibre GL 6 via `react-map-gl`; own style on OpenFreeMap vector tiles (no token) |
 | State | Zustand (playhead + persisted settings), TanStack Query (polling) |
 | Backend | Cloudflare Pages Functions (`functions/api/*`), edge cache |
-| Data | adsb.fi + adsb.lol merged, OpenSky last resort (health-aware failover); adsbdb + hexdb; aviationweather.gov + NOAA; FAA NASR. Every source and its terms: [docs/data-sources.md](docs/data-sources.md) |
+| Data | adsb.fi + adsb.lol + adsb.one + airplanes.live merged, OpenSky last resort (health-aware failover); adsbdb + hexdb; aviationweather.gov + NOAA; FAA NASR. Every source and its terms: [docs/data-sources.md](docs/data-sources.md) |
 | Tooling | oxlint, Vitest, Wrangler; Python + Piper for the replay clips |
 
 No paid APIs, fonts, icon packs or tile services are needed, and no accounts or keys. Two optional extras use the owner's own accounts, set as Cloudflare secrets: the AI features and a last-resort AirNav flight lookup (see [docs/ai-setup.md](docs/ai-setup.md)).
@@ -53,7 +53,7 @@ public/sw.js          Service worker: caches tiles/glyphs/imagery/clips, never t
 scripts/              Vite dev middleware mirroring the Functions; airport data fetcher; AI data cleanup
 scripts/clips/        Clip generator: scenarios, flight kinematics, speech synthesis, radio effect, verifier
 src/api/              Types, airport catalog, providers + normalizers, browser client
-src/app/              Shell, top bar, map controls, menu and panels
+src/app/              Shell, top bar, side panel, menu and panels
 src/discovery/        Spotting: rarity scoring of live traffic, the Spotted list, map-tag stars
 src/feedback/         The Send feedback sheet, its context and error ring
 src/flight/           Flight card and full view, plain-language phrasebook
@@ -69,7 +69,7 @@ src/ui/               Shared sheets, drag and presence helpers
 
 - `usePlayhead` is the single clock and UI state. In a scene the `<audio>` element writes `tMs`; in a rewind a timer does. The map, subtitles and station bar all read it.
 - `MapView` polls `/api/aircraft` and pushes each snapshot into the `LivePositionBuffer` (smoothing), the `LiveRecorder` (rewind) and `detectEvents` (tower log). `AircraftLayer` runs one `requestAnimationFrame` loop that samples positions and writes GeoJSON straight into MapLibre, so React never re-renders per frame.
-- `mapStyle.ts` is the whole map style. Every theme has the same layers, so switching theme only pushes new paint values.
+- `mapStyle.ts` is the whole map style.
 - `airportDiagram.ts` turns runway end points into pavement and paint polygons in real-world metres.
 - `functions/api/aircraft.ts` tries each provider in `src/api/aircraftHandler.ts`, starting the next one early if the first is slow, and caches the result at the edge for a few seconds so all clients share one upstream request per airport.
 

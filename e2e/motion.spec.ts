@@ -26,9 +26,9 @@ test.describe('reduced motion', () => {
   test('the setting stills sheets and the talking-aircraft halo', async ({ app, page }) => {
     await app.open('JFK')
     // Normal motion first: sheets animate...
-    await page.evaluate(() => window.__atc.playhead.getState().setPanel('layers'))
-    expect(await sheetMotionMs(page, 'Map')).toBeGreaterThan(100)
-    await page.getByRole('dialog', { name: 'Map' }).getByRole('button', { name: 'Close' }).click()
+    await page.keyboard.press('?')
+    expect(await sheetMotionMs(page, 'Help')).toBeGreaterThan(100)
+    await page.getByRole('dialog', { name: 'Help' }).getByRole('button', { name: 'Close' }).click()
     // ...and the halo round a selected aircraft breathes (it only animates while something wears it).
     await app.tapAircraft(JFK.departure.icao24)
     await expect.poll(async () => new Set(await haloRadii(page)).size).toBeGreaterThan(1)
@@ -38,14 +38,14 @@ test.describe('reduced motion', () => {
     await expect.poll(async () => new Set(await haloRadii(page)).size).toBe(1)
     await page.keyboard.press('Escape')
     await expect.poll(() => app.playhead((s) => s.selectedIcao)).toBeNull()
-    await page.evaluate(() => window.__atc.playhead.getState().setPanel('layers'))
-    expect(await sheetMotionMs(page, 'Map')).toBeLessThan(1)
+    await page.keyboard.press('?')
+    expect(await sheetMotionMs(page, 'Help')).toBeLessThan(1)
   })
 
   test('the operating system setting is honoured too', async ({ app, page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await app.open('JFK')
-    await page.evaluate(() => window.__atc.playhead.getState().setPanel('layers'))
-    expect(await sheetMotionMs(page, 'Map')).toBeLessThan(1)
+    await page.keyboard.press('?')
+    expect(await sheetMotionMs(page, 'Help')).toBeLessThan(1)
   })
 })

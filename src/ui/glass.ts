@@ -47,8 +47,6 @@ export type GlassSignals = {
 
 /** Idle frames slower than this (under ~45 fps) leave no headroom for blur. */
 export const PROBE_SLOW_MS = 22
-/** Big surfaces get blur only with frames at least this quick (a steady 60 fps or better). */
-export const PROBE_FULL_MS = 18
 /** While the map is being dragged, a median frame above this (under ~38 fps) turns the blur off. */
 export const WATCHDOG_SLOW_MS = 26
 
@@ -58,10 +56,8 @@ export function chooseGlass(s: GlassSignals): GlassTier {
   if (s.cores != null && s.cores > 0 && s.cores < 4) return 'off'
   if (s.memoryGb != null && s.memoryGb > 0 && s.memoryGb < 4) return 'off'
   if (s.frameMs != null && s.frameMs > PROBE_SLOW_MS) return 'off'
-  // Big blurred surfaces want real headroom: a fast machine, or Apple's compositor.
-  const strong = s.apple || ((s.cores ?? 0) >= 6 && (s.memoryGb == null || s.memoryGb >= 8))
-  if (!strong || (s.frameMs != null && s.frameMs > PROBE_FULL_MS)) return 'lite'
-  return 'full'
+  // ponytail: big blurred surfaces (sheets, the side panel) cost real frame time over a live map; never on by default.
+  return 'lite'
 }
 
 /** One step down, for the watchdog. */

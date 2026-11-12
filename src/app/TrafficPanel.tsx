@@ -24,8 +24,8 @@ import { EmptyState, ListSkeleton, OfflineArt, QuietArt, StateAction } from '../
 import { ActivityList } from './ActivityList'
 import { classifyAircraft, isVehicle, TRAFFIC_ORDER, type TrafficGroup } from './panel/overview'
 
-/** `docked`: rendered in the desktop side panel instead of as a sheet. */
-export function TrafficPanel({ docked = false }: { docked?: boolean }) {
+/** `docked`: rendered in the desktop side panel instead of as a sheet; `search` is its query when the panel owns the search box. */
+export function TrafficPanel({ docked = false, search }: { docked?: boolean; search?: string }) {
   const open = usePlayhead((s) => s.panel === 'traffic') || docked
   const mode = usePlayhead((s) => s.mode)
   const airportIcao = usePlayhead((s) => s.airportIcao)
@@ -35,7 +35,8 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
   const setHover = usePlayhead((s) => s.setHover)
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const speedUnit = useSettings((s) => s.speedUnit)
-  const [query, setQuery] = useState('')
+  const [ownQuery, setQuery] = useState('')
+  const query = search ?? ownQuery
   const [list, setList] = useState<Aircraft[]>([])
   const queryClient = useQueryClient()
   // Same busy state as the map's offline card, so a tap on "Try again" visibly does something.
@@ -101,7 +102,7 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
 
       {total === 0 ? (
         q ? (
-          <EmptyState title="No matches">Nothing in view matches “{query}”.</EmptyState>
+          <EmptyState title="No matches">Nothing matches “{query}”.</EmptyState>
         ) : mode === 'live' && liveStatus === 'error' ? (
           <EmptyState
             art={<OfflineArt />}
@@ -112,13 +113,13 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
               </StateAction>
             }
           >
-            The tracking feeds aren’t answering. It keeps retrying by itself.
+            Feeds not answering. Retrying.
           </EmptyState>
         ) : mode === 'live' && liveStatus !== 'ok' ? (
           <ListSkeleton />
         ) : (
           <EmptyState art={<QuietArt className="rounded-[22px] ring-1 ring-white/10" />} title={`All quiet at ${airport.icao}`}>
-            No aircraft in view right now. New ones appear here as they come within range.
+            No aircraft in range.
           </EmptyState>
         )
       ) : (

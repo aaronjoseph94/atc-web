@@ -109,7 +109,7 @@ export function StationSheet() {
           ))}
 
           <p className="mt-3 px-1 text-[11px] leading-relaxed text-black/55">
-            {FAA_CYCLE_DATE && airport.group === 'US' ? `Frequencies from the FAA’s ${FAA_CYCLE_DATE} data cycle.` : 'Frequencies from OurAirports.'} For interest only, not for navigation.
+            {FAA_CYCLE_DATE && airport.group === 'US' ? `FAA cycle ${FAA_CYCLE_DATE}.` : 'Published frequencies.'} Not for navigation.
           </p>
         </div>
       </div>

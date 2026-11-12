@@ -46,7 +46,7 @@ export type QualityProfile = {
 }
 
 export const PROFILES: Record<QualityTier, QualityProfile> = {
-  beautiful: { motionPx: 0.5, minSendMs: 0, maxPixelRatio: 2, contrails: true, particles: 1, overlayFps: 30, waterSheen: true, glass: 'full' },
+  beautiful: { motionPx: 0.5, minSendMs: 0, maxPixelRatio: 1.5, contrails: true, particles: 1, overlayFps: 30, waterSheen: true, glass: 'full' },
   balanced: { motionPx: 0.75, minSendMs: 30, maxPixelRatio: 1.5, contrails: true, particles: 0.6, overlayFps: 24, waterSheen: true, glass: 'lite' },
   smooth: { motionPx: 1, minSendMs: 50, maxPixelRatio: 1, contrails: false, particles: 0.35, overlayFps: 15, waterSheen: false, glass: 'off' },
 }

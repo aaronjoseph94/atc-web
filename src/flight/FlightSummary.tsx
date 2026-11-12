@@ -8,6 +8,7 @@
 import { ArrowDownRight, ArrowRight, ArrowUpRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { getAirport } from '../api/airports'
+import { POSITION_SOURCE_LABEL } from '../api/types'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, formatVerticalRate, useSettings } from '../settings/settingsStore'
 import { Ticker } from '../ui/Ticker'
@@ -73,6 +74,7 @@ export function FlightSummary({ flight }: { flight: FlightView }) {
         tone={squawkAlert || emergency ? 'alert' : undefined}
         hint={emergency ? `emergency: ${emergency}` : squawkAlert ? squawkAlert : d.squawk === '1200' ? 'flying visually (VFR)' : d.squawk ? 'assigned by ATC' : null}
       />
+      {d.source && <Cell label="Position" value={POSITION_SOURCE_LABEL[d.source]} hint={d.source === 'mlat' ? 'multilateration' : d.source === 'tisb' || d.source === 'adsr' ? 'rebroadcast' : null} />}
       <Cell label={`From ${airport.icao}`} value={formatDistance(fromAirport.nm, speedUnit)} hint={fromAirport.nm < 0.5 ? 'on the field' : `${compassDirection(fromAirport.bearing)} of the field`} />
     </section>
   )

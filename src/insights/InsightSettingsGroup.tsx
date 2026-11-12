@@ -27,7 +27,7 @@ export function InsightSettingsGroup() {
     <>
       <SectionLabel>Learn and alerts</SectionLabel>
       <Group>
-        <Row label="Learn mode" hint="Underline ATC terms in transcripts, captions and the weather; tap one to learn what it means">
+        <Row label="Learn mode" hint="Tap underlined ATC terms for a definition">
           <Toggle checked={s.learn} onChange={(v) => s.update('learn', v)} label="Learn mode" />
         </Row>
         <button
@@ -42,16 +42,16 @@ export function InsightSettingsGroup() {
           <span className="flex-1">All ATC terms</span>
           <ChevronRight className="size-4 text-white/40" />
         </button>
-        <Row label="Airport briefing" hint="A short summary when an airport opens, and every 20 minutes">
+        <Row label="Airport briefing" hint="Summary on open and every 20 min">
           <Toggle checked={s.briefing} onChange={(v) => s.update('briefing', v)} label="Airport briefing" />
         </Row>
-        <Row label="What did I miss?" hint="Offer a recap when you come back after 5 minutes or more">
+        <Row label="What did I miss?" hint="Recap after 5 min away">
           <Toggle checked={s.catchUp} onChange={(v) => s.update('catchUp', v)} label="What did I miss" />
         </Row>
       </Group>
 
       <Group className="mt-2">
-        <Row label="Alerts" hint="Go-arounds, emergencies and other unusual moments, as they happen">
+        <Row label="Alerts" hint="Go-arounds, emergencies, oddities">
           <Toggle checked={s.alerts} onChange={(v) => s.update('alerts', v)} label="Alerts" />
         </Row>
         {s.alerts && (

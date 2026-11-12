@@ -24,6 +24,7 @@ export const MAP_CREDITS: Credit[] = [
 export const TRAFFIC_CREDITS: Credit[] = [
   { name: 'adsb.fi', href: 'https://adsb.fi' },
   { name: 'adsb.lol (ODbL)', href: 'https://opendatacommons.org/licenses/odbl/1-0/' },
+  { name: 'adsb.one', href: 'https://adsb.one' },
   { name: 'The OpenSky Network', href: 'https://opensky-network.org' },
 ]
 

@@ -95,7 +95,7 @@ test.describe('screens for review (not compared)', () => {
     await shot('04-channels')
   })
 
-  test('traffic, layers, radio and transcript', async ({ app, page, stubs }, info) => {
+  test('traffic, radio and transcript', async ({ app, page, stubs }, info) => {
     const shot = screens(page, info)
     stubs.transcribeQueue.push({ text: 'JetBlue nine twenty four, runway three one left, line up and wait' })
     await app.open('JFK')
@@ -103,11 +103,6 @@ test.describe('screens for review (not compared)', () => {
     await app.settled(app.view('traffic', 'Traffic at JFK'))
     await shot('05-traffic')
     if (!app.docked) await app.view('traffic', 'Traffic at JFK').getByRole('button', { name: 'Close' }).first().click()
-
-    await page.evaluate(() => window.__atc.playhead.getState().setPanel('layers'))
-    await app.settled(page.getByRole('dialog', { name: 'Map' }))
-    await shot('06-layers')
-    await page.getByRole('dialog', { name: 'Map' }).getByRole('button', { name: 'Close' }).click()
 
     await page.getByRole('button', { name: /^Listen live to / }).click()
     await expect(page.getByRole('button', { name: 'Open the radio transcript' })).toContainText('JetBlue', { timeout: 45_000 })

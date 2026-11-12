@@ -29,6 +29,8 @@ const devCache = memoryCache()
 const sourceEnv = () => ({
   ATC_ENABLE_AIRPLANES_LIVE: process.env.ATC_ENABLE_AIRPLANES_LIVE,
   ATC_FAIL_SOURCES: process.env.ATC_FAIL_SOURCES,
+  OPENSKY_CLIENT_ID: process.env.OPENSKY_CLIENT_ID,
+  OPENSKY_CLIENT_SECRET: process.env.OPENSKY_CLIENT_SECRET,
 })
 
 /** AI config comes from the shell environment in dev (never from files in the repo). */
