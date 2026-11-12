@@ -10,8 +10,6 @@
 import { useSettings } from '../settings/settingsStore'
 import { SectionLabel } from '../ui/Panel'
 import { formatLength } from './format'
-import { sideProfile } from './sideProfiles'
-import { SideView } from './SideView'
 import { aircraftProfile, type TypeFacts } from './types'
 
 type Props = {
@@ -35,12 +33,11 @@ function engines(e: TypeFacts['engines']): string {
   return `${e.count} ${e.type}${e.count === 1 ? '' : 's'}`
 }
 
-export function AircraftPanel({ type, category, registration, dbName, dbManufacturer, onGround = false }: Props) {
+export function AircraftPanel({ type, category, registration, dbName, dbManufacturer }: Props) {
   const altitudeUnit = useSettings((s) => s.altitudeUnit)
   const profile = aircraftProfile({ type, category, dbName, dbManufacturer })
   const facts = profile.facts
   const isHeli = profile.shape === 'ac-heli'
-  const side = sideProfile({ shape: profile.shape, type, lengthM: facts?.lengthM, spanM: facts?.spanM, gear: onGround })
   const title = profile.title ?? 'Aircraft type not reported'
   const about = facts ? [facts.kind, facts.firstFlight != null ? `since ${facts.firstFlight}` : null] : [profile.title ? 'No specifications on file' : 'Drawn by its class']
 
@@ -56,11 +53,8 @@ export function AircraftPanel({ type, category, registration, dbName, dbManufact
     <section aria-label="Aircraft" className="mt-5">
       <SectionLabel>Aircraft</SectionLabel>
       <div className="ui-card overflow-hidden px-4 pb-3.5 pt-3">
-        {/* The drawing sits on a faint pool of light, so the pale airframe reads on the dark card. */}
-        <div className="relative mx-auto h-[6.5rem] w-full max-w-[22rem]" style={{ backgroundImage: 'radial-gradient(60% 55% at 50% 60%, rgba(140,165,220,0.13), rgba(140,165,220,0) 75%)' }}>
-          <SideView profile={side} label={`Side view of ${profile.title ?? 'the aircraft'}`} animKey={`${profile.shape}:${type ?? ''}`} className="absolute inset-x-1 inset-y-2 h-[calc(100%-1rem)] w-[calc(100%-0.5rem)] drop-shadow-[0_5px_6px_rgba(0,0,0,0.4)]" />
-        </div>
-        <h3 className="mt-2.5 truncate text-subhead font-semibold leading-tight">{title}</h3>
+        {/* No picture for now: the owner is supplying the artwork for this section. */}
+        <h3 className="truncate text-subhead font-semibold leading-tight">{title}</h3>
         <p className="mt-0.5 truncate text-caption text-white/50">
           {registration && (
             <>
