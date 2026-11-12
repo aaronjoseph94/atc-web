@@ -481,47 +481,14 @@ body,
   display: none;
 }
 
-/* Keep the (required) attribution unobtrusive: a small glass chip like the other map controls. */
-.maplibregl-ctrl-attrib {
-  background: rgb(27 35 51 / 0.72) !important;
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  color: #9aa3b5 !important;
-  font-family: var(--font-sans);
-  font-size: 11px !important;
-  line-height: 16px;
-  border-radius: 12px !important;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
-}
-.maplibregl-ctrl-attrib.maplibregl-compact {
-  min-height: 24px;
-}
-.maplibregl-ctrl-attrib.maplibregl-compact-show {
-  padding: 3px 28px 3px 10px;
-}
-.maplibregl-ctrl-attrib a {
-  color: #c4cbd8 !important;
-}
-.maplibregl-ctrl-attrib-button {
-  filter: invert(1);
-  opacity: 0.55;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-.maplibregl-ctrl-attrib-button:hover {
-  opacity: 0.9;
-}
-.maplibregl-ctrl-bottom-right {
-  bottom: calc(var(--bottom-stack, 8.25rem) + 0.25rem);
-  transition: bottom var(--duration-sheet) var(--ease-sheet);
-}
-@media (min-width: 768px) {
-  .maplibregl-ctrl-bottom-right {
-    bottom: 0.5rem;
-  }
-  /* No room beside the floating bar (AppShell sets the class): above it instead, clear of its 1.5rem lift. */
-  .attrib-lift .maplibregl-ctrl-bottom-right {
-    bottom: calc(var(--bottom-stack, 8.25rem) + 2rem);
-  }
+/*
+ * The map draws nothing of MapLibre's own on top of itself: no attribution
+ * button, no logo. The credits its data needs are in the menu and under
+ * Help > Map data and credits.
+ */
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-logo {
+  display: none !important;
 }
 
 /*
@@ -758,13 +725,6 @@ body,
     translate: calc(var(--pane-dir, 1) * 16px) 0;
   }
 }
-@media (min-width: 1024px) {
-  .maplibregl-ctrl-bottom-right {
-    right: var(--dock-w, 0px);
-    transition: right var(--duration-sheet) var(--ease-sheet);
-  }
-}
-
 /* Honour OS-level reduced motion in addition to the in-app setting. */
 @media (prefers-reduced-motion: reduce) {
   *,

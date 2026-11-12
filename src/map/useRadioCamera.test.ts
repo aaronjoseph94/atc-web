@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LiveAircraft } from './livePositions'
-import { cameraTargets, easeInOutCubic, focusZoom } from './useRadioCamera'
+import { alreadyFramed, cameraEase, cameraTargets, flyDuration, FLY_MAX_MS, FLY_MIN_MS, focusZoom, FRAMED_OFFSET, FRAMED_ZOOM_IN, FRAMED_ZOOM_OUT } from './useRadioCamera'
 
 const airport = { zoom: 12.2, elevationFt: 13 }
 
@@ -18,12 +18,51 @@ describe('radio camera', () => {
     expect(focusZoom({ onGround: true, altitudeFt: null }, { zoom: 15.9, elevationFt: 0 })).toBeLessThanOrEqual(16)
   })
 
-  it('eases in and out', () => {
-    expect(easeInOutCubic(0)).toBe(0)
-    expect(easeInOutCubic(1)).toBe(1)
-    expect(easeInOutCubic(0.5)).toBeCloseTo(0.5)
-    expect(easeInOutCubic(0.1)).toBeLessThan(0.1)
-    expect(easeInOutCubic(0.9)).toBeGreaterThan(0.9)
+  it('zooms modestly: a taxiing aircraft keeps a kilometre or so of airfield around it', () => {
+    const ground = focusZoom({ onGround: true, altitudeFt: null }, airport)
+    // Ground metres across a 430 px phone at this zoom, at JFK's latitude.
+    const across = (430 * 78271.5 * Math.cos((40.64 * Math.PI) / 180)) / 2 ** ground
+    expect(across).toBeGreaterThan(700)
+    expect(across).toBeLessThan(1600)
+  })
+
+  it('eases softly at both ends and never rushes the middle', () => {
+    expect(cameraEase(0)).toBe(0)
+    expect(cameraEase(1)).toBe(1)
+    expect(cameraEase(0.5)).toBeCloseTo(0.5)
+    expect(cameraEase(0.1)).toBeLessThan(0.02)
+    expect(cameraEase(0.9)).toBeGreaterThan(0.98)
+    let top = 0
+    let last = 0
+    for (let i = 1; i <= 1000; i++) {
+      const v = cameraEase(i / 1000)
+      expect(v).toBeGreaterThanOrEqual(last)
+      top = Math.max(top, (v - last) * 1000)
+      last = v
+    }
+    // Peak speed under twice the average speed of the move.
+    expect(top).toBeLessThan(2)
+  })
+
+  it('takes 1.6 to 2.2 seconds, longer for a bigger move', () => {
+    expect(flyDuration(0, 0)).toBe(FLY_MIN_MS)
+    expect(flyDuration(0.3, 0)).toBeGreaterThan(FLY_MIN_MS)
+    expect(flyDuration(0.2, 2.6)).toBe(FLY_MAX_MS)
+    expect(flyDuration(5, -4)).toBe(FLY_MAX_MS)
+    expect(flyDuration(0.3, 1.5)).toBeGreaterThan(flyDuration(0.3, 0.5))
+    expect(FLY_MIN_MS).toBeGreaterThanOrEqual(1600)
+    expect(FLY_MAX_MS).toBeLessThanOrEqual(2200)
+  })
+
+  it('leaves the camera alone when the aircraft is already framed', () => {
+    const want = 14.8
+    expect(alreadyFramed(0.05, want, want)).toBe(true)
+    expect(alreadyFramed(FRAMED_OFFSET, want - FRAMED_ZOOM_OUT, want)).toBe(true)
+    expect(alreadyFramed(0.1, want + FRAMED_ZOOM_IN, want)).toBe(true)
+    // Too far from the middle, too far out, or so close in that nothing around it shows.
+    expect(alreadyFramed(FRAMED_OFFSET + 0.05, want, want)).toBe(false)
+    expect(alreadyFramed(0.05, 12.4, want)).toBe(false)
+    expect(alreadyFramed(0.05, 17, want)).toBe(false)
   })
 })
 

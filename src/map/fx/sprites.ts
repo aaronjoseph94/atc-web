@@ -48,11 +48,15 @@ export function exhaustImage(shape: ShapeId, frame: 0 | 1): string {
   return `${PREFIX.exhaust}${shape}-${frame}`
 }
 
-/** Glow radii (core, halo) per band, in icon-box pixels. */
+/**
+ * Glow radii (core, halo) per band, in icon-box pixels. Small on purpose:
+ * seen from above an aircraft's lights are pinpricks on the wingtips and
+ * tail, not lamps. They should be found when looked for, never noticed first.
+ */
 const GLOW: Record<LightBand, [number, number]> = {
-  0: [1.5, 5.2],
-  1: [0.85, 3],
-  2: [0.34, 1.25],
+  0: [1.4, 4.6],
+  1: [0.72, 2.4],
+  2: [0.28, 0.95],
 }
 
 type Ctx = CanvasRenderingContext2D
@@ -71,20 +75,20 @@ function pixels(ctx: Ctx): ImageData {
   return ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
 }
 
-/** A light: soft halo plus a hot core. `rgb` as "r,g,b". */
+/** A light: a faint soft halo around a small core in the light's own colour (only part-whitened, so it never glares). `rgb` as "r,g,b". */
 function glow(ctx: Ctx, x: number, y: number, rgb: string, core: number, halo: number, strength = 1) {
   const g = ctx.createRadialGradient(x, y, 0, x, y, halo)
-  g.addColorStop(0, `rgba(${rgb},${0.85 * strength})`)
-  g.addColorStop(0.22, `rgba(${rgb},${0.42 * strength})`)
-  g.addColorStop(0.55, `rgba(${rgb},${0.12 * strength})`)
+  g.addColorStop(0, `rgba(${rgb},${0.56 * strength})`)
+  g.addColorStop(0.25, `rgba(${rgb},${0.2 * strength})`)
+  g.addColorStop(0.6, `rgba(${rgb},${0.05 * strength})`)
   g.addColorStop(1, `rgba(${rgb},0)`)
   ctx.fillStyle = g
   ctx.beginPath()
   ctx.arc(x, y, halo, 0, Math.PI * 2)
   ctx.fill()
   const c = ctx.createRadialGradient(x, y, 0, x, y, core)
-  c.addColorStop(0, `rgba(255,255,255,${strength})`)
-  c.addColorStop(0.5, `rgba(${rgb},${0.95 * strength})`)
+  c.addColorStop(0, `rgba(${whiten(rgb, 0.45)},${0.9 * strength})`)
+  c.addColorStop(0.55, `rgba(${rgb},${0.7 * strength})`)
   c.addColorStop(1, `rgba(${rgb},0)`)
   ctx.fillStyle = c
   ctx.beginPath()
@@ -92,11 +96,20 @@ function glow(ctx: Ctx, x: number, y: number, rgb: string, core: number, halo: n
   ctx.fill()
 }
 
-const RED = '255,56,48'
-const GREEN = '64,255,150'
-const WHITE = '255,252,240'
-const STROBE = '235,245,255'
-const BEACON = '255,40,36'
+/** `rgb` mixed `k` of the way to white. */
+function whiten(rgb: string, k: number): string {
+  return rgb
+    .split(',')
+    .map((v) => Math.round(Number(v) + (255 - Number(v)) * k))
+    .join(',')
+}
+
+// A little off the pure signal colours: softer on the eye against the navy map.
+const RED = '255,84,76'
+const GREEN = '92,236,160'
+const WHITE = '255,246,226'
+const STROBE = '232,240,255'
+const BEACON = '255,72,64'
 
 /** Room around the icon box for glows that spill past the wingtips. */
 const LIGHT_BOX = 60
@@ -114,18 +127,18 @@ export function drawLights(a: Anchors, bits: string, band: LightBand, bankDeg = 
   if (bits.includes('N')) {
     glow(ctx, -left, ty, RED, core, halo)
     glow(ctx, right, ty, GREEN, core, halo)
-    glow(ctx, 0, tailY, WHITE, core * 0.8, halo * 0.7, 0.8)
+    glow(ctx, 0, tailY, WHITE, core * 0.8, halo * 0.7, 0.7)
   }
   if (bits.includes('B')) {
     const [, by] = toIconPx(a, a.beacon)
-    glow(ctx, 0, by, BEACON, core * 1.1, halo * 1.35)
+    glow(ctx, 0, by, BEACON, core, halo * 1.1, 0.75)
   }
   if (bits.includes('S')) {
-    // Strobes sit just behind the wingtip lights and outshine them.
+    // Strobes sit just behind the wingtip lights: a brief glint, only a touch brighter than the lights beside it.
     const back = core * 0.6
-    glow(ctx, -left, ty + back, STROBE, core * 1.3, halo * 1.7)
-    glow(ctx, right, ty + back, STROBE, core * 1.3, halo * 1.7)
-    glow(ctx, 0, tailY + back, STROBE, core, halo * 1.2, 0.85)
+    glow(ctx, -left, ty + back, STROBE, core * 1.05, halo * 1.2, 0.8)
+    glow(ctx, right, ty + back, STROBE, core * 1.05, halo * 1.2, 0.8)
+    glow(ctx, 0, tailY + back, STROBE, core * 0.85, halo * 0.9, 0.6)
   }
   return pixels(ctx)
 }
@@ -133,32 +146,38 @@ export function drawLights(a: Anchors, bits: string, band: LightBand, bankDeg = 
 /** The landing-light pool is nothing but soft gradients, so one pixel per box pixel is plenty (it is uploaded again every frame, see `FIN_RATIO`). */
 const LANDING_RATIO = 1
 
-/** The landing lights: a soft pool of light thrown ahead of the nose. */
+/**
+ * The landing and taxi lights: a faint, warm pool of light on the ground
+ * ahead of the nose. Shorter than the aircraft is long, and tungsten-warm
+ * rather than white, so it reads as light falling on pavement and not as a
+ * beam.
+ */
 export function drawLanding(a: Anchors): { data: ImageData; size: number } {
   const [, noseY] = toIconPx(a, a.nose)
-  const reach = BOX * FILL * 1.05
+  const reach = BOX * FILL * 0.82
   const size = Math.ceil(2 * (Math.abs(noseY) + reach + 4))
   const ctx = canvas(size, size, LANDING_RATIO)
-  const cy = noseY - reach * 0.48
+  const cy = noseY - reach * 0.46
   ctx.save()
   ctx.translate(0, cy)
-  ctx.scale(0.42, 1)
+  ctx.scale(0.4, 1)
   const g = ctx.createRadialGradient(0, reach * 0.3, 0, 0, 0, reach * 0.62)
-  g.addColorStop(0, 'rgba(255,250,232,0.5)')
-  g.addColorStop(0.45, 'rgba(255,248,226,0.2)')
-  g.addColorStop(1, 'rgba(255,246,220,0)')
+  g.addColorStop(0, 'rgba(255,236,198,0.26)')
+  g.addColorStop(0.4, 'rgba(255,232,190,0.1)')
+  g.addColorStop(0.75, 'rgba(255,230,186,0.035)')
+  g.addColorStop(1, 'rgba(255,228,182,0)')
   ctx.fillStyle = g
   ctx.beginPath()
   ctx.arc(0, 0, reach * 0.62, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
-  // The lamps themselves, in the wing roots / nose gear.
-  const spot = ctx.createRadialGradient(0, noseY - 1, 0, 0, noseY - 1, 4.5)
-  spot.addColorStop(0, 'rgba(255,255,245,0.9)')
-  spot.addColorStop(1, 'rgba(255,255,245,0)')
+  // The lamps themselves, in the wing roots / nose gear: a small warm point.
+  const spot = ctx.createRadialGradient(0, noseY - 1, 0, 0, noseY - 1, 3)
+  spot.addColorStop(0, 'rgba(255,244,220,0.55)')
+  spot.addColorStop(1, 'rgba(255,240,212,0)')
   ctx.fillStyle = spot
   ctx.beginPath()
-  ctx.arc(0, noseY - 1, 4.5, 0, Math.PI * 2)
+  ctx.arc(0, noseY - 1, 3, 0, Math.PI * 2)
   ctx.fill()
   return { data: pixels(ctx), size }
 }
@@ -180,8 +199,8 @@ export function drawExhaust(a: Anchors, frame: 0 | 1): ImageData {
       ctx.translate(ex + wobble * side * 0.4, ey + len * 0.5)
       ctx.scale(w / len, 1)
       const g = ctx.createRadialGradient(0, -len * 0.3, 0, 0, 0, len * (frame === 0 ? 0.55 : 0.5))
-      g.addColorStop(0, 'rgba(232,236,244,0.55)')
-      g.addColorStop(0.5, 'rgba(226,232,242,0.22)')
+      g.addColorStop(0, 'rgba(232,236,244,0.34)')
+      g.addColorStop(0.5, 'rgba(226,232,242,0.13)')
       g.addColorStop(1, 'rgba(220,228,240,0)')
       ctx.fillStyle = g
       ctx.beginPath()

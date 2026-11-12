@@ -47,7 +47,8 @@ export const ICON_SCALE = Object.fromEntries(
     const s = getShape(id)
     const rel = (Math.max(s.span, s.length) / REFERENCE_LENGTH) ** 0.62
     const floor = id === 'ac-vehicle' || id === 'ac-dot' ? 0 : id === 'ac-heli' ? 0.68 : 0.62
-    const fixed: Partial<Record<ShapeId, number>> = { 'ac-vehicle': 0.4, 'ac-dot': 0.42 }
+    // The dot (a parked aircraft nobody knows the heading of) is kept small: a row of them shouldn't outweigh the aircraft drawn around it.
+    const fixed: Partial<Record<ShapeId, number>> = { 'ac-vehicle': 0.4, 'ac-dot': 0.35 }
     return [id, Math.round((fixed[id] ?? Math.max(floor, rel)) * 1000) / 1000]
   }),
 ) as Record<AircraftIcon, number>

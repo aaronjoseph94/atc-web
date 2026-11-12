@@ -66,7 +66,21 @@ describe('night paint plan', () => {
     for (const { layer } of specs) expect((layer.layout as { visibility: string }).visibility).toBe('none')
     const { prop, value } = lightOpacity(LIGHT_LAYER.runwayCore, 0.5)
     expect(prop).toBe('circle-opacity')
-    expect(value[value.length - 1]).toBe(0.5)
+    // Half way to night, half the layer's full strength.
+    const full = lightOpacity(LIGHT_LAYER.runwayCore, 1).value
+    expect(value[value.length - 1]).toBeCloseTo((full[full.length - 1] as number) / 2)
     expect(lightOpacity(LIGHT_LAYER.apronWash, 1).prop).toBe('fill-opacity')
+  })
+
+  it('keeps the lights mellow: no layer at full strength, blooms fainter than cores', () => {
+    const peak = (id: string) => {
+      const v = lightOpacity(id, 1).value
+      return v[v.length - 1] as number
+    }
+    for (const id of Object.values(LIGHT_LAYER)) expect(peak(id)).toBeLessThanOrEqual(0.8)
+    expect(peak(LIGHT_LAYER.runwayBloom)).toBeLessThan(peak(LIGHT_LAYER.runwayCore) / 2)
+    expect(peak(LIGHT_LAYER.taxiBloom)).toBeLessThan(peak(LIGHT_LAYER.taxiCore) / 2)
+    // Taxiway lights are everywhere, so they stay below the runway's.
+    expect(peak(LIGHT_LAYER.taxiCore)).toBeLessThan(peak(LIGHT_LAYER.runwayCore))
   })
 })

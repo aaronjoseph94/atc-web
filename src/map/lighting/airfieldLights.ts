@@ -31,18 +31,23 @@ export type GlowFeature = Feature<Point, { r: number }>
 /** Light colours, sampled to read as the real fixtures do in night photos. */
 export const LIGHT = {
   white: '#FFE6B0',
+  /** Runway centreline lights: the same warm white, held back so a long runway isn't a string of beads. */
+  centre: '#C9B88F',
   yellow: '#FFC02E',
   green: '#2EE58C',
   red: '#FF3B2F',
-  approach: '#F4F6FF',
+  approach: '#D5DCEE',
   taxiBlue: '#4A74FF',
   taxiGreen: '#2FD877',
 } as const
 
+/** How far a light's core is whitened from its glow colour. Kept low: a near-white core is what makes a light glare. */
+export const CORE_WHITEN = 0.38
+
 /** A light point with its whiter core colour worked out. */
 function light(p: LngLat, color: string, size = 1): LightFeature {
   const c = parseColor(color)!
-  const core = formatColor(mixColor(c, [255, 255, 255, 1], 0.55))
+  const core = formatColor(mixColor(c, [255, 255, 255, 1], CORE_WHITEN))
   return { type: 'Feature', properties: { c: color, k: core, s: size }, geometry: { type: 'Point', coordinates: p } }
 }
 
@@ -55,6 +60,8 @@ export const CENTRE_SPACING_M = 30
 /** Runways at least this long and wide get centreline and approach lights. */
 const CENTRELINE_MIN = { lengthM: 2400, widthM: 44 }
 const ILS_MIN = { lengthM: 1800, widthM: 44 }
+/** Size factor of an approach light: the bars are many lights close together, so each is kept small. */
+const APPROACH_SIZE = 0.7
 /** Most runway lights generated for one airport. */
 export const MAX_RUNWAY_LIGHTS = 8000
 
@@ -162,7 +169,8 @@ export function runwayLights(airport: string): LightFeature[] {
         if (longer.some((o) => onRunway(o, p, 1))) return
         const d = Math.min(s, L - s)
         const color = d < 300 ? LIGHT.red : d < 900 ? (i % 2 ? LIGHT.red : LIGHT.white) : LIGHT.white
-        out.push(light(p, color, 0.8))
+        // Inset fixtures: from above they are far dimmer than the raised edge lights.
+        out.push(light(p, color === LIGHT.white ? LIGHT.centre : color, 0.55))
       })
     }
 
@@ -179,9 +187,10 @@ export function runwayLights(airport: string): LightFeature[] {
         const crossbars: [number, number][] = faa ? [[300, 15]] : [150, 300, 450, 600, 750].map((d, i) => [d, 6 + i * 3])
         for (let d = 30; d <= reach + 1e-6; d += 30) {
           const s = thr + dir * d
-          for (const t of [-3, -1.5, 0, 1.5, 3]) out.push(light(r.at(s, t), LIGHT.approach, 1.15))
+          // Three small lights a bar, not five big ones: drawn overlapping they added up to one white blob per bar.
+          for (const t of [-3, 0, 3]) out.push(light(r.at(s, t), LIGHT.approach, APPROACH_SIZE))
           const bar = crossbars.find(([at]) => Math.abs(at - d) < 1)
-          if (bar) for (let t = 4.5; t <= bar[1] + 1e-6; t += 1.5) for (const side of [-1, 1]) out.push(light(r.at(s, side * t), LIGHT.approach, 1.15))
+          if (bar) for (let t = 6; t <= bar[1] + 1e-6; t += 3) for (const side of [-1, 1]) out.push(light(r.at(s, side * t), LIGHT.approach, APPROACH_SIZE))
         }
       }
     }
