@@ -20,7 +20,7 @@ import { findCallsigns, guessSpeaker, splitCalls } from './callsigns'
 import { createGate } from './gate'
 import { hintCallsigns } from './hints'
 import { matchMentions } from './match'
-import { onSegment } from './player'
+import { onSegment, radioDelayMs } from './player'
 import { useRadio, type Transmission } from './radioStore'
 import type { Segment } from './segmenter'
 import type { Understanding } from './understand/result'
@@ -116,16 +116,35 @@ export type CallMeta = { stationId: string; airport: string; kind: StationKind |
 
 type Held = { call: Transmission; words?: Transmission['words'] }
 
+/**
+ * When a call will be heard: the radio plays as late as the map draws the aircraft, so a call
+ * reaches the speakers `radioDelayMs()` after it was spoken.
+ */
+const heardAt = (call: Transmission) => call.at + radioDelayMs()
+
+/** Shortest wait for the AI, even when the call is already due (a late transcript). */
+const MIN_AI_WAIT_MS = 2_500
+/** A little past the moment the call starts playing, so an answer just behind it still makes it. */
+const AI_GRACE_MS = 1_200
+
 const gate = createGate<Held, Understanding>({
   waitMs: AI_WAIT_MS,
+  // The AI has until the call is heard: the radio's delay is its working time.
+  waitFor: (h) => (radioDelayMs() > 0 ? Math.max(MIN_AI_WAIT_MS, heardAt(h.call) + AI_GRACE_MS - Date.now()) : AI_WAIT_MS),
   // Order matters within a channel; channels do not wait for each other.
   channel: (h) => `${h.call.airport}|${h.call.stationId}`,
   process: (h) => requestUnderstanding(h.call),
   publish: (h, u) => {
     const call = settleCall(h.call, u)
-    publish(call, h.words)
-    // The taxi watcher has just seen the published words; this covers a clearance only the answer could read.
-    if (u) routeTaxiFrom(call, u, call.text)
+    const out = () => {
+      publish(call, h.words)
+      // The taxi watcher has just seen the published words; this covers a clearance only the answer could read.
+      if (u) routeTaxiFrom(call, u, call.text)
+    }
+    // Ready before it is heard: show it (caption, highlight, camera) as the audio reaches it.
+    const wait = heardAt(h.call) - Date.now()
+    if (wait > 50) window.setTimeout(out, wait)
+    else out()
   },
   upgrade: (h, u) => applyUnderstanding(h.call, u),
   onChange: () => syncPending(),

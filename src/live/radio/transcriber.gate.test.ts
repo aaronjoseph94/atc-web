@@ -9,7 +9,7 @@ import { useAiSettings } from '../../ai/aiSettings'
 import { resetAiLimits } from '../../ai/client'
 import { usePlayhead } from '../../playback/playheadStore'
 
-vi.mock('./player', () => ({ onSegment: () => () => {} }))
+vi.mock('./player', () => ({ onSegment: () => () => {}, radioDelayMs: () => 0 }))
 
 const { AI_WAIT_MS, ingest } = await import('./transcriber')
 const { useRadio } = await import('./radioStore')
