@@ -4,7 +4,8 @@
  * the same badges as the tab bar (new calls, alerts, the aircraft count).
  * The airport, the channel and play/pause stay on the station bar, as ever.
  */
-import { PanelRightOpen } from 'lucide-react'
+import { MoreHorizontal, PanelRightOpen } from 'lucide-react'
+import { usePlayhead } from '../../playback/playheadStore'
 import { DOCK_TABS, type DockTab } from '../../ui/layout'
 import { Tooltip } from '../../ui/Panel'
 import { PANEL_ICON } from './icons'
@@ -15,6 +16,8 @@ const RAIL_BUTTON = 'has-tooltip pressable relative grid size-10 place-items-cen
 
 export function PanelRail({ shown, onOpen }: { shown: boolean; onOpen: (tab?: DockTab) => void }) {
   const signals = useTabSignals()
+  const menuOpen = usePlayhead((s) => s.panel === 'menu')
+  const setPanel = usePlayhead((s) => s.setPanel)
 
   return (
     <nav
@@ -44,6 +47,19 @@ export function PanelRail({ shown, onOpen }: { shown: boolean; onOpen: (tab?: Do
           </button>
         )
       })}
+      {shown && <span aria-hidden className="my-1 h-px w-6 bg-white/10" />}
+      {shown && <button
+        type="button"
+        aria-label="Menu"
+        aria-keyshortcuts="M"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        className={`${RAIL_BUTTON} ${menuOpen ? 'bg-white/15 text-white' : ''}`}
+        onClick={() => setPanel(menuOpen ? null : 'menu')}
+      >
+        <MoreHorizontal aria-hidden {...PANEL_ICON} />
+        {!menuOpen && <Tooltip label="Menu" shortcut="M" side="left" />}
+      </button>}
     </nav>
   )
 }

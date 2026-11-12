@@ -75,23 +75,14 @@ test.describe('live radio', () => {
     await expect.poll(() => app.playhead((s) => [s.activeCallsign, s.activeSpeaker])).toEqual([CALLS[1].aircraft.icao24, 'pilot'])
     await expect.poll(async () => (await waves(page)).color).toBe(PILOT_BLUE)
 
-    // The transcript: both calls, searchable, filterable to radio calls.
+    // The transcript: both calls.
     await caption.click()
     const transcript = app.view('transcripts', 'Transcripts')
     await expect(transcript).toBeVisible()
     for (const c of CALLS) await expect(transcript.getByRole('listitem').filter({ hasText: c.text })).toBeVisible()
-    const search = transcript.getByRole('searchbox', { name: 'Search transcripts' })
-    await search.fill('heading')
-    await expect(transcript.getByText(/^1 match\b/)).toBeVisible()
-    await expect(transcript.getByRole('listitem')).toHaveCount(1)
-    await expect(transcript.locator('mark').first()).toHaveText(/^heading$/i)
-    await search.fill('')
-    // Only radio here: takeoffs and landings are listed under Recent activity in the traffic panel.
-    const filters = transcript.getByRole('toolbar', { name: 'Filters' })
-    await expect(filters.getByRole('button', { name: 'Tower log' })).toHaveCount(0)
-    await filters.getByRole('button', { name: 'Only calls on this channel' }).click()
-    await expect(transcript.getByRole('listitem').filter({ hasText: CALLS[0].text })).toBeVisible()
-    await filters.getByRole('button', { name: 'Only calls on this channel' }).click()
+    // No search box or filter chips: just the calls.
+    await expect(transcript.getByRole('searchbox')).toHaveCount(0)
+    await expect(transcript.getByRole('toolbar', { name: 'Filters' })).toHaveCount(0)
 
     // Tapping a call points at its aircraft: it replays the call's recorded audio and lights the
     // aircraft up, or (with no audio kept) selects it.

@@ -66,14 +66,9 @@ test('a recorded scene plays, seeks and goes back to live', async ({ app, page }
   if (app.docked) await expect(app.dockTab('Radio')).toHaveAttribute('aria-selected', 'true')
   const lines = transcript.getByRole('listitem')
   await expect.poll(() => lines.count()).toBeGreaterThan(6)
-  // Search narrows it to the matching calls, highlighted.
-  const search = transcript.getByRole('searchbox', { name: 'Search transcripts' })
-  await search.fill('go around')
-  await expect(transcript.getByText(/^\d+ match(es)?$/)).toBeVisible()
-  await expect(lines.first()).toContainText('Speedbird one seven three heavy, go around')
-  await expect(lines.first().locator('mark').first()).toHaveText(/^(go|around)/i)
-  await search.fill('Speedbird')
-  await expect(transcript.getByText(/^[6-9] matches/)).toBeVisible()
+  // No search box or filter chips: just the calls.
+  await expect(transcript.getByRole('searchbox')).toHaveCount(0)
+  await expect(transcript.getByRole('toolbar', { name: 'Filters' })).toHaveCount(0)
   // Tapping a call jumps the replay there.
   await lines.filter({ hasText: 'Speedbird one seven three heavy, Kennedy Tower' }).getByRole('button').click()
   if (!app.docked) await expect(transcript).toBeHidden()

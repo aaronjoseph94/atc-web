@@ -151,16 +151,9 @@ test.describe('radio AI', () => {
     const readback = calls.filter({ hasText: 'American 100, left 220, up to 5,000.' })
     await expect(readback.getByText('Pilot', { exact: true })).toBeVisible()
 
-    // The plain-English line, a handoff chip; the raw words still searchable.
+    // The cleaned call and a handoff chip (no Explain toggle or search box any more).
     await expect(transcript.getByText('American 100 should turn left')).toHaveCount(0)
-    await transcript.getByRole('switch', { name: 'Explain calls' }).click()
-    await expect(transcript.getByText('American 100 should turn left to 220°')).toBeVisible()
-    const search = transcript.getByRole('searchbox', { name: 'Search transcripts' })
-    await search.fill('niner')
-    await expect(transcript.getByText(/^1 match\b/)).toBeVisible()
-    await expect(transcript.locator('mark').first()).toHaveText(/^niner$/i)
-    await search.fill('')
-    await transcript.getByRole('switch', { name: 'Explain calls' }).click()
+    await expect(transcript.getByRole('switch', { name: 'Explain calls' })).toHaveCount(0)
 
     // Following the handoff tunes Departure.
     await transcript.getByRole('button', { name: 'Switch to Departure 135.9' }).click()

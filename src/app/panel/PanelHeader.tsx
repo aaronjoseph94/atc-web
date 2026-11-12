@@ -9,6 +9,7 @@
  */
 import { MoreHorizontal, PanelRightClose } from 'lucide-react'
 import { usePlayhead } from '../../playback/playheadStore'
+import { useDock } from '../../ui/layout'
 import type { DockTab } from '../../ui/layout'
 import { Tooltip } from '../../ui/Panel'
 import { PANEL_ICON, PANEL_ICON_BUTTON } from './icons'
@@ -31,6 +32,9 @@ export function PanelHeader({ tab, flightShown, onPick, onCollapse }: { tab: Doc
 function PanelMenuButton() {
   const open = usePlayhead((s) => s.panel === 'menu')
   const setPanel = usePlayhead((s) => s.setPanel)
+  // Tucked away, the panel's own button gives way to the rail's (one Menu button on screen at a time).
+  const collapsed = useDock((s) => s.collapsed)
+  if (collapsed) return null
   return (
     <button
       type="button"

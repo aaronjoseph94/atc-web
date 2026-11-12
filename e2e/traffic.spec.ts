@@ -59,8 +59,8 @@ test('takeoffs and landings are listed under recent activity, not in the transcr
   // The transcript is for what was said on the radio.
   await openPanel('transcripts')
   const transcript = app.view('transcripts', 'Transcripts')
-  await expect(transcript.getByRole('searchbox', { name: 'Search transcripts' })).toBeVisible()
-  await expect(transcript.getByRole('toolbar', { name: 'Filters' }).getByRole('button', { name: 'Tower log' })).toHaveCount(0)
+  await expect(transcript).toBeVisible()
+  await expect(transcript.getByRole('searchbox')).toHaveCount(0)
   await expect(transcript.getByText(text)).toHaveCount(0)
 
   // The traffic sheet lists it (the side panel's Now tab on a wide screen), colour-coded as a takeoff.
