@@ -13,11 +13,14 @@
  */
 import { offset, toLocal, type LngLat } from '../../map/geo'
 
-export type TaxiLine = { ref: string | null; coords: LngLat[] }
+/** What a line is when it isn't a taxiway: the motion model (`src/map/motion`) adds runway centrelines and airside service roads to its own graphs. */
+export type LineKind = 'runway' | 'road'
+
+export type TaxiLine = { ref: string | null; coords: LngLat[]; kind?: LineKind }
 
 export type XY = { x: number; y: number }
 
-export type TaxiEdge = { a: number; b: number; ref: string | null; len: number }
+export type TaxiEdge = { a: number; b: number; ref: string | null; len: number; kind?: LineKind }
 
 export type TaxiGraph = {
   origin: LngLat
@@ -42,7 +45,7 @@ export function cleanRef(ref: unknown): string | null {
   return r && r.length <= 4 ? r : null
 }
 
-type Seg = { p: XY; q: XY; ref: string | null; cuts: number[] }
+type Seg = { p: XY; q: XY; ref: string | null; kind?: LineKind; cuts: number[] }
 
 /** Closest point on segment pq to c, as a parameter 0..1 and the distance. */
 export function project(p: XY, q: XY, c: XY): { t: number; d: number; x: number; y: number } {
@@ -65,7 +68,7 @@ export function buildGraph(lines: TaxiLine[], origin: LngLat): TaxiGraph {
     })
     for (let i = 1; i < pts.length; i++) {
       if (Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) < 0.05) continue
-      segs.push({ p: pts[i - 1], q: pts[i], ref, cuts: [] })
+      segs.push({ p: pts[i - 1], q: pts[i], ref, kind: line.kind, cuts: [] })
     }
   }
 
@@ -155,11 +158,14 @@ export function buildGraph(lines: TaxiLine[], origin: LngLat): TaxiGraph {
       const t = ts[k]
       const n = nodeAt(t === 1 ? s.q : { x: s.p.x + (s.q.x - s.p.x) * t, y: s.p.y + (s.q.y - s.p.y) * t })
       if (n !== prev) {
-        const key = prev < n ? `${prev}:${n}:${s.ref}` : `${n}:${prev}:${s.ref}`
+        const key = `${prev < n ? `${prev}:${n}` : `${n}:${prev}`}:${s.ref}${s.kind ? `:${s.kind}` : ''}`
         if (!edgeKeys.has(key)) {
           edgeKeys.add(key)
-          edges.push({ a: prev, b: n, ref: s.ref, len: Math.hypot(nodes[n].x - nodes[prev].x, nodes[n].y - nodes[prev].y) })
-          if (s.ref) refs.add(s.ref)
+          const edge: TaxiEdge = { a: prev, b: n, ref: s.ref, len: Math.hypot(nodes[n].x - nodes[prev].x, nodes[n].y - nodes[prev].y) }
+          if (s.kind) edge.kind = s.kind
+          edges.push(edge)
+          // Only taxiways have names the router steers by.
+          if (s.ref && !s.kind) refs.add(s.ref)
         }
       }
       prev = n

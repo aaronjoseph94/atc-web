@@ -26,6 +26,7 @@ import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
 import { AircraftFx, hideCoveredFins, LIVERY_MIN_ZOOM } from './fx/aircraftFx'
 import type { LiveAircraft, LivePositionBuffer } from './livePositions'
 import { addImageHandler } from './imageResolver'
+import { loadPavement } from './motion/pavementLoader'
 import { ensureMapImages, ICON_REACH_PX, ICON_SCALE, iconFor, iconImage } from './mapImages'
 import { iconZoomFactor, LAYER, SRC } from './mapStyle'
 import { ParkedHeadings } from './parkedHeading'
@@ -78,6 +79,24 @@ export function AircraftLayer(props: Props) {
   useEffect(() => {
     latest.current = props
   })
+
+  // ---- motion: the airport's pavement ------------------------------------
+  // Ground traffic follows the taxiway and runway centrelines (src/map/motion). They are read from
+  // the map's z14 tiles a moment after the airport opens, so the map's own tiles go first.
+  const airportIcao = usePlayhead((s) => s.airportIcao)
+  useEffect(() => {
+    let wanted = true
+    const timer = setTimeout(() => {
+      void loadPavement(airportIcao).then((data) => {
+        if (wanted) liveBuffer.setPavement(data)
+      })
+    }, 900)
+    return () => {
+      wanted = false
+      clearTimeout(timer)
+      liveBuffer.setPavement(null)
+    }
+  }, [airportIcao, liveBuffer])
 
   useEffect(() => {
     if (!map) return
@@ -211,8 +230,8 @@ export function AircraftLayer(props: Props) {
         const guess = !playing && a.headingKnown === false ? parkedHeadings.get(a.icao24) : null
         if (guess != null) a = { ...a, heading: guess, headingKnown: true }
         const icon = iconFor(a)
-        // Image for this frame (airborne helicopters cycle rotor frames).
-        const image = iconImage(icon, !a.onGround, t, L.reduceMotion)
+        // Image for this frame (airborne helicopters cycle rotor frames; a vehicle gets the drawing for its kind).
+        const image = iconImage(icon, !a.onGround, t, L.reduceMotion, a)
         const parked = a.onGround && (a.speedKt ?? 0) < 5
         const state = a.onGround ? (parked ? 0 : 1) : 2
         const agl = a.onGround || a.altitudeFt == null ? 0 : Math.max(0, a.altitudeFt - L.elevationFt)

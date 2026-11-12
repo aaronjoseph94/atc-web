@@ -141,6 +141,8 @@ export function MapView() {
 
   // A new airport starts a new session: stale positions, history and event memory go.
   useEffect(() => resetLiveSession, [airportIcao])
+  // The motion buffer delays the picture by about one and a half polls; tell it how often we poll.
+  useEffect(() => liveBuffer.expectInterval(pollSeconds * 1000), [pollSeconds])
 
   const { data, dataUpdatedAt, isError, isPending } = query
   useEffect(() => {
@@ -154,7 +156,13 @@ export function MapView() {
       const events = detectEvents(eventState, data.aircraft, ends, airport.elevationFt, now)
       if (events.length) {
         liveRecorder.addEvents(events)
-        usePlayhead.getState().addEvents(events)
+        // Traffic is drawn a few seconds late (livePositions.ts). The tower log waits just as long,
+        // so "landed runway 27C" appears as the aircraft is seen to land, not ten seconds before.
+        const shownAt = usePlayhead.getState().airportIcao
+        window.setTimeout(() => {
+          const s = usePlayhead.getState()
+          if (s.airportIcao === shownAt && s.mode === 'live') s.addEvents(events)
+        }, liveBuffer.delayMs)
       }
       setLive('ok', data.aircraft.length, data.provider)
     } else if (isPending && usePlayhead.getState().liveStatus !== 'error') {

@@ -246,3 +246,65 @@ export function taxiwaysInTile(layers: MvtLayer[], z: number, x: number, y: numb
   }
   return out
 }
+
+/** A polygon as its rings in lng/lat (outer ring and any holes; tested even-odd). */
+export type LngLatPolygon = LngLat[][]
+
+/** Everything an aircraft or a vehicle can move on, as one tile has it. */
+export type TilePavement = {
+  taxiways: TaxiLine[]
+  /** Runway centrelines. */
+  runways: TaxiLine[]
+  aprons: LngLatPolygon[]
+  /** Runway surfaces drawn as areas (not every runway has one). */
+  runwayAreas: LngLatPolygon[]
+  /** The airport's own grounds. */
+  aerodromes: LngLatPolygon[]
+}
+
+/**
+ * The paved surfaces in one decoded tile, for keeping ground traffic on them
+ * (`src/map/motion`). Lines are clipped to the tile so neighbours meet edge
+ * to edge; polygons keep the tile's margin, which only makes them overlap.
+ */
+export function pavementInTile(layers: MvtLayer[], z: number, x: number, y: number): TilePavement {
+  const out: TilePavement = { taxiways: [], runways: [], aprons: [], runwayAreas: [], aerodromes: [] }
+  for (const layer of layers) {
+    if (layer.name !== 'aeroway') continue
+    const at = ([px, py]: [number, number]) => tileToLngLat(z, x, y, px, py, layer.extent)
+    for (const f of layer.features) {
+      const cls = f.props.class
+      if (f.type === 2 && (cls === 'taxiway' || cls === 'runway')) {
+        const ref = typeof f.props.ref === 'string' ? f.props.ref : null
+        for (const line of f.geometry)
+          for (const piece of clipLine(line, layer.extent)) {
+            if (cls === 'taxiway') out.taxiways.push({ ref, coords: piece.map(at) })
+            else out.runways.push({ ref, coords: piece.map(at), kind: 'runway' })
+          }
+      } else if (f.type === 3 && (cls === 'apron' || cls === 'runway' || cls === 'aerodrome')) {
+        const rings = f.geometry.filter((r) => r.length >= 4).map((r) => r.map(at))
+        if (!rings.length) continue
+        if (cls === 'apron') out.aprons.push(rings)
+        else if (cls === 'runway') out.runwayAreas.push(rings)
+        else out.aerodromes.push(rings)
+      }
+    }
+  }
+  return out
+}
+
+/** Service roads in one decoded tile (the roads airside vehicles drive on, among others), clipped to the tile. */
+export function serviceRoadsInTile(layers: MvtLayer[], z: number, x: number, y: number): TaxiLine[] {
+  const out: TaxiLine[] = []
+  for (const layer of layers) {
+    if (layer.name !== 'transportation') continue
+    for (const f of layer.features) {
+      if (f.type !== 2 || f.props.class !== 'service') continue
+      // Car parks and private drives are not where a follow-me car goes.
+      if (f.props.service === 'parking_aisle' || f.props.service === 'driveway' || f.props.service === 'drive-through') continue
+      for (const line of f.geometry)
+        for (const piece of clipLine(line, layer.extent)) out.push({ ref: null, kind: 'road', coords: piece.map(([px, py]) => tileToLngLat(z, x, y, px, py, layer.extent)) })
+    }
+  }
+  return out
+}
