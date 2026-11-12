@@ -1,7 +1,8 @@
 /**
  * Desktop layout: on wide screens (≥ 1024 px) a side panel is docked on the
- * right, hosting the selected flight or the Transcript / Traffic / Weather
- * tabs. Phones and tablets keep the floating sheets.
+ * right, hosting the Now / Radio / Traffic / Weather tabs and, over them,
+ * the selected flight. Tucked away it leaves a slim rail. Phones and tablets
+ * keep the floating sheets.
  *
  * Width, collapsed state and last tab are a per-viewer convenience, kept in
  * localStorage (and fine to lose).
@@ -9,8 +10,8 @@
 import { useSyncExternalStore } from 'react'
 import { create } from 'zustand'
 
-export type DockTab = 'transcripts' | 'traffic' | 'weather'
-export const DOCK_TABS: DockTab[] = ['transcripts', 'traffic', 'weather']
+export type DockTab = 'now' | 'transcripts' | 'traffic' | 'weather'
+export const DOCK_TABS: DockTab[] = ['now', 'transcripts', 'traffic', 'weather']
 
 /** Viewport width from which the side panel docks. */
 export const DOCK_BREAKPOINT = 1024
@@ -19,6 +20,8 @@ export const DOCK_MAX = 480
 export const DOCK_DEFAULT = 400
 /** Gap between the panel and the window edge. */
 export const DOCK_INSET = 12
+/** Width of the rail the panel leaves behind when it is tucked away. */
+export const DOCK_RAIL = 56
 /** The map keeps at least this much width beside the panel. */
 const MAP_MIN = 600
 
@@ -28,9 +31,9 @@ export function clampDockWidth(want: number, viewport: number): number {
   return Math.round(Math.max(DOCK_MIN, Math.min(roomy, want)))
 }
 
-/** Space the panel takes from the right of the map area (0 while hidden). */
-export function dockReserve(active: boolean, width: number, viewport: number): number {
-  return active ? clampDockWidth(width, viewport) + DOCK_INSET : 0
+/** Space the panel takes from the right of the map area: its width when open, its rail's when tucked away. */
+export function dockReserve(open: boolean, width: number, viewport: number): number {
+  return (open ? clampDockWidth(width, viewport) : DOCK_RAIL) + DOCK_INSET
 }
 
 const KEY = 'atc.dock'
@@ -38,7 +41,7 @@ const KEY = 'atc.dock'
 type Saved = { width: number; collapsed: boolean; tab: DockTab }
 
 function load(): Saved {
-  const fallback: Saved = { width: DOCK_DEFAULT, collapsed: false, tab: 'transcripts' }
+  const fallback: Saved = { width: DOCK_DEFAULT, collapsed: false, tab: 'now' }
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<Saved> | null
     if (!raw) return fallback
@@ -97,7 +100,7 @@ export function useIsWide(): boolean {
   )
 }
 
-/** The side panel is showing (wide screen and not collapsed). */
+/** The side panel is showing in full (wide screen and not tucked away to its rail). */
 export function useDockActive(): boolean {
   const wide = useIsWide()
   const collapsed = useDock((s) => s.collapsed)

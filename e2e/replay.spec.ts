@@ -49,7 +49,7 @@ test('a recorded scene plays, seeks and goes back to live', async ({ app, page }
   await expect.poll(() => app.playhead((s) => s.tMs)).toBeGreaterThanOrEqual(before + 4000)
 
   // Pause and play.
-  await page.getByRole('button', { name: 'Pause' }).click()
+  await page.getByRole('button', { name: 'Pause', exact: true }).click()
   await expect.poll(async () => (await audio(page))?.paused).toBe(true)
   await page.getByRole('button', { name: 'Play', exact: true }).click()
   await expect.poll(async () => (await audio(page))?.paused).toBe(false)
@@ -59,7 +59,7 @@ test('a recorded scene plays, seeks and goes back to live', async ({ app, page }
   await page.getByRole('menuitem', { name: /^Transcript/ }).click()
   const transcript = app.view('transcripts', 'Transcript')
   await expect(transcript).toBeVisible()
-  if (app.docked) await expect(app.dockTab('Transcript')).toHaveAttribute('aria-selected', 'true')
+  if (app.docked) await expect(app.dockTab('Radio')).toHaveAttribute('aria-selected', 'true')
   const lines = transcript.getByRole('listitem')
   await expect.poll(() => lines.count()).toBeGreaterThan(6)
   // Search narrows it to the matching calls, highlighted.

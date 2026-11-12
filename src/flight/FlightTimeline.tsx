@@ -16,6 +16,8 @@ import { runwayEnds } from '../map/airportDiagram'
 import { sampleOnGround, trackKeyFor } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, useSettings, type AltitudeUnit, type SpeedUnit } from '../settings/settingsStore'
+import { Badge } from '../ui/kit'
+import { SectionLabel } from '../ui/Panel'
 import { arrivalEstimate, buildTimeline, formatCountdown, formatDuration, monotonePath, stepLabel, valueAt, type FlightRole, type Step, type TrackPoint } from './timeline'
 import type { FlightView } from './useFlight'
 
@@ -134,15 +136,17 @@ export function FlightTimeline({ flight, info }: { flight: FlightView; info: Fli
   ].filter((m): m is { t: number; label: string } => !!m)
 
   return (
-    <section aria-label="Flight timeline" className="mt-4 animate-rise overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/[0.04]">
+    <section aria-label="Flight timeline" className="mt-5 animate-rise">
+      <SectionLabel>Timeline</SectionLabel>
+      <div className="ui-card overflow-hidden">
       {/* Headline */}
       <div className="flex items-start justify-between gap-3 bg-gradient-to-br from-atc-card/25 via-atc-card/5 to-transparent px-4 pb-3 pt-3.5">
         <div className="min-w-0">
-          <div className="text-caption2 font-semibold uppercase tracking-[0.06em] text-white/50">{headline.label}</div>
+          <div className="text-caption font-semibold text-white/60">{headline.label}</div>
           <div className="mt-0.5 font-sans text-title1 font-bold tabular-nums text-white">{headline.value}</div>
           {headline.sub && <div className="mt-0.5 truncate text-caption text-white/55">{headline.sub}</div>}
         </div>
-        <span className="mt-0.5 shrink-0 rounded-full bg-atc-purple/20 px-2.5 py-1 text-caption2 font-semibold text-[#C4B5FF] ring-1 ring-atc-purple/30">{ROLE_LABEL[timeline.role]}</span>
+        <Badge tone="purple" className="mt-0.5">{ROLE_LABEL[timeline.role]}</Badge>
       </div>
 
       <TrackChart
@@ -160,11 +164,12 @@ export function FlightTimeline({ flight, info }: { flight: FlightView; info: Fli
 
       <Steps steps={timeline.steps} role={timeline.role} clock={clock} altitudeUnit={altitudeUnit} reduced={reduced} eta={eta ? now + eta.remainingMs : null} />
 
-      <p className="px-4 pb-3 pt-1 text-caption2 text-white/40">
+      <p className="px-4 pb-3 pt-1 text-caption2 text-white/50">
         {full.length
           ? `Worked out from ${live ? `${full.length} position reports since ${clock(full[0].t)}` : 'the replayed track'}. ~ marks a time estimated between two reports.`
           : 'Waiting for position reports.'}
       </p>
+      </div>
     </section>
   )
 }
@@ -265,8 +270,8 @@ function Steps({
             <li key="before" className="relative flex animate-rise gap-3 pb-1" style={style}>
               <Rail state="missed" next={nextOf(rows[i + 1])} last={lastRow} />
               <div className="flex min-h-[30px] min-w-0 flex-1 items-center justify-between gap-3">
-                <span className="truncate text-footnote text-white/40">{label}</span>
-                <span className="shrink-0 text-caption2 text-white/35">before we saw it</span>
+                <span className="truncate text-footnote text-white/50">{label}</span>
+                <span className="shrink-0 text-caption2 text-white/50">before we saw it</span>
               </div>
             </li>
           )
@@ -290,7 +295,7 @@ function Steps({
             <div className={`flex min-h-[34px] min-w-0 flex-1 items-start justify-between gap-3 ${lastRow ? '' : 'pb-1.5'}`}>
               <div className="min-w-0 pt-[3px]">
                 <div className={`truncate text-subhead ${s.state === 'current' ? 'font-semibold text-white' : seen ? 'font-medium text-white/90' : 'text-white/40'}`}>{stepLabel(s, role)}</div>
-                {detail && <div className={`truncate text-caption2 ${seen ? 'text-white/50' : 'text-white/30'}`}>{detail}</div>}
+                {detail && <div className={`truncate text-caption2 ${seen ? 'text-white/55' : 'text-white/40'}`}>{detail}</div>}
               </div>
               <div className="shrink-0 pt-[5px] text-right">
                 {seen ? (
@@ -299,7 +304,7 @@ function Steps({
                     {clock(s.at!)}
                   </time>
                 ) : est != null ? (
-                  <span className="text-footnote tabular-nums text-white/40">est. {clock(est)}</span>
+                  <span className="text-footnote tabular-nums text-white/55">est. {clock(est)}</span>
                 ) : null}
               </div>
             </div>
@@ -441,7 +446,7 @@ function TrackChart({
 
   if (!enough) {
     return (
-      <div className="mx-4 mb-2 grid h-[96px] place-items-center rounded-xl bg-white/[0.03] text-caption text-white/40" ref={wrap}>
+      <div className="mx-4 mb-2 grid h-[96px] place-items-center rounded-xl bg-white/[0.03] text-caption text-white/50" ref={wrap}>
         Collecting speed and altitude…
       </div>
     )
@@ -583,9 +588,9 @@ function TrackChart({
         )}
       </div>
 
-      <div className="mt-1 flex justify-between text-caption2 tabular-nums text-white/35">
+      <div className="mt-1 flex justify-between text-caption2 tabular-nums text-white/50">
         <span>{clock(t0)}</span>
-        {onSeek && <span className="text-white/30">{scrub == null ? 'Drag to look back · tap to jump' : pressed ? 'Release to jump here' : 'Click to jump here'}</span>}
+        {onSeek && <span className="text-white/45">{scrub == null ? 'Drag to look back · tap to jump' : pressed ? 'Release to jump here' : 'Click to jump here'}</span>}
         <span>{live ? 'now' : clock(t1)}</span>
       </div>
     </div>

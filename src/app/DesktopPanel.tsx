@@ -1,36 +1,38 @@
 /**
- * The side panel docked on the right on wide screens (≥ 1024 px).
+ * The side panel docked on the right on wide screens (≥ 1024 px): the app's
+ * control room.
  *
- * It shows the selected flight when there is one, otherwise one of three
- * tabs: Transcript, Traffic, Weather. The same components the phone shows
- * as sheets render here in their `docked` mode. It can be dragged wider or
- * narrower by its left edge, and tucked away (`]`, or the button in its
- * header); a button in the top bar brings it back.
+ * Top to bottom: a header that echoes the yellow station bar (airport sign,
+ * channel, on-air lamp, weather, play); four tabs (Now, Radio, Traffic,
+ * Weather) with what is new on each; and the chosen tab. Selecting a flight
+ * slides its page in over the tabs; "back" (or any tab's key) returns to the
+ * tabs with the flight still selected, folded into a purple strip above them.
  *
- * Requests to open those three panels (keyboard shortcuts, the menu, the
- * status pill, the weather chip) are routed here instead of opening a modal,
- * and the space it takes is published as `--dock-w` so the map chrome and
- * the camera keep clear of it.
+ * The same components the phone shows as sheets render here in their
+ * `docked` mode. The panel can be dragged wider or narrower by its left
+ * edge, and tucked away (`]`, or the button in its header) to a slim rail
+ * that keeps the lamp, the play button and the tab badges in view.
+ *
+ * Requests to open those panels (keyboard shortcuts, the menu, the status
+ * pill, the weather chip) are routed here instead of opening a modal, and
+ * the space the panel (or its rail) takes is published as `--dock-w` so the
+ * map chrome and the camera keep clear of it.
  */
-import { PanelRightClose } from 'lucide-react'
-import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { AirlineLogo } from '../airline/AirlineLogo'
-import { FlightDetail } from '../flight/FlightSheet'
-import { BriefingCard } from '../insights/Briefing'
-import { useFlight } from '../flight/useFlight'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { FlightDetail } from '../flight/FlightDetail'
 import { usePlayhead } from '../playback/playheadStore'
 import { WeatherPanel } from '../weather/WeatherPanel'
 import { clampDockWidth, DOCK_DEFAULT, DOCK_EVENT, DOCK_TABS, dockActiveNow, dockReserve, useDock, type DockTab } from '../ui/layout'
-import { Tooltip } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
+import { FlightChip } from './panel/FlightChip'
+import { NowTab } from './panel/NowTab'
+import { PanelHeader } from './panel/PanelHeader'
+import { PanelRail } from './panel/PanelRail'
+import { usePanel } from './panel/panelStore'
+import { PanelTabs } from './panel/PanelTabs'
+import { TAB_LABEL, tabId, tabPanelId } from './panel/tabs'
 import { TrafficPanel } from './TrafficPanel'
 import { TranscriptsView } from './TranscriptsView'
-
-type View = 'flight' | DockTab
-
-const VIEWS: View[] = ['flight', ...DOCK_TABS]
-const LABEL: Record<DockTab, string> = { transcripts: 'Transcript', traffic: 'Traffic', weather: 'Weather' }
-const KEY: Record<DockTab, string> = { transcripts: 'T', traffic: '/', weather: 'W' }
 
 const isTab = (p: unknown): p is DockTab => DOCK_TABS.includes(p as DockTab)
 
@@ -45,12 +47,12 @@ function useViewportWidth() {
 }
 
 /**
- * Keeps the outgoing view mounted for its exit while the new one comes in,
+ * Keeps the outgoing tab mounted for its exit while the new one comes in,
  * so tabs cross-fade instead of cutting.
  */
-function useSwap(view: View) {
-  const [state, setState] = useState<{ current: View; leaving: View | null; dir: number }>({ current: view, leaving: null, dir: 1 })
-  if (state.current !== view) setState({ current: view, leaving: state.current, dir: VIEWS.indexOf(view) >= VIEWS.indexOf(state.current) ? 1 : -1 })
+function useSwap(tab: DockTab) {
+  const [state, setState] = useState<{ current: DockTab; leaving: DockTab | null; dir: number }>({ current: tab, leaving: null, dir: 1 })
+  if (state.current !== tab) setState({ current: tab, leaving: state.current, dir: DOCK_TABS.indexOf(tab) >= DOCK_TABS.indexOf(state.current) ? 1 : -1 })
   useEffect(() => {
     if (!state.leaving) return
     const id = window.setTimeout(() => setState((s) => ({ ...s, leaving: null })), 200)
@@ -71,27 +73,31 @@ export function DesktopPanel() {
   const w = clampDockWidth(width, vw)
   const aside = useRef<HTMLElement>(null)
 
-  // A new selection takes the panel; picking a tab while one is selected keeps the selection (and the camera on it).
+  // A new selection brings the flight's page in; going back to the tabs keeps the selection (and the camera on it).
   const [showFlight, setShowFlight] = useState(!!selected)
   const [lastSelected, setLastSelected] = useState(selected)
   if (selected !== lastSelected) {
     setLastSelected(selected)
     if (selected) setShowFlight(true)
   }
-  const view: View = selected && showFlight ? 'flight' : tab
-  const swap = useSwap(view)
+  const flightShown = !!selected && showFlight
+  const swap = useSwap(tab)
   const body = usePresence(!collapsed, 260)
+  const flightLayer = usePresence(flightShown && !collapsed, 240)
+  // The tabs rest (unmounted) once the flight's page has covered them, so nothing ticks underneath.
+  const tabsBody = usePresence(!flightShown, 320)
 
   // Publish the space the panel takes; the map re-frames once a resize is let go, not on every pixel.
   useLayoutEffect(() => {
     document.documentElement.style.setProperty('--dock-w', `${dockReserve(!collapsed, w, vw)}px`)
     document.documentElement.classList.toggle('dock-resizing', resizing)
+    document.documentElement.classList.toggle('dock-rail-on', collapsed)
     if (!resizing) window.dispatchEvent(new Event(DOCK_EVENT))
   }, [collapsed, w, vw, resizing])
   useEffect(
     () => () => {
       document.documentElement.style.setProperty('--dock-w', '0px')
-      document.documentElement.classList.remove('dock-resizing')
+      document.documentElement.classList.remove('dock-resizing', 'dock-rail-on')
       window.dispatchEvent(new Event(DOCK_EVENT))
     },
     [],
@@ -140,139 +146,81 @@ export function DesktopPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const pick = (v: View) => {
-    if (v === 'flight') setShowFlight(true)
-    else {
-      setTab(v)
+  // What counts as "seen": calls while the Radio tab is showing, alerts while Now is. Marked on the way in and on the way out.
+  const radioShowing = !collapsed && !flightShown && tab === 'transcripts'
+  const nowShowing = !collapsed && !flightShown && tab === 'now'
+  useEffect(() => {
+    if (!radioShowing) return
+    usePanel.getState().markRadioSeen()
+    return () => usePanel.getState().markRadioSeen()
+  }, [radioShowing])
+  useEffect(() => {
+    if (!nowShowing) return
+    usePanel.getState().markAlertsSeen()
+    return () => usePanel.getState().markAlertsSeen()
+  }, [nowShowing])
+
+  // Stable, so the memoised panes below don't re-render with the panel (while it is dragged wider, say).
+  const pick = useCallback(
+    (t: DockTab) => {
+      setTab(t)
       setShowFlight(false)
-    }
+    },
+    [setTab],
+  )
+  const back = useCallback(() => setShowFlight(false), [])
+  const open = (t?: DockTab) => {
+    if (t) pick(t)
+    setCollapsed(false)
   }
 
   return (
-    <aside
-      ref={aside}
-      aria-label="Side panel"
-      data-collapsed={collapsed ? '' : undefined}
-      inert={collapsed}
-      style={{ width: w }}
-      className="dock glass-sheet grain absolute bottom-3 right-3 top-[max(0.75rem,var(--safe-top))] z-30 flex flex-col overflow-hidden rounded-[1.6rem] shadow-pop ring-1 ring-white/[0.09]"
-    >
-      <ResizeHandle width={w} vw={vw} />
-      <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
-        <Tabs view={view} selected={!!selected} onPick={pick} />
-        <button
-          type="button"
-          aria-label="Hide side panel"
-          aria-keyshortcuts="]"
-          className="has-tooltip pressable relative grid size-9 shrink-0 place-items-center rounded-full text-white/70 hover:bg-white/10 hover:text-white"
-          onClick={() => setCollapsed(true)}
-        >
-          <PanelRightClose className="size-[18px]" />
-          <Tooltip label="Hide panel" shortcut="]" side="left" />
-        </button>
-      </div>
-      <BriefingCard docked />
-      <div className="mx-3 h-px shrink-0 bg-white/[0.08]" />
-      <div className="relative grid min-h-0 flex-1" style={{ ['--pane-dir' as string]: swap.dir }}>
-        {body.mounted &&
-          [swap.current, swap.leaving].map((v) =>
-            v ? (
-              <div key={v} className="dock-pane min-h-0 min-w-0 [grid-area:1/1]" data-closing={v === swap.leaving ? '' : undefined} inert={v === swap.leaving}>
-                <Pane view={v} />
+    <>
+      <aside
+        ref={aside}
+        aria-label="Side panel"
+        data-collapsed={collapsed ? '' : undefined}
+        inert={collapsed}
+        style={{ width: w }}
+        className="dock glass-sheet grain absolute bottom-3 right-3 top-[max(0.75rem,var(--safe-top))] z-30 flex flex-col overflow-hidden rounded-[1.6rem] shadow-pop ring-1 ring-white/[0.09]"
+      >
+        <ResizeHandle width={w} vw={vw} />
+        <PanelHeader onCollapse={() => setCollapsed(true)} />
+        <div className="relative min-h-0 flex-1">
+          {body.mounted && tabsBody.mounted && (
+            <div className="dock-tabs flex h-full flex-col" data-under={flightShown ? '' : undefined} inert={flightShown}>
+              {selected && !flightShown && <FlightChip onOpen={() => setShowFlight(true)} />}
+              <PanelTabs tab={tab} onPick={pick} />
+              <div className="relative mt-2 grid min-h-0 flex-1" style={{ ['--pane-dir' as string]: swap.dir }}>
+                {[swap.current, swap.leaving].map((v) =>
+                  v ? (
+                    <div key={v} role="tabpanel" id={tabPanelId(v)} aria-labelledby={tabId(v)} className="dock-pane min-h-0 min-w-0 [grid-area:1/1]" data-closing={v === swap.leaving ? '' : undefined} inert={v === swap.leaving}>
+                      <Pane view={v} onPick={pick} />
+                    </div>
+                  ) : null,
+                )}
               </div>
-            ) : null,
+            </div>
           )}
-      </div>
-    </aside>
+          {body.mounted && flightLayer.mounted && (
+            <div className="dock-layer absolute inset-0" data-closing={flightLayer.closing ? '' : undefined} inert={flightLayer.closing}>
+              <FlightDetail docked onBack={back} backLabel={TAB_LABEL[tab]} />
+            </div>
+          )}
+        </div>
+      </aside>
+      <PanelRail shown={collapsed} onOpen={open} />
+    </>
   )
 }
 
-/** One view's content. Memoised so dragging the panel wider doesn't re-render a long list on every pixel. */
-const Pane = memo(function Pane({ view }: { view: View }) {
-  if (view === 'flight') return <FlightDetail docked />
+/** One tab's content. Memoised so dragging the panel wider doesn't re-render a long list on every pixel. */
+const Pane = memo(function Pane({ view, onPick }: { view: DockTab; onPick: (t: DockTab) => void }) {
+  if (view === 'now') return <NowTab go={onPick} />
   if (view === 'transcripts') return <TranscriptsView docked />
   if (view === 'traffic') return <TrafficPanel docked />
   return <WeatherPanel docked />
 })
-
-/** The tab strip: the selected flight (when there is one), then the three tabs, with a pill gliding between them. */
-function Tabs({ view, selected, onPick }: { view: View; selected: boolean; onPick: (v: View) => void }) {
-  const box = useRef<HTMLDivElement>(null)
-  const [pill, setPill] = useState<{ x: number; w: number } | null>(null)
-  const items: View[] = selected ? VIEWS : DOCK_TABS
-
-  useLayoutEffect(() => {
-    const el = box.current
-    if (!el) return
-    const measure = () => {
-      const btn = el.querySelectorAll<HTMLElement>('[role="tab"]')[items.indexOf(view)]
-      if (btn) setPill((p) => (p && p.x === btn.offsetLeft && p.w === btn.offsetWidth ? p : { x: btn.offsetLeft, w: btn.offsetWidth }))
-    }
-    measure()
-    // Tabs change width as logos and fonts load, so watch them as well as the strip.
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    el.querySelectorAll('[role="tab"]').forEach((tab) => ro.observe(tab))
-    return () => ro.disconnect()
-  }, [view, items])
-
-  // Arrow keys move along the tabs, as a tab list should.
-  const onKeyDown = (e: ReactKeyboardEvent) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-    e.preventDefault()
-    e.stopPropagation()
-    const i = items.indexOf(view)
-    const next = items[(i + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length]
-    onPick(next)
-    box.current?.querySelector<HTMLElement>(`[data-view="${next}"]`)?.focus()
-  }
-
-  return (
-    <div ref={box} role="tablist" aria-label="Side panel" className="relative flex min-w-0 flex-1 rounded-full bg-white/[0.07] p-1" onKeyDown={onKeyDown}>
-      {pill && (
-        <span
-          aria-hidden
-          className={`absolute inset-y-1 left-0 rounded-full shadow-[0_1px_6px_rgba(0,0,0,0.35)] transition-[translate,width,background-color] duration-[var(--duration-base)] ease-[var(--ease-out)] ${view === 'flight' ? 'bg-atc-card' : 'bg-white/[0.16]'}`}
-          style={{ translate: `${pill.x}px 0`, width: pill.w }}
-        />
-      )}
-      {items.map((v) => (
-        <TabButton key={v} view={v} active={v === view} onPick={onPick}>
-          {v === 'flight' ? <FlightTabLabel /> : LABEL[v]}
-        </TabButton>
-      ))}
-    </div>
-  )
-}
-
-function TabButton({ view, active, onPick, children }: { view: View; active: boolean; onPick: (v: View) => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      data-view={view}
-      aria-selected={active}
-      aria-keyshortcuts={view === 'flight' ? undefined : KEY[view]}
-      tabIndex={active ? 0 : -1}
-      className={`relative flex h-8 items-center justify-center gap-1.5 rounded-full px-2.5 text-footnote ${view === 'flight' ? 'max-w-[42%] shrink-0 pl-2 pr-3' : 'min-w-0 flex-1'} font-semibold transition-colors duration-[var(--duration-fast)] ${active ? 'text-white' : 'text-white/60 hover:text-white/90'}`}
-      onClick={() => onPick(view)}
-    >
-      {children}
-    </button>
-  )
-}
-
-/** The selected flight's tab: its airline's mark and callsign. */
-function FlightTabLabel() {
-  const flight = useFlight()
-  if (!flight) return <span className="truncate">Flight</span>
-  return (
-    <>
-      <AirlineLogo callsign={flight.callsign} icao24={flight.icao24} height={13} maxWidth={20} className="shrink-0" />
-      <span className="display-tight truncate font-display text-[15px] leading-none tracking-normal">{flight.callsign}</span>
-    </>
-  )
-}
 
 /** Drag the panel's left edge to resize it; double-click to reset. Also a keyboard-operable separator. */
 function ResizeHandle({ width, vw }: { width: number; vw: number }) {

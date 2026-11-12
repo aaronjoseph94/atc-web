@@ -143,7 +143,7 @@ export function WindCard({ metar, ends, active }: { metar: Metar; ends: RunwayEn
   const u = speedUnitLabel(unit)
 
   return (
-    <section aria-label="Wind" className="rounded-2xl bg-white/[0.05] ring-1 ring-inset ring-white/[0.06] @xl:grid @xl:grid-cols-2">
+    <section aria-label="Wind" className="ui-card @xl:grid @xl:grid-cols-2">
       <div className="flex items-center gap-4 p-3.5 @md:gap-5">
         <WindDial metar={metar} lines={lines} active={inUse} unit={unit} />
         <div className="min-w-0 flex-1">

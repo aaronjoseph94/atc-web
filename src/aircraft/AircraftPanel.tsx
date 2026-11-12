@@ -10,6 +10,7 @@
 import { useAirlineLogo } from '../airline/useAirlineLogo'
 import { brandColour } from '../map/fx/brand'
 import { useSettings } from '../settings/settingsStore'
+import { SectionLabel } from '../ui/Panel'
 import { formatCruise, formatLength, formatRange } from './format'
 import { sideProfile } from './sideProfiles'
 import { SideView } from './SideView'
@@ -33,8 +34,8 @@ type Props = {
 
 function Chip({ label, value }: { label?: string; value: string }) {
   return (
-    <li className="flex items-baseline gap-1 whitespace-nowrap rounded-full bg-white/[0.07] px-2 py-0.5 text-caption ring-1 ring-white/[0.05]">
-      {label && <span className="text-white/45">{label}</span>}
+    <li className="flex items-baseline gap-1 whitespace-nowrap rounded-full bg-white/[0.07] px-2 py-0.5 text-caption ring-1 ring-inset ring-white/[0.06]">
+      {label && <span className="text-white/55">{label}</span>}
       <span className="font-semibold tabular-nums text-white/90">{value}</span>
     </li>
   )
@@ -66,7 +67,9 @@ export function AircraftPanel({ type, category, registration, dbName, dbManufact
     : []
 
   return (
-    <section aria-label="Aircraft" className="mb-4 overflow-hidden rounded-2xl bg-white/[0.06] ring-1 ring-white/[0.04]">
+    <section aria-label="Aircraft" className="mt-5">
+      <SectionLabel>Aircraft</SectionLabel>
+      <div className="ui-card overflow-hidden">
       <div className="flex items-center gap-3 px-3 pt-3">
         {/* The drawing sits on a faint pool of light, so the white airframe reads on the dark sheet. */}
         <div
@@ -94,6 +97,7 @@ export function AircraftPanel({ type, category, registration, dbName, dbManufact
       ) : (
         <div className="h-3" />
       )}
+      </div>
     </section>
   )
 }

@@ -1,37 +1,28 @@
 /**
- * Everything currently in view, searchable, under a short list of recent
- * activity (takeoffs, landings, go-arounds). Hovering a row lights the
- * aircraft up on the map; tapping selects it and closes the list.
+ * Everything currently in view, searchable. On a phone it sits under a short
+ * list of recent activity (takeoffs, landings, go-arounds) and notable
+ * aircraft; in the desktop side panel those live on the Now tab, and this is
+ * the list alone. Hovering a row lights the aircraft up on the map; tapping
+ * selects it and closes the list.
  */
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
 import { memo, useEffect, useMemo, useState } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { airlineInfo, brandFor } from '../airline/airlines'
 import { getAirport } from '../api/airports'
 import type { Aircraft } from '../api/types'
 import { SpottedList } from '../discovery/SpottedList'
-import { aircraftTypeName, flightPhase, friendlyFlightName, PHASE_LABEL, type Phase } from '../flight/describe'
-import { runwayRelation } from '../live/events'
+import { aircraftTypeName, friendlyFlightName, PHASE_LABEL, type Phase } from '../flight/describe'
 import { liveBuffer } from '../live/session'
 import { runwayEnds } from '../map/airportDiagram'
 import { positionsAt } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, useSettings } from '../settings/settingsStore'
+import { SearchField } from '../ui/kit'
 import { PanelFrame, SectionLabel } from '../ui/Panel'
 import { EmptyState, ListSkeleton, OfflineArt, QuietArt, StateAction } from '../ui/States'
 import { ActivityList } from './ActivityList'
-
-type Group = 'Arriving' | 'Departing' | 'Passing through' | 'Taxiing' | 'Parked'
-const ORDER: Group[] = ['Arriving', 'Departing', 'Taxiing', 'Passing through', 'Parked']
-
-function groupOf(phase: Phase, onFinal: boolean): Group {
-  if (phase === 'parked') return 'Parked'
-  if (phase === 'taxiing' || phase === 'rolling') return 'Taxiing'
-  if (onFinal || phase === 'final' || phase === 'descending') return 'Arriving'
-  if (phase === 'takeoff' || phase === 'climbing') return 'Departing'
-  return 'Passing through'
-}
+import { classifyAircraft, isVehicle, TRAFFIC_ORDER, type TrafficGroup } from './panel/overview'
 
 /** `docked`: rendered in the desktop side panel instead of as a sheet. */
 export function TrafficPanel({ docked = false }: { docked?: boolean }) {
@@ -67,16 +58,14 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
   const q = query.trim().toLowerCase()
 
   const groups = useMemo(() => {
-    const by = new Map<Group, { a: Aircraft; phase: Phase; note: string | null }[]>()
+    const by = new Map<TrafficGroup, { a: Aircraft; phase: Phase; note: string | null }[]>()
     for (const a of list) {
-      if (a.category?.startsWith('C')) continue
+      if (isVehicle(a)) continue
       const name = friendlyFlightName(a.callsign)
       // The brand too, so "Delta" also finds the Endeavor flights wearing the Delta logo.
       const brand = airlineInfo(brandFor(a.callsign)?.brand)?.name ?? ''
       if (q && !`${a.callsign} ${name} ${brand} ${a.type ?? ''} ${a.registration ?? ''}`.toLowerCase().includes(q)) continue
-      const rel = runwayRelation(a, ends, airport.elevationFt)
-      const phase = flightPhase({ ...a, altitudeFt: a.altitudeFt == null || a.onGround ? a.altitudeFt : a.altitudeFt - airport.elevationFt })
-      const g = groupOf(phase, rel?.kind === 'final')
+      const { phase, group: g, relation: rel } = classifyAircraft(a, ends, airport.elevationFt)
       const note = rel?.kind === 'final' ? `Final ${rel.runway}, ${rel.distanceNm.toFixed(1)} nm` : rel?.kind === 'on' ? `Runway ${rel.runway}` : null
       by.set(g, [...(by.get(g) ?? []), { a, phase, note }])
     }
@@ -98,24 +87,17 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
   })
 
   return (
-    <PanelFrame docked={docked} open={open} title={`Traffic at ${airport.icao}`} onClose={close}>
-      <label className="sticky top-0 z-10 flex items-center gap-2 rounded-xl bg-[#232c3b] px-3 shadow-[0_6px_12px_-6px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-transparent transition-shadow duration-[var(--duration-fast)] focus-within:ring-atc-yellow/70">
-        <Search className="size-4 shrink-0 text-atc-muted" />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Flight, airline, type or tail number"
-          aria-label="Search traffic"
-          className="h-10 min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-atc-muted"
-        />
-        <span className="shrink-0 text-caption tabular-nums text-atc-muted">{total}</span>
-      </label>
-
-      {/* What the traffic has been doing: takeoffs, landings, go-arounds. Live only, and out of the way of a search. */}
-      {mode === 'live' && !q && <ActivityList onPick={close} />}
+    <PanelFrame
+      docked={docked}
+      open={open}
+      title={`Traffic at ${airport.icao}`}
+      onClose={close}
+      pinned={<SearchField value={query} onChange={setQuery} placeholder="Flight, airline, type or tail number" label="Search traffic" trailing={total} onEscape={() => (setQuery(''), true)} />}
+    >
+      {/* What the traffic has been doing: takeoffs, landings, go-arounds. Live only, and out of the way of a search. The side panel shows both on its Now tab instead. */}
+      {!docked && mode === 'live' && !q && <ActivityList onPick={close} />}
       {/* Unusual visitors this session (src/discovery). */}
-      {mode === 'live' && !q && <SpottedList onPick={close} />}
+      {!docked && mode === 'live' && !q && <SpottedList onPick={close} />}
 
       {total === 0 ? (
         q ? (
@@ -140,14 +122,12 @@ export function TrafficPanel({ docked = false }: { docked?: boolean }) {
           </EmptyState>
         )
       ) : (
-        ORDER.map((g) => {
+        TRAFFIC_ORDER.map((g) => {
           const rows = groups.get(g)
           if (!rows?.length) return null
           return (
-            <section key={g}>
-              <SectionLabel>
-                {g} <span className="font-normal tabular-nums text-white/30">{rows.length}</span>
-              </SectionLabel>
+            <section key={g} className="mt-5 first:mt-0">
+              <SectionLabel count={rows.length}>{g}</SectionLabel>
               <ul className="grid grid-cols-1 gap-1.5 @xl:grid-cols-2">
                 {rows.map(({ a, phase, note }) => (
                   <TrafficRow
@@ -184,7 +164,7 @@ const TrafficRow = memo(function TrafficRow({ icao24, callsign, detail, altitude
       <button
         type="button"
         aria-current={selected || undefined}
-        className={`pressable-soft flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2 text-left ${selected ? 'bg-atc-card' : 'bg-white/[0.05] hover:bg-white/[0.09]'}`}
+        className={`pressable-soft flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left ${selected ? 'rounded-2xl bg-atc-card shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12)]' : 'ui-card hover:bg-white/[0.09]'}`}
         onPointerEnter={() => setHover(icao24)}
         onPointerLeave={() => setHover(null)}
         onFocus={() => setHover(icao24)}
@@ -196,9 +176,9 @@ const TrafficRow = memo(function TrafficRow({ icao24, callsign, detail, altitude
         </span>
         <span className="min-w-0 flex-1">
           <span className="display-tight block truncate font-display text-[22px] leading-tight">{callsign}</span>
-          <span className="block truncate text-caption text-white/60">{detail}</span>
+          <span className={`block truncate text-caption ${selected ? 'text-white/85' : 'text-white/60'}`}>{detail}</span>
         </span>
-        <span className="shrink-0 text-right text-caption tabular-nums text-white/65">
+        <span className={`shrink-0 text-right text-caption tabular-nums ${selected ? 'text-white/85' : 'text-white/65'}`}>
           <span className="block text-footnote font-semibold text-white">{altitude}</span>
           <span className="block">{speed}</span>
         </span>

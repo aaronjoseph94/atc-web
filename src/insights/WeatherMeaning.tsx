@@ -23,8 +23,8 @@ export function WeatherMeaning({ airport, metar, taf, atis, active, ends }: { ai
   const text = ai.data ?? fallback
   if (!text) return null
   return (
-    <section aria-label="What it means" className="mt-2 rounded-2xl bg-white/[0.05] px-3.5 py-3 ring-1 ring-inset ring-white/[0.06]">
-      <div className="flex items-center gap-1 text-caption font-semibold text-white/55">
+    <section aria-label="What it means" className="ui-card mt-2 px-3.5 py-3">
+      <div className="flex items-center gap-1 text-caption font-semibold text-white/60">
         What it means
         {ai.data && <AiMark />}
       </div>

@@ -21,7 +21,7 @@ export class App {
     return (this.page.viewportSize()?.width ?? 1280) < 768
   }
 
-  /** Wide screens (≥ 1024 px) dock the flight, transcript, traffic and weather in a side panel instead of sheets. */
+  /** Wide screens (≥ 1024 px) dock the flight, radio transcript, traffic and weather in a side panel instead of sheets. */
   get docked(): boolean {
     return (this.page.viewportSize()?.width ?? 1280) >= 1024
   }
@@ -32,16 +32,22 @@ export class App {
   }
 
   /**
-   * Where the Transcript, Traffic or Weather view shows: the side panel's tab on
-   * a wide screen, otherwise a sheet with that title. (`kind` documents which.)
+   * Where the transcript, traffic or weather view shows: the side panel's Radio,
+   * Traffic or Weather tab on a wide screen, otherwise a sheet with that title.
+   * (`kind` documents which.)
    */
   view(_kind: 'transcripts' | 'traffic' | 'weather', title: string | RegExp) {
     return this.docked ? this.sidePanel() : this.page.getByRole('dialog', { name: title })
   }
 
-  /** The selected tab in the side panel. */
+  /** One of the side panel's tabs: Now, Radio, Traffic, Weather (its name may carry a count: "Traffic, 26 aircraft"). */
   dockTab(name: string | RegExp) {
     return this.sidePanel().getByRole('tab', { name })
+  }
+
+  /** The slim rail the side panel leaves behind when it is tucked away. */
+  dockRail() {
+    return this.page.getByRole('navigation', { name: 'Side panel, collapsed' })
   }
 
   /** Open an airport and wait until its traffic is on the map. */
@@ -191,7 +197,7 @@ export class App {
     return this.page.locator('section[aria-label^="Flight "]').filter(callsign ? { hasText: callsign } : {})
   }
 
-  /** The full flight view: a sheet on phones, the side panel on wide screens. */
+  /** The full flight view: a sheet on phones, a page over the side panel's tabs on wide screens. */
   flightDetail() {
     // (Callsign only: "Flight timeline" is a section inside it.)
     const name = /^Flight [A-Z0-9]+$/

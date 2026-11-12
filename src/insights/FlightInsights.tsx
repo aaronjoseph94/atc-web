@@ -23,6 +23,7 @@ import { sampleOnGround, trackKeyFor } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
 import { useNow } from '../hooks/useNow'
 import { useAiTask } from './ai'
+import { SectionLabel } from '../ui/Panel'
 import { AiMark } from './AiMark'
 import { buildFacts } from './facts'
 import { parseFacts, parseStory } from './parse'
@@ -122,16 +123,19 @@ export function FlightInsights({ flight, info }: { flight: FlightView; info: Fli
   const steadyFallback = useSettled(fallback, storyKey(storyInput), 2500)
   const text = aiStory.data ?? steadyFallback ?? fallback
   return (
-    <section aria-label="Story so far" className="mt-4 animate-rise rounded-2xl bg-white/[0.06] px-4 pb-3.5 pt-3 ring-1 ring-white/[0.04]">
-      <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-white/60">
-        Story so far
-        {aiStory.data && <AiMark />}
-      </h3>
-      <p className="mt-1 text-[15px] leading-snug text-white/90">{text}</p>
+    <section aria-label="Story so far" className="mt-5 animate-rise">
+      <SectionLabel>
+        <span className="flex items-center gap-1.5">
+          Story so far
+          {aiStory.data && <AiMark />}
+        </span>
+      </SectionLabel>
+      <div className="ui-card px-4 py-3.5">
+      <p className="text-subhead leading-snug text-white/90">{text}</p>
       {shownFacts.length > 0 && (
-        <ul className="mt-3 space-y-1.5 border-t border-white/[0.08] pt-3" aria-label="Facts about this flight">
+        <ul className="mt-3 space-y-1.5 border-t border-white/[0.07] pt-3" aria-label="Facts about this flight">
           {shownFacts.map((f) => (
-            <li key={f.id} className="flex gap-2 text-sm leading-snug text-white/75">
+            <li key={f.id} className="flex gap-2 text-footnote leading-snug text-white/75">
               <Lightbulb aria-hidden className="mt-0.5 size-3.5 shrink-0 text-atc-yellow" strokeWidth={2.25} />
               <span className="min-w-0">
                 {f.text}
@@ -141,6 +145,7 @@ export function FlightInsights({ flight, info }: { flight: FlightView; info: Fli
           ))}
         </ul>
       )}
+      </div>
     </section>
   )
 }
