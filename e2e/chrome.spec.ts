@@ -30,7 +30,7 @@ test.describe('map chrome', () => {
     // Plain Help still opens at the top.
     await page.getByRole('button', { name: 'Menu' }).click()
     await menu.getByRole('menuitem', { name: 'Help' }).click()
-    await expect(help.getByText('Tap an aircraft')).toBeInViewport()
+    await expect(help.getByText('Tap aircraft', { exact: true })).toBeInViewport()
   })
 
   test('search stays one step away: the status pill opens the traffic list and its search field', async ({ app, page }) => {
