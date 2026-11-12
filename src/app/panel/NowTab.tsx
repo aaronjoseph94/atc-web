@@ -350,7 +350,7 @@ function Alerts() {
   const now = useNow(20_000)
   if (!alerts.length) return null
   return (
-    <section aria-label="Alerts" className="mt-5">
+    <section aria-label="Alerts">
       <SectionLabel count={alerts.length}>Alerts</SectionLabel>
       <ul className="flex flex-col">
         {alerts.slice(0, 3).map((a) => (
@@ -369,9 +369,11 @@ export function NowTab({ go }: { go: Go }) {
   const airportIcao = usePlayhead((s) => s.airportIcao)
   return (
     <PanelFrame docked open title={`Now at ${airportIcao}`} onClose={noop}>
+      {/* Most important first: anything needing attention, what is being said, the runways,
+          the traffic, what just happened; then the overview and the curiosities. */}
       <div className="flex flex-col gap-2.5">
+        {live && !offline && <Alerts />}
         <OnAirCard go={go} />
-        {live && <Briefing />}
       </div>
       <FieldCard go={go} />
       {live &&
@@ -382,8 +384,8 @@ export function NowTab({ go }: { go: Go }) {
         ) : (
           <>
             <TrafficTiles go={go} />
-            <Alerts />
             <ActivityList onPick={noop} hideEmpty />
+            <Briefing />
             <SpottedList onPick={noop} hideEmpty />
           </>
         ))}

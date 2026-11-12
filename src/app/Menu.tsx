@@ -8,7 +8,7 @@ import { useLearn } from '../learn/learnStore'
 import { usePlayhead, type Panel } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
 import { Kbd, useDialog } from '../ui/Panel'
-import { useDockActive } from '../ui/layout'
+import { useDockActive, useIsWide } from '../ui/layout'
 import { usePresence } from '../ui/usePresence'
 import { PANEL_ICON } from './panel/icons'
 
@@ -22,6 +22,7 @@ export function Menu() {
   const pinned = useSettings((s) => s.favourites.includes(airportIcao))
   const toggleFavourite = useSettings((s) => s.toggleFavourite)
   const docked = useDockActive()
+  const railed = useIsWide() && !docked
 
   const close = () => setPanel(null)
   const { mounted, closing } = usePresence(open, 180)
@@ -55,7 +56,7 @@ export function Menu() {
         tabIndex={-1}
         onKeyDown={onKeyDown}
         data-closing={closing ? '' : undefined}
-        className={`motion-menu absolute w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none ${docked ? 'right-14 top-[calc(max(0.75rem,var(--safe-top))+3.25rem)]' : 'right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] md:right-4'}`}
+        className={`motion-menu absolute w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none ${docked ? 'right-14 top-[calc(max(0.75rem,var(--safe-top))+3.25rem)]' : railed ? 'right-[4.75rem] top-[max(0.75rem,var(--safe-top))]' : 'right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] md:right-4'}`}
       >
         {mode === 'playback' ? (
           <Item icon={Radio} label="Back to live" onClick={exitPlayback} />

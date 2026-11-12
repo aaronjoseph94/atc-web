@@ -9,6 +9,7 @@ import type { Map as MapLibreMap, RasterTileSource } from 'maplibre-gl'
 import type { MapRef } from 'react-map-gl/maplibre'
 import { getAirport } from '../api/airports'
 import { watchBaseMap } from './baseMapRetry'
+import { setRadioDelay } from '../live/radio/player'
 import { getAircraft } from '../api/client'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
@@ -142,6 +143,13 @@ export function MapView() {
   useEffect(() => resetLiveSession, [airportIcao])
   // The motion buffer delays the picture by about one and a half polls; tell it how often we poll.
   useEffect(() => liveBuffer.expectInterval(pollSeconds * 1000), [pollSeconds])
+  // The radio is heard as late as the aircraft are drawn, so a call and its aircraft line up.
+  useEffect(() => {
+    const sync = () => setRadioDelay(liveBuffer.delayMs)
+    sync()
+    const id = window.setInterval(sync, 2000)
+    return () => window.clearInterval(id)
+  }, [pollSeconds])
 
   const { data, dataUpdatedAt, isError, isPending } = query
   useEffect(() => {

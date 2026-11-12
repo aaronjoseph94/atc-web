@@ -5,7 +5,7 @@ a secret into Cloudflare:
 
 | Secret | What it switches on | Cost |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` and/or `OPENROUTER_API_KEY` | The AI features: radio calls cleaned up and explained before they are shown, airport briefings, flight stories, weather in plain words, feedback triage. They run on Claude Haiku 5.5 unless you pick Sonnet (below) | You pay your AI provider per request. Capped per day (below). |
+| `ANTHROPIC_API_KEY` and/or `OPENROUTER_API_KEY` | The AI features: radio calls cleaned up and explained before they are shown, airport briefings, flight stories, weather in plain words. They run on Claude Haiku 5.5 unless you pick Sonnet (below) | You pay your AI provider per request. Capped per day (below). |
 | `AIRNAV_ODAPI_TOKEN` | A last-resort lookup of a flight's route and aircraft when the free sources know neither | AirNav credits. Capped at 3 a day and 90 in total by default (below). |
 
 Keys live **only** in Cloudflare. Nothing is typed into the app, and no browser

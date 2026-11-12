@@ -165,3 +165,24 @@ describe('createGate', () => {
     err.mockRestore()
   })
 })
+
+describe('gate per-call wait', () => {
+  it('waits as long as waitFor says for each call', async () => {
+    vi.useFakeTimers()
+    const out: string[] = []
+    const gate = createGate<{ id: string; wait: number }, string>({
+      waitMs: 8000,
+      waitFor: (i) => i.wait,
+      channel: () => 'a',
+      process: () => new Promise(() => {}),
+      publish: (i) => out.push(i.id),
+      upgrade: () => {},
+    })
+    gate.submit({ id: 'x', wait: 12_000 })
+    await vi.advanceTimersByTimeAsync(8_500)
+    expect(out).toEqual([])
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(out).toEqual(['x'])
+    vi.useRealTimers()
+  })
+})

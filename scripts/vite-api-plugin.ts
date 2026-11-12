@@ -11,7 +11,6 @@ import { handleAircraftRequest, jsonResponse } from '../src/api/aircraftHandler'
 import { allStations } from '../src/api/airports'
 import { parseFlightQuery } from '../src/api/flightInfoHandler'
 import { fetchFlightDetails } from '../src/api/flightSources'
-import { handleFeedback, MAX_BODY } from '../src/api/feedbackHandler'
 import { buildHealth } from '../src/api/healthHandler'
 import { memoryCache } from '../src/api/sourceHealth'
 import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
@@ -151,12 +150,6 @@ export function apiDevPlugin(): Plugin {
               choice,
             })
             return await send(res, new Response(JSON.stringify(out.body), { status: out.status, headers: { 'content-type': 'application/json', ...out.headers } }))
-          }
-
-          if (url.pathname === '/api/feedback' && req.method === 'POST') {
-            const env = { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY, GITHUB_FEEDBACK_TOKEN: process.env.GITHUB_FEEDBACK_TOKEN, GITHUB_FEEDBACK_REPO: process.env.GITHUB_FEEDBACK_REPO, GITHUB_FEEDBACK_SCREENSHOT_BRANCH: process.env.GITHUB_FEEDBACK_SCREENSHOT_BRANCH }
-            const out = await handleFeedback(await readBody(req, MAX_BODY), env, req.socket.remoteAddress ?? 'local')
-            return await send(res, jsonResponse(out.body, out.status, 'no-store'))
           }
 
           if (url.pathname === '/api/summarize') {

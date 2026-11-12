@@ -19,19 +19,19 @@
  * filters stay put above it, each call carries its speaker's colour down its
  * left edge, and the time headings are small pills between the groups.
  */
-import { ArrowRightLeft, AudioLines, ChevronDown, Hourglass, OctagonMinus, Play, Plane, PlaneLanding, PlaneTakeoff, Radio, RotateCcw, Route, X, type LucideIcon } from 'lucide-react'
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AudioLines, Play, Route } from 'lucide-react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { getAirport, resolveStation } from '../api/airports'
 import { formatMhz } from '../api/airportData'
 import { useNow } from '../hooks/useNow'
 import { findClip, loadClipIndex, playClip, startClipCapture, stopClip, useClips } from '../live/history/clips'
-import { callsignSuggestions, groupByTime, highlight, NO_FILTERS, PHRASES, type Filters, type Hit, type Range, type SearchItem } from '../live/history/search'
+import { groupByTime, highlight, NO_FILTERS, type Filters, type Hit, type Range, type SearchItem } from '../live/history/search'
 import { startHistory, useHistory, type HistoryEntry } from '../live/history/store'
 import { Terms } from '../learn/Terms'
 import { useRadio } from '../live/radio/radioStore'
 import { releaseFocus } from '../live/radio/transcriber'
-import { AiHint, CallExtras, ExplainToggle, FadeSwap, UnprocessedMark } from '../live/radio/understand/CallExtras'
+import { AiHint, CallExtras, FadeSwap, UnprocessedMark } from '../live/radio/understand/CallExtras'
 import { searchWithRaw, withUnderstanding } from '../live/radio/understand/search'
 import { useUnderstanding } from '../live/radio/understand/store'
 import { liveBuffer } from '../live/session'
@@ -40,7 +40,7 @@ import { showTaxiRoute } from '../live/taxi/watch'
 import { trackId } from '../playback/interpolate'
 import { formatClock } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
-import { Equalizer, SearchField } from '../ui/kit'
+import { Equalizer } from '../ui/kit'
 import { PanelFrame } from '../ui/Panel'
 import { ShimmerText, StreamText } from '../ui/textMotion'
 import { speakerColors, type RadioSpeaker } from '../ui/speaker'
@@ -118,73 +118,6 @@ export function TranscriptsView({ docked = false }: { docked?: boolean }) {
   )
 }
 
-/** An icon for each quick-search phrase, so the pills read at a glance. */
-const PHRASE_ICON: Record<string, LucideIcon> = {
-  goaround: RotateCcw,
-  holdshort: OctagonMinus,
-  land: PlaneLanding,
-  luaw: Hourglass,
-  takeoff: PlaneTakeoff,
-  taxi: Route,
-  contact: ArrowRightLeft,
-}
-
-/**
- * The filter pills on one line; when they don't all fit, a small arrow at the
- * end shows the rest (and folds them away again).
- */
-function FilterRow({ children, trailing }: { children: ReactNode; trailing?: ReactNode }) {
-  const row = useRef<HTMLDivElement>(null)
-  const [open, setOpen] = useState(false)
-  const [overflows, setOverflows] = useState(false)
-  useEffect(() => {
-    const el = row.current
-    if (!el) return
-    const measure = () => setOverflows(el.scrollHeight > el.clientHeight + 2 || (open && el.scrollHeight > 36))
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [open])
-  return (
-    <div className="mt-2.5 flex items-start gap-1.5">
-      <div ref={row} className={`flex min-w-0 flex-1 flex-wrap gap-1.5 overflow-hidden ${open ? '' : 'max-h-7'}`} role="toolbar" aria-label="Filters">
-        {children}
-      </div>
-      {trailing}
-      {overflows && (
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-label={open ? 'Show fewer filters' : 'Show more filters'}
-          title={open ? 'Fewer' : 'More'}
-          className="pressable-soft grid size-7 shrink-0 place-items-center rounded-full bg-white/[0.09] text-white/75 hover:bg-white/[0.15] hover:text-white"
-          onClick={() => setOpen((v) => !v)}
-        >
-          <ChevronDown className={`size-4 transition-transform duration-[var(--duration-fast)] ${open ? 'rotate-180' : ''}`} strokeWidth={2} />
-        </button>
-      )}
-    </div>
-  )
-}
-
-function Chip({ active, onClick, children, label, tone = 'plain', disabled }: { active?: boolean; onClick: () => void; children: ReactNode; label?: string; tone?: 'plain' | 'purple'; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className={`pressable-soft flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full pl-2 pr-2.5 text-caption font-semibold transition-colors duration-[var(--duration-fast)] disabled:opacity-35 ${
-        tone === 'purple' ? 'bg-atc-card text-white' : active ? 'bg-white text-black' : 'bg-white/[0.09] text-white/75 enabled:hover:bg-white/[0.15] enabled:hover:text-white'
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
 
 function Marked({ text, ranges }: { text: string; ranges: Range[] }) {
   if (!ranges.length) return <Terms text={text} />
@@ -263,7 +196,6 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   const hits = useMemo(() => searchWithRaw(items, active), [items, active])
   const shown = hits.slice(-limit)
   const groups = useMemo(() => (playback ? [{ label: clip?.title ?? 'Replay', key: 'replay', hits: shown }] : groupByTime(shown, now)), [playback, clip, shown, now])
-  const suggestions = useMemo(() => (filters.callsign ? [] : callsignSuggestions(items, query)), [items, query, filters.callsign])
   const filtering = !!(query || filters.phrase || filters.stationId || filters.callsign || filters.icao24)
   const activeCue = playback ? clip?.cues.find((c) => tMs >= c.startMs && tMs < c.endMs)?.id : undefined
   const withAudio = useMemo(() => new Set(hits.filter((h) => h.item.source === 'radio' && findClip(clipIndex, h.item.stationId, h.item.at, (h.item as HistoryEntry).durationMs)).map((h) => h.item.id)), [hits, clipIndex])
@@ -335,72 +267,15 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   const empty = !filtering && hits.length === 0
   const processing = !playback && !filtering && !empty && radioOn && pending > 0 && transcripts !== 'unavailable'
 
-  // The search box and filters. On a phone they stick to the top of the scrolling sheet; in the
-  // side panel they sit above the list and never scroll (the panel's header already names the channel).
+  // Above the list: on a phone, the channel line; the owner asked for no search box or filter chips.
   const controls = (
     <>
         {!docked && (
-          <div className="mb-2.5 flex min-h-7 items-center justify-between gap-3">
+          <div className="mb-2.5 flex min-h-7 items-center">
             <p className="min-w-0 truncate text-footnote text-white/55">{subtitle}</p>
-            {!playback && <ExplainToggle />}
           </div>
         )}
         {!playback && radioCount > 0 && <AiHint />}
-        <SearchField
-          size={docked ? 'md' : 'lg'}
-          label="Search transcripts"
-          placeholder={playback ? 'Search this replay' : 'Search calls, callsigns, runways'}
-          value={filters.query}
-          onChange={(v) => patch({ query: v })}
-          onEscape={() => (patch({ query: '' }), true)}
-        />
-        <FilterRow trailing={docked && !playback ? <ExplainToggle /> : null}>
-          {!playback && (
-            <Chip active={!!filters.stationId} onClick={() => patch({ stationId: filters.stationId ? null : stationId })} label="Only calls on this channel">
-              <Radio className="size-4" strokeWidth={2} aria-hidden />
-              This channel
-            </Chip>
-          )}
-          {/* Only offered once there is a flight to narrow to; a greyed-out chip just took room. */}
-          {(myFlight || filters.icao24) && (
-            <Chip active={!!filters.icao24} onClick={() => patch({ icao24: filters.icao24 ? null : myFlight })} label="Only calls about your flight">
-              <Plane aria-hidden className="size-4" strokeWidth={2} />
-              My flight
-            </Chip>
-          )}
-          {filters.callsign && (
-            <Chip tone="purple" onClick={() => patch({ callsign: null })} label={`Remove the ${filters.callsign} filter`}>
-              {filters.callsign}
-              <X aria-hidden className="size-4" strokeWidth={2} />
-            </Chip>
-          )}
-          {PHRASES.map((p) => (
-            <Chip key={p.id} active={filters.phrase === p.id} onClick={() => patch({ phrase: filters.phrase === p.id ? null : p.id })}>
-              {(() => {
-                const Icon = PHRASE_ICON[p.id]
-                return Icon ? <Icon className="size-4" strokeWidth={2} aria-hidden /> : null
-              })()}
-              {p.label}
-            </Chip>
-          ))}
-        </FilterRow>
-        {suggestions.length > 0 && (
-          <div className="animate-fade mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-caption font-medium text-white/45">Callsigns</span>
-            {suggestions.map((c) => (
-              <button key={c} type="button" className="pressable-soft flex h-7 items-center gap-1.5 rounded-full bg-atc-card/25 px-2.5 text-caption font-bold text-white ring-1 ring-inset ring-atc-card/60 hover:bg-atc-card/45" onClick={() => patch({ callsign: c, query: '' })}>
-                <AirlineLogo callsign={c} icao24={null} height={12} maxWidth={20} />
-                {c}
-              </button>
-            ))}
-          </div>
-        )}
-        {filtering && (
-          <p className="mt-2 text-caption font-medium text-white/50" aria-live="polite">
-            {hits.length === 0 ? 'No matches' : `${hits.length} ${hits.length === 1 ? 'match' : 'matches'}`}
-            {withAudio.size > 0 && ` · ${withAudio.size} with audio`}
-          </p>
-        )}
     </>
   )
 

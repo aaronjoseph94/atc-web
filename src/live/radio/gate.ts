@@ -20,6 +20,8 @@
 export type GateOptions<T, R> = {
   /** Longest a call is held back for its answer. */
   waitMs: number
+  /** Per call instead of `waitMs` (e.g. until the moment the call will be heard). */
+  waitFor?: (item: T) => number
   /** Calls with the same channel keep their order. */
   channel: (item: T) => string
   /** Start processing; the promise resolves to the answer, or null when there is none. Return null when no answer can come, to skip the wait. */
@@ -84,7 +86,7 @@ export function createGate<T, R>(opts: GateOptions<T, R>): Gate<T> {
         e.timer = setTimer(() => {
           e.ready = true
           flush(mine)
-        }, opts.waitMs)
+        }, Math.max(0, opts.waitFor ? opts.waitFor(item) : opts.waitMs))
         void pending
           .then(
             (r) => r,

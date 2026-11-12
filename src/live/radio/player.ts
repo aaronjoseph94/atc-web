@@ -78,6 +78,18 @@ let lastTime = -1
 let connectStarted = 0
 /** Bumped by every connect and stop, so a failure check that outlives its connection does nothing. */
 let generation = 0
+/**
+ * The radio is heard as late as the aircraft are drawn (see map/livePositions.ts): a call reaches
+ * the speakers at the moment its aircraft is shown doing what the call is about. Transcription
+ * listens to the stream as it arrives, so the delay is the time the speech-to-text and the AI
+ * pass have to finish before the call is heard.
+ */
+let delayNode: DelayNode | null = null
+let delayMs = 0
+/** Longest delay the line can hold (the map's own delay tops out well below this). */
+const MAX_DELAY_S = 30
+/** Delay changes smaller than this are ignored: moving the delay bends the pitch while it moves. */
+const DELAY_STEP_MS = 1500
 /** The MSE feed into the element, when that is how this browser plays the stream. */
 let stream: MseStream | null = null
 /** MSE failed once in this browser: use plain `src` from then on. */
@@ -107,9 +119,12 @@ function element(): HTMLAudioElement {
   el.setAttribute('webkit-playsinline', '')
   el.style.display = 'none'
   document.body.appendChild(el)
+  // With the delay line, sound reaches the speakers `delayMs` after the stream starts playing:
+  // until then the channel reads "buffering" rather than live and silent.
+  const heardYet = () => !delayNode || (el?.currentTime ?? 0) * 1000 >= delayMs
   el.addEventListener('playing', () => {
     if (!want) return
-    set('live', { retryInS: null })
+    set(heardYet() ? 'live' : 'buffering', { retryInS: null })
   })
   el.addEventListener('waiting', () => want && useRadio.getState().status === 'live' && set('buffering'))
   el.addEventListener('stalled', () => want && useRadio.getState().status === 'live' && set('buffering'))
@@ -119,7 +134,7 @@ function element(): HTMLAudioElement {
     lastProgress = performance.now()
     // Ten seconds of clean audio forgives earlier failures.
     if (el.currentTime > 10) attempt = 0
-    if (want && useRadio.getState().status === 'buffering') set('live')
+    if (want && useRadio.getState().status === 'buffering' && heardYet()) set('live')
   })
   el.addEventListener('error', () => want && void fail())
   el.addEventListener('ended', () => want && void fail())
@@ -138,7 +153,11 @@ function graph(media: HTMLAudioElement) {
   const analyser = makeAnalyser(ctx)
   // The volume sits after the analyser, so the waveform keeps showing the channel while it is turned down.
   volume = ctx.createGain()
-  source.connect(analyser)
+  // Delayed on the way to the speakers (and the waveform); the transcription tap below hears it at once.
+  delayNode = ctx.createDelay(MAX_DELAY_S)
+  delayNode.delayTime.value = delayMs / 1000
+  source.connect(delayNode)
+  delayNode.connect(analyser)
   analyser.connect(volume)
   volume.connect(ctx.destination)
   analysers.live = analyser
@@ -156,7 +175,13 @@ async function attachTap(ctx: AudioContext, from: AudioNode) {
     if (!seg || !want) return
     const wasSpeaking = seg.speaking
     const done = seg.push(samples)
-    if (seg.speaking !== wasSpeaking) useRadio.getState().patch({ speaking: seg.speaking })
+    // "On the air" follows what is heard, not what the tap has just seen.
+    if (seg.speaking !== wasSpeaking) {
+      const speaking = seg.speaking
+      window.setTimeout(() => {
+        if (want) useRadio.getState().patch({ speaking })
+      }, delayMs)
+    }
     for (const s of done) emit(s)
   }
   if (ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
@@ -443,4 +468,22 @@ export function radioElement(): HTMLAudioElement | null {
 /** Wait until the transcription tap is attached (for diagnostics). */
 export function tapAttached(): Promise<void> | null {
   return tapReady
+}
+
+/** How late the radio is heard behind the stream, in ms (0 before the delay is first set). */
+export function radioDelayMs(): number {
+  // Without the Web Audio graph the element plays straight to the speakers, undelayed.
+  return delayNode ? delayMs : 0
+}
+
+/**
+ * Line the radio up with the map's delay. Small changes are ignored and larger ones glide over a
+ * couple of seconds, so the audio never jumps or skips.
+ */
+export function setRadioDelay(ms: number) {
+  const next = Math.max(0, Math.min(MAX_DELAY_S * 1000 - 500, Math.round(ms)))
+  if (Math.abs(next - delayMs) < DELAY_STEP_MS && delayMs !== 0) return
+  delayMs = next
+  const ctx = delayNode?.context
+  if (delayNode && ctx) delayNode.delayTime.setTargetAtTime(next / 1000, ctx.currentTime, 0.8)
 }
