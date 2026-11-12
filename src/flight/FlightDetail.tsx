@@ -175,7 +175,7 @@ export function FlightDetail({ docked = false, onBack, backLabel }: { docked?: b
           <div data-scrolled={scrolled ? '' : undefined} className={`@container flex h-12 items-center gap-2 border-b pl-2 pr-3 transition-colors duration-[var(--duration-base)] ${scrolled ? 'border-white/10' : 'border-transparent'} ${docked ? '' : 'md:mt-1.5'}`}>
             {onBack && (
               <button type="button" data-no-drag aria-label={`Back to ${backLabel ?? 'the tabs'}`} className="pressable flex h-8 shrink-0 items-center rounded-full pl-1 pr-3 text-footnote font-semibold text-white/80 hover:bg-white/10 hover:text-white" onClick={onBack}>
-                <ChevronLeft className="size-5" strokeWidth={2.25} />
+                <ChevronLeft className="size-4" strokeWidth={2} />
                 {backLabel ?? 'Back'}
               </button>
             )}

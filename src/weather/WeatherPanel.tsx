@@ -115,7 +115,8 @@ function Hero({ metar, ageMs, night, heights }: { metar: Metar; ageMs: number; n
       <p className="mt-2 text-body font-semibold">{conditionsLine(metar, heights)}</p>
       {metar.tempC != null && (
         <p className="mt-0.5 text-footnote tabular-nums text-white/55">
-          {signed(toF(metar.tempC))}°F{metar.dewpointC != null ? ` · Dew point ${signed(metar.dewpointC)}°C` : ''}
+          {/* The dew point has its own tile below, with the spread. */}
+          {signed(toF(metar.tempC))}°F
         </p>
       )}
     </section>
@@ -126,7 +127,7 @@ function Tile({ icon: Icon, label, children, hint, tone, className = '' }: { ico
   return (
     <div className={`ui-card min-w-0 px-3 py-2.5 ${className}`}>
       <div className="flex items-center gap-1.5 text-caption font-medium text-white/55">
-        <Icon aria-hidden className="size-3.5 shrink-0" strokeWidth={2.25} />
+        <Icon aria-hidden className="size-4 shrink-0" strokeWidth={2} />
         <span className="truncate">{label}</span>
       </div>
       <div className="mt-1 truncate text-title3 font-semibold tabular-nums">{children}</div>
@@ -157,7 +158,7 @@ function CloudStack({ metar, heights }: { metar: Metar; heights: AltitudeUnit })
   return (
     <div className="ui-card row-span-2 flex min-w-0 flex-col px-3 py-2.5">
       <div className="flex items-center gap-1.5 text-caption font-medium text-white/55">
-        <Cloud aria-hidden className="size-3.5 shrink-0" strokeWidth={2.25} />
+        <Cloud aria-hidden className="size-4 shrink-0" strokeWidth={2} />
         Ceiling
       </div>
       <div className="mt-1 truncate text-title3 font-semibold tabular-nums">{ceiling != null ? formatHeight(ceiling, heights) : 'None'}</div>

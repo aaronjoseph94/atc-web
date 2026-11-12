@@ -53,7 +53,8 @@ function Row({ a, now, onPick }: { a: Activity; now: number; onPick: (a: Activit
   )
 }
 
-export function ActivityList({ onPick }: { onPick: () => void }) {
+/** `hideEmpty`: show nothing until there is something to list (the side panel's Now tab). */
+export function ActivityList({ onPick, hideEmpty = false }: { onPick: () => void; hideEmpty?: boolean }) {
   const airport = usePlayhead((s) => s.airportIcao)
   const events = usePlayhead((s) => s.events)
   const liveStatus = usePlayhead((s) => s.liveStatus)
@@ -64,7 +65,7 @@ export function ActivityList({ onPick }: { onPick: () => void }) {
   const list = useMemo(() => recentActivity(history, events, airport, LIMIT), [history, events, airport])
   const shown = all ? list : list.slice(0, COLLAPSED)
 
-  if (!list.length && liveStatus !== 'ok') return null
+  if (!list.length && (hideEmpty || liveStatus !== 'ok')) return null
   return (
     <section aria-label="Recent activity" className="mt-5 first:mt-0">
       <SectionLabel>Recent activity</SectionLabel>

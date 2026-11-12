@@ -31,7 +31,7 @@ function Badge({ s }: { s: Spot }) {
   const Icon = s.military ? Shield : Star
   return (
     <span className={`mt-0.5 grid size-[26px] shrink-0 place-items-center rounded-full ${s.rare ? 'bg-atc-yellow/[0.16] text-atc-yellow' : 'bg-white/[0.08] text-white/70'}`} aria-hidden>
-      <Icon className="size-3.5" strokeWidth={2.4} fill={s.rare ? 'currentColor' : 'none'} />
+      <Icon className="size-4" strokeWidth={2} fill={s.rare ? 'currentColor' : 'none'} />
     </span>
   )
 }
@@ -71,7 +71,8 @@ function Row({ s, now, onPick }: { s: Spot; now: number; onPick: (s: Spot) => vo
   )
 }
 
-export function SpottedList({ onPick }: { onPick: () => void }) {
+/** `hideEmpty`: show nothing until something unusual turns up (the side panel's Now tab). */
+export function SpottedList({ onPick, hideEmpty = false }: { onPick: () => void; hideEmpty?: boolean }) {
   const spots = useSpotted((s) => s.spots)
   const airport = usePlayhead((s) => s.airportIcao)
   const spottedAt = useSpotted((s) => s.airport)
@@ -82,7 +83,7 @@ export function SpottedList({ onPick }: { onPick: () => void }) {
   const list = spottedAt === airport ? spots : []
   const shown = all ? list : list.slice(0, COLLAPSED)
 
-  if (!list.length && liveStatus !== 'ok') return null
+  if (!list.length && (hideEmpty || liveStatus !== 'ok')) return null
   return (
     <section aria-label="Spotted" className="mt-5 first:mt-0">
       <SectionLabel count={list.length || null}>Spotted</SectionLabel>

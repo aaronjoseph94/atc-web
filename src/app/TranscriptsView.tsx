@@ -160,7 +160,7 @@ function FilterRow({ children, trailing }: { children: ReactNode; trailing?: Rea
           className="pressable-soft grid size-7 shrink-0 place-items-center rounded-full bg-white/[0.09] text-white/75 hover:bg-white/[0.15] hover:text-white"
           onClick={() => setOpen((v) => !v)}
         >
-          <ChevronDown className={`size-4 transition-transform duration-[var(--duration-fast)] ${open ? 'rotate-180' : ''}`} strokeWidth={2.5} />
+          <ChevronDown className={`size-4 transition-transform duration-[var(--duration-fast)] ${open ? 'rotate-180' : ''}`} strokeWidth={2} />
         </button>
       )}
     </div>
@@ -354,25 +354,28 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
         <FilterRow trailing={docked && !playback ? <ExplainToggle /> : null}>
           {!playback && (
             <Chip active={!!filters.stationId} onClick={() => patch({ stationId: filters.stationId ? null : stationId })} label="Only calls on this channel">
-              <Radio className="size-3.5" strokeWidth={2.5} aria-hidden />
+              <Radio className="size-4" strokeWidth={2} aria-hidden />
               This channel
             </Chip>
           )}
-          <Chip active={!!filters.icao24} disabled={!myFlight} onClick={() => patch({ icao24: filters.icao24 ? null : myFlight })} label={myFlight ? 'Only calls about your flight' : 'Select a flight on the map first'}>
-            <Plane className="size-3.5" strokeWidth={2.5} />
-            My flight
-          </Chip>
+          {/* Only offered once there is a flight to narrow to; a greyed-out chip just took room. */}
+          {(myFlight || filters.icao24) && (
+            <Chip active={!!filters.icao24} onClick={() => patch({ icao24: filters.icao24 ? null : myFlight })} label="Only calls about your flight">
+              <Plane aria-hidden className="size-4" strokeWidth={2} />
+              My flight
+            </Chip>
+          )}
           {filters.callsign && (
             <Chip tone="purple" onClick={() => patch({ callsign: null })} label={`Remove the ${filters.callsign} filter`}>
               {filters.callsign}
-              <X className="size-3.5" strokeWidth={2.75} />
+              <X aria-hidden className="size-4" strokeWidth={2} />
             </Chip>
           )}
           {PHRASES.map((p) => (
             <Chip key={p.id} active={filters.phrase === p.id} onClick={() => patch({ phrase: filters.phrase === p.id ? null : p.id })}>
               {(() => {
                 const Icon = PHRASE_ICON[p.id]
-                return Icon ? <Icon className="size-3.5" strokeWidth={2.5} aria-hidden /> : null
+                return Icon ? <Icon className="size-4" strokeWidth={2} aria-hidden /> : null
               })()}
               {p.label}
             </Chip>

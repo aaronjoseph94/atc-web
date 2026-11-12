@@ -136,7 +136,7 @@ export function FlightInsights({ flight, info }: { flight: FlightView; info: Fli
         <ul className="mt-3 space-y-1.5 border-t border-white/[0.07] pt-3" aria-label="Facts about this flight">
           {shownFacts.map((f) => (
             <li key={f.id} className="flex gap-2 text-footnote leading-snug text-white/75">
-              <Lightbulb aria-hidden className="mt-0.5 size-3.5 shrink-0 text-atc-yellow" strokeWidth={2.25} />
+              <Lightbulb aria-hidden className="mt-0.5 size-4 shrink-0 text-atc-yellow" strokeWidth={2} />
               <span className="min-w-0">
                 {f.text}
                 {aiFacts.data && <AiMark className="ml-1" />}

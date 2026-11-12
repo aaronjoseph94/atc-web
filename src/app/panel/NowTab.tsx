@@ -3,20 +3,22 @@
  * in the order someone glancing over would ask:
  *
  *   who is talking        the call on the air (or the last one), in the speaker's colour
- *   what is going on      the briefing, in a sentence or two
+ *   what is going on      the AI briefing, when there is one
  *   which runways         landing and departing ends, with the wind on them
  *   how busy              arriving, departing, taxiing, parked
  *   anything unusual      alerts raised this session
  *   what just happened    recent takeoffs and landings, notable aircraft
  *
+ * Only what the station bar under the map doesn't already say: no airport,
+ * channel, flight category or wind summary here. Sections with nothing in
+ * them yet stay out of the way rather than explain themselves.
+ *
  * Each block opens the tab that has the detail. Nothing here fetches on its
  * own: it reads the same stores and cached queries the other tabs fill.
  */
-import { ArrowLeftRight, ChevronRight, Navigation2, PlaneLanding, PlaneTakeoff } from 'lucide-react'
+import { ArrowLeftRight, CircleParking, PlaneLanding, PlaneTakeoff } from 'lucide-react'
 import { memo, useMemo, type ReactNode } from 'react'
 import { AirlineLogo } from '../../airline/AirlineLogo'
-import { formatMhz } from '../../api/airportData'
-import { getAirport, resolveStation } from '../../api/airports'
 import type { TranscriptCue } from '../../api/types'
 import { SpottedList } from '../../discovery/SpottedList'
 import { useNow } from '../../hooks/useNow'
@@ -32,21 +34,21 @@ import { useUnderstood } from '../../live/radio/understand/store'
 import { toggleRadio } from '../../live/radio/useLiveRadio'
 import { liveBuffer } from '../../live/session'
 import { runwayEnds } from '../../map/airportDiagram'
-import { RUNWAY_USE_COLOR } from '../../map/mapStyle'
 import { trackId } from '../../playback/interpolate'
 import { usePlayhead } from '../../playback/playheadStore'
 import { useSettings, type SpeedUnit } from '../../settings/settingsStore'
-import { CATEGORY_COLOR, useWeather } from '../../station/StationBar'
+import { useWeather } from '../../station/StationBar'
 import { Lamp } from '../../ui/kit'
 import type { DockTab } from '../../ui/layout'
 import { PanelFrame, SectionLabel } from '../../ui/Panel'
 import { speakerColors, type RadioSpeaker } from '../../ui/speaker'
-import { Bone, EmptyState, OfflineArt } from '../../ui/States'
+import { EmptyState, OfflineArt } from '../../ui/States'
 import { Ticker } from '../../ui/Ticker'
 import { runwayWinds, type RunwayWind } from '../../weather/atis'
-import { compassPoint, speedUnitLabel, speedValue } from '../../weather/decode'
+import { speedUnitLabel, speedValue } from '../../weather/decode'
 import { RunwayChip } from '../../weather/WindCard'
 import { ActivityList } from '../ActivityList'
+import { PANEL_ICON } from './icons'
 import { agoShort } from './overview'
 import { useLampState, useOnAir, useTrafficCounts } from './panelStore'
 
@@ -109,7 +111,6 @@ function useReplayCue(): TranscriptCue | null {
 /** Who is talking: the panel's live centre. */
 function OnAirCard({ go }: { go: Go }) {
   const playback = usePlayhead((s) => s.mode === 'playback')
-  const airportIcao = usePlayhead((s) => s.airportIcao)
   const stationId = usePlayhead((s) => s.stationId)
   const setPanel = usePlayhead((s) => s.setPanel)
   const lamp = useLampState()
@@ -121,42 +122,38 @@ function OnAirCard({ go }: { go: Go }) {
   const cue = useReplayCue()
   const clip = usePlayhead((s) => (s.mode === 'playback' ? s.clip : null))
   const now = useNow(20_000)
-  const station = resolveStation(getAirport(airportIcao), stationId)
-  const channel = `${station?.label ?? 'Tower'}${station?.frequencyMhz != null ? ` ${formatMhz(station.frequencyMhz)}` : ''}`
   const off = lamp.state === 'off'
 
   // A wash of the speaker's colour while they have the microphone; it drains away when they let go.
   const wash = air.speaking ? `color-mix(in srgb, ${air.colors.base} 13%, rgb(255 255 255 / 0.05))` : undefined
+  // The channel's name is on the station bar; here the lamp and what it means are enough (a replay names its scene).
   const head = (
     <div className="flex items-center gap-2">
       <Lamp state={lamp.state} color={lamp.color} />
       <span className="text-footnote font-semibold text-white/85">{lamp.label}</span>
-      <span className="ml-auto min-w-0 truncate text-caption text-white/50">{playback ? clip?.title : channel}</span>
+      {playback && clip && <span className="ml-auto min-w-0 truncate text-caption text-white/50">{clip.title}</span>}
     </div>
   )
 
+  // Radio off: one quiet line with the one thing to do about it.
   if (!playback && off) {
     const nofeed = status === 'nofeed'
     return (
-      <section aria-label="On the air" className="ui-card p-3.5">
-        {head}
-        <p className="mt-2 text-subhead leading-snug text-white/75">{nofeed ? 'Nobody streams this channel. Channels marked with bars in the list play live.' : 'Play the radio to hear this channel; each call is written out here as it is spoken.'}</p>
-        <div className="mt-3 flex gap-2">
-          {nofeed ? (
-            <button type="button" className="pressable on-yellow flex h-9 items-center rounded-full bg-atc-yellow px-4 text-footnote font-semibold text-black hover:bg-atc-yellow-deep" onClick={() => setPanel('stations')}>
-              Choose a channel
-            </button>
-          ) : (
-            <button type="button" className="pressable on-yellow flex h-9 items-center rounded-full bg-atc-yellow px-4 text-footnote font-semibold text-black hover:bg-atc-yellow-deep" onClick={() => toggleRadio()}>
-              Listen live
-            </button>
-          )}
-          {call && (
-            <button type="button" className="pressable flex h-9 items-center rounded-full bg-white/10 px-4 text-footnote font-semibold text-white ring-1 ring-inset ring-white/10 hover:bg-white/[0.16]" onClick={() => go('transcripts')}>
-              Earlier calls
-            </button>
-          )}
-        </div>
+      <section aria-label="On the air" className="ui-card flex items-center gap-3 py-2.5 pl-3.5 pr-2.5">
+        <Lamp state={lamp.state} color={lamp.color} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-footnote font-semibold text-white/85">{nofeed ? 'No live audio' : 'Radio off'}</span>
+          <span className="block truncate text-caption text-white/55">{nofeed ? 'Nobody streams this channel' : 'Calls are written out here as they’re spoken'}</span>
+        </span>
+        {nofeed ? (
+          <button type="button" className="pressable flex h-8 shrink-0 items-center rounded-full bg-white/10 px-3.5 text-footnote font-semibold text-white hover:bg-white/[0.16]" onClick={() => setPanel('stations')}>
+            Change channel
+          </button>
+        ) : (
+          <button type="button" className="pressable on-yellow flex h-8 shrink-0 items-center rounded-full bg-atc-yellow px-3.5 text-footnote font-semibold text-black hover:bg-atc-yellow-deep" onClick={() => toggleRadio()}>
+            Listen
+          </button>
+        )}
       </section>
     )
   }
@@ -202,25 +199,21 @@ function OnAirCard({ go }: { go: Go }) {
   )
 }
 
-/** The briefing: what is going on here, in a sentence or two (AI-written when it can be). */
+/**
+ * The AI briefing: what is going on here, in a sentence or two. Only the
+ * AI-written one: the plain fallback just read out the runway and traffic
+ * cards below it.
+ */
 function Briefing() {
   const brief = useBriefingText()
-  const waiting = usePlayhead((s) => s.mode === 'live' && s.liveStatus !== 'error')
-  if (!brief && !waiting) return null
+  if (!brief?.ai) return null
   return (
     <section aria-label="Airport briefing" className="rounded-2xl bg-atc-card/[0.16] px-3.5 py-3 ring-1 ring-inset ring-atc-card/40">
       <div className="flex items-center gap-1 text-caption font-semibold text-white/65">
         Right now
-        {brief?.ai && <AiMark />}
+        <AiMark />
       </div>
-      {brief ? (
-        <p className="mt-1 animate-fade text-subhead leading-snug text-white/90">{brief.text}</p>
-      ) : (
-        <div className="mt-2 space-y-2 pb-1" role="status" aria-label="Gathering the briefing">
-          <Bone className="h-3.5 w-11/12" />
-          <Bone className="h-3.5 w-8/12" />
-        </div>
-      )}
+      <p className="mt-1 animate-fade text-subhead leading-snug text-white/90">{brief.text}</p>
     </section>
   )
 }
@@ -256,14 +249,12 @@ function FieldCard({ go }: { go: Go }) {
   const byIdent = new Map(winds.map((w) => [w.ident, w]))
   const inUse = active && (active.landing.length > 0 || active.departing.length > 0)
   const idents = inUse ? [...new Set([...active.landing, ...active.departing])] : (active?.favoured.length ? active.favoured : winds.slice(0, 2).map((w) => w.ident)).slice(0, 2)
-  if (!metar && !idents.length) return null
-  const kt = metar?.windKt ?? 0
-  const dir = metar?.windDirDeg ?? null
+  if (!idents.length) return null
   const basis = !inUse ? 'Best into the wind' : active.basis === 'atis' ? 'Per the ATIS' : 'From the traffic'
 
   return (
     <section aria-label="Runways and wind" className="mt-5">
-      <SectionLabel aside={idents.length > 0 ? basis : undefined}>{inUse || !idents.length ? 'Runways in use' : 'Favoured runways'}</SectionLabel>
+      <SectionLabel aside={basis}>{inUse ? 'Runways in use' : 'Favoured runways'}</SectionLabel>
       <button type="button" className="ui-card pressable-soft block w-full px-3.5 text-left hover:bg-white/[0.08]" aria-label="Runways and wind. Open the weather" onClick={() => go('weather')}>
         {idents.map((ident) => {
           const landing = !!inUse && active.landing.includes(ident)
@@ -276,26 +267,6 @@ function FieldCard({ go }: { go: Go }) {
             </span>
           )
         })}
-        {metar && (
-          <span className="flex min-h-11 items-center gap-2.5 py-1.5">
-            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-atc-yellow/[0.14]" aria-hidden>
-              {/* Points the way the wind is blowing: from 300° it heads south-east. */}
-              {kt && dir != null ? <Navigation2 className="size-3.5 fill-atc-yellow text-atc-yellow transition-transform duration-700 ease-[var(--ease-out)]" style={{ transform: `rotate(${dir + 180}deg)` }} /> : <span className="size-1.5 rounded-full bg-atc-yellow" />}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-footnote text-white/70">
-              <span className="font-semibold tabular-nums text-white">{!kt ? 'Calm' : `${dir != null ? `${String(dir).padStart(3, '0')}°` : 'Variable'} · ${speedValue(kt, unit)} ${speedUnitLabel(unit)}`}</span>
-              {kt && dir != null ? ` from the ${compassPoint(dir)}` : ''}
-              {metar.gustKt ? `, gusting ${speedValue(metar.gustKt, unit)}` : ''}
-            </span>
-            {metar.flightCategory && (
-              <span className="flex shrink-0 items-center gap-1.5 text-caption font-bold text-white/85">
-                <span aria-hidden className="size-2 rounded-full" style={{ background: CATEGORY_COLOR[metar.flightCategory] }} />
-                {metar.flightCategory}
-              </span>
-            )}
-            <ChevronRight aria-hidden className="-mr-1 size-4 shrink-0 text-white/35" />
-          </span>
-        )}
       </button>
     </section>
   )
@@ -308,22 +279,22 @@ function TrafficTiles({ go }: { go: Go }) {
   const c = useTrafficCounts()
   const status = usePlayhead((s) => s.liveStatus)
   const cells: [string, number, ReactNode][] = [
-    ['Arriving', c.arriving, <PlaneLanding key="i" className="size-4" style={{ color: RUNWAY_USE_COLOR.arrivals }} strokeWidth={2.5} />],
-    ['Departing', c.departing, <PlaneTakeoff key="i" className="size-4" style={{ color: RUNWAY_USE_COLOR.departures }} strokeWidth={2.5} />],
-    ['Taxiing', c.taxiing, <ArrowLeftRight key="i" className="size-4 text-atc-yellow/90" strokeWidth={2.25} />],
-    ['Parked', c.parked, <span key="i" className="size-1.5 rounded-full bg-white/45" />],
+    ['Arriving', c.arriving, <PlaneLanding key="i" {...PANEL_ICON} />],
+    ['Departing', c.departing, <PlaneTakeoff key="i" {...PANEL_ICON} />],
+    ['Taxiing', c.taxiing, <ArrowLeftRight key="i" {...PANEL_ICON} />],
+    ['Parked', c.parked, <CircleParking key="i" {...PANEL_ICON} />],
   ]
   return (
     <section aria-label="Traffic" className="mt-5">
-      <SectionLabel count={status === 'ok' ? c.total : undefined}>Traffic</SectionLabel>
+      <SectionLabel>Traffic</SectionLabel>
       <button type="button" className="ui-card pressable-soft grid w-full grid-cols-4 divide-x divide-white/[0.06] py-2.5 text-left hover:bg-white/[0.08]" aria-label={`Traffic: ${c.arriving} arriving, ${c.departing} departing, ${c.taxiing} taxiing, ${c.parked} parked. Open the list`} onClick={() => go('traffic')}>
         {cells.map(([label, n, icon]) => (
           <span key={label} className="min-w-0 px-3" aria-hidden>
             <span className="flex items-center justify-between gap-1">
               <span className="font-display text-[1.6rem] leading-none tracking-normal text-white">{status === 'ok' ? <Ticker value={n} format={whole} /> : <span className="text-white/30">–</span>}</span>
-              <span className="grid size-4 shrink-0 place-items-center">{icon}</span>
+              <span className="shrink-0 text-white/40">{icon}</span>
             </span>
-            <span className="mt-1.5 block truncate text-caption2 font-medium text-white/60">{label}</span>
+            <span className="mt-1.5 block truncate text-caption2 font-medium text-white/55">{label}</span>
           </span>
         ))}
       </button>
@@ -340,7 +311,7 @@ const AlertRow = memo(function AlertRow({ alert, why, now }: { alert: Alert; why
     <li>
       <button type="button" aria-disabled={!here || undefined} className="ui-row pressable-soft flex w-full items-start gap-3 aria-disabled:cursor-default" onClick={() => here && usePlayhead.getState().select(alert.icao24)}>
         <span className="mt-0.5 grid size-[26px] shrink-0 place-items-center rounded-full" style={{ color: urgent ? '#fff' : s.color, background: urgent ? s.color : `color-mix(in srgb, ${s.color} 22%, transparent)` }} aria-hidden>
-          <Icon className="size-[15px]" strokeWidth={2.25} />
+          <Icon {...PANEL_ICON} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline gap-2">
@@ -400,8 +371,8 @@ export function NowTab({ go }: { go: Go }) {
           <>
             <TrafficTiles go={go} />
             <Alerts />
-            <ActivityList onPick={noop} />
-            <SpottedList onPick={noop} />
+            <ActivityList onPick={noop} hideEmpty />
+            <SpottedList onPick={noop} hideEmpty />
           </>
         ))}
       {!live && <p className="mt-6 px-1 text-footnote text-white/55">This is a replay. Runways and wind are as they are now; traffic counts and recent activity come back with the live view.</p>}
