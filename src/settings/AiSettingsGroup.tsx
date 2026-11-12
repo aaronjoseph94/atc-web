@@ -1,150 +1,81 @@
 /**
- * Settings > AI: where the owner pastes a Claude and/or OpenRouter key, picks
- * the provider and model, and checks the connection. Keys stay in this
- * browser and are only ever sent to this site's own `/api/ai`.
+ * Settings > AI: the on/off switch for this device and a read-only line
+ * saying whether the site has AI set up and which model answers.
+ *
+ * There is nothing to type: the key belongs to the site owner and lives in
+ * Cloudflare (docs/ai-setup.md). `AiUsage` is the matching block for
+ * Settings > Data and diagnostics: today's requests against the daily cap.
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, EyeOff, KeyRound } from 'lucide-react'
-import { useState } from 'react'
-import { askAi, getAiRunStatus } from '../ai/client'
-import { useAiSettings, type AiProviderChoice } from '../ai/aiSettings'
-import { CLAUDE_MODELS } from '../api/ai/run'
-import { Group, Row, SectionLabel, Segmented, Toggle } from '../ui/Panel'
-
-const inputCls =
-  'h-10 w-full rounded-xl bg-white/[0.08] pl-3 pr-10 font-mono text-footnote text-white outline-none ring-1 ring-inset ring-white/[0.08] placeholder:font-sans placeholder:text-white/35 focus:ring-2 focus:ring-atc-purple/70'
-
-function KeyField({ label, value, onChange, placeholder, help }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; help: string }) {
-  const [show, setShow] = useState(false)
-  return (
-    <label className="block py-2.5">
-      <span className="mb-1.5 flex items-center gap-1.5 text-subhead font-medium">
-        <KeyRound className="size-3.5 text-white/50" strokeWidth={2.5} aria-hidden />
-        {label}
-      </span>
-      <span className="relative block">
-        <input
-          type={show ? 'text' : 'password'}
-          autoComplete="off"
-          spellCheck={false}
-          className={inputCls}
-          value={value}
-          placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <button
-          type="button"
-          aria-label={show ? `Hide ${label}` : `Show ${label}`}
-          className="pressable absolute right-1.5 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-white/55 hover:text-white"
-          onClick={() => setShow((v) => !v)}
-        >
-          {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-        </button>
-      </span>
-      <span className="mt-1 block text-caption text-atc-muted">{help}</span>
-    </label>
-  )
-}
+import { useAiLimit, useAiStatus } from '../ai/client'
+import { useAiSettings } from '../ai/aiSettings'
+import { Group, Row, SectionLabel, Toggle } from '../ui/Panel'
 
 export function AiSettingsGroup() {
-  const s = useAiSettings()
-  const qc = useQueryClient()
-  const status = useQuery({ queryKey: ['ai-run-status', s.provider, s.model, !!s.anthropicKey, !!s.openrouterKey], queryFn: getAiRunStatus, staleTime: 30_000, retry: 0 })
-  const [test, setTest] = useState<{ state: 'idle' | 'busy' | 'ok' | 'fail'; message?: string }>({ state: 'idle' })
-
-  const runTest = async () => {
-    setTest({ state: 'busy' })
-    try {
-      await askAi('ping', {}, { fresh: true })
-      setTest({ state: 'ok', message: 'Connected. AI features are ready.' })
-    } catch (err) {
-      setTest({ state: 'fail', message: err instanceof Error ? err.message : 'Test failed' })
-    }
-    void qc.invalidateQueries({ queryKey: ['ai-run-status'] })
-  }
-
+  const enabled = useAiSettings((s) => s.enabled)
+  const update = useAiSettings((s) => s.update)
+  const status = useAiStatus()
+  const capped = useAiLimit((s) => s.limited?.code === 'daily_cap')
   const st = status.data
-  const summary = !s.enabled
-    ? 'AI features are off.'
-    : st?.configured
-      ? `Using ${st.provider === 'openrouter' ? 'OpenRouter' : 'Claude'} · ${st.model}${st.keySource === 'server' ? ' (key set on the server)' : ''}`
-      : 'Add a Claude or OpenRouter key to turn on the AI features.'
+  const limited = !!st?.configured && (st.usage.limited || capped)
+  const line = status.isPending ? 'Checking…' : !st ? 'AI status is not available right now' : st.configured ? `AI: on (${st.label ?? st.model}, set in Cloudflare)` : 'AI is not set up'
 
   return (
     <>
       <SectionLabel>AI</SectionLabel>
       <Group>
-        <Row label="AI features" hint={summary}>
-          <Toggle checked={s.enabled} onChange={(v) => s.update('enabled', v)} label="AI features" />
+        <Row label="AI features" hint={enabled ? 'Cleans up and explains radio calls, writes the briefings' : 'Off on this device'}>
+          <Toggle checked={enabled} onChange={(v) => update('enabled', v)} label="AI features" />
         </Row>
-        {s.enabled && (
-          <>
-            <Row label="Provider">
-              <Segmented<AiProviderChoice>
-                label="AI provider"
-                value={s.provider}
-                options={[
-                  ['auto', 'Auto'],
-                  ['anthropic', 'Claude'],
-                  ['openrouter', 'OpenRouter'],
-                ]}
-                onChange={(v) => s.update('provider', v)}
-              />
-            </Row>
-            <Row label="Model">
-              <select
-                aria-label="AI model"
-                className="max-w-[11rem] truncate rounded-lg bg-white/10 px-2.5 py-1.5 text-footnote font-medium outline-none ring-1 ring-white/10 focus:ring-atc-yellow/60"
-                value={s.model}
-                onChange={(e) => s.update('model', e.target.value)}
-              >
-                {CLAUDE_MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label} · {m.note}
-                  </option>
-                ))}
-              </select>
-            </Row>
-            <KeyField
-              label="Claude API key"
-              value={s.anthropicKey}
-              onChange={(v) => s.update('anthropicKey', v)}
-              placeholder="sk-ant-…"
-              help="From console.anthropic.com → API keys."
-            />
-            <KeyField
-              label="OpenRouter API key"
-              value={s.openrouterKey}
-              onChange={(v) => s.update('openrouterKey', v)}
-              placeholder="sk-or-…"
-              help="From openrouter.ai → Keys. Used when the provider is OpenRouter, or when there is no Claude key."
-            />
-            <div className="flex flex-wrap items-center gap-2 py-2.5">
-              <button
-                type="button"
-                className="pressable rounded-full bg-atc-card px-3.5 py-1.5 text-footnote font-semibold text-white hover:brightness-110 disabled:opacity-50"
-                onClick={() => void runTest()}
-                disabled={test.state === 'busy'}
-              >
-                {test.state === 'busy' ? 'Testing…' : 'Test connection'}
-              </button>
-              {(s.anthropicKey || s.openrouterKey) && (
-                <button type="button" className="pressable rounded-full bg-white/10 px-3.5 py-1.5 text-footnote font-semibold text-white/80 hover:bg-white/15" onClick={s.clearKeys}>
-                  Remove keys
-                </button>
-              )}
-              {test.message && (
-                <span role="status" className={`text-caption font-medium ${test.state === 'ok' ? 'text-emerald-400' : 'text-atc-live'}`}>
-                  {test.message}
-                </span>
-              )}
-            </div>
-          </>
-        )}
+        <div className="py-2.5" role="status" aria-label="AI status">
+          <p className="flex items-center gap-2 text-subhead font-medium">
+            <span className={`size-2 shrink-0 rounded-full ${!st ? 'bg-atc-muted' : st.configured ? (limited ? 'bg-atc-yellow' : 'bg-atc-purple') : 'bg-white/30'}`} aria-hidden />
+            {line}
+          </p>
+          {limited && <p className="mt-1 text-caption text-atc-muted">Today’s limit is reached. Radio calls are shown as heard, and the rest is back after midnight UTC.</p>}
+          {st && !st.configured && (
+            <p className="mt-1 text-caption text-atc-muted">
+              The site owner switches it on in Cloudflare: Workers &amp; Pages → atc-web → Settings → Variables and Secrets → add the secret ANTHROPIC_API_KEY (Production and Preview), then redeploy. Until then everything works without it: radio calls are shown as heard.
+            </p>
+          )}
+        </div>
       </Group>
-      <p className="mt-2 px-1 text-caption text-atc-muted">
-        Keys stay in this browser and are sent only to this site, per request, to reach the model; they are never stored on the server. To share one key with every visitor instead, set ANTHROPIC_API_KEY or OPENROUTER_API_KEY as a secret in Cloudflare Pages.
-      </p>
+      <p className="mt-2 px-1 text-caption text-atc-muted">The AI key belongs to the site and is kept in Cloudflare. This browser never holds or sends one.</p>
     </>
+  )
+}
+
+const STORAGE_LABEL = { kv: 'Cloudflare KV, all regions', cache: 'this region’s cache (approximate)', memory: 'dev server memory' } as const
+
+/** Today's AI requests against the daily cap, for Settings > Data and diagnostics. */
+export function AiUsage() {
+  const status = useAiStatus()
+  const st = status.data
+  const u = st?.usage
+  const radio = u?.tasks.radioCleanup
+  const resets = u ? new Date(u.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : null
+  return (
+    <Group className="py-3">
+      <div className="flex items-center gap-2">
+        <span className={`size-2 rounded-full ${!st ? 'bg-atc-muted' : !st.configured ? 'bg-white/30' : u?.limited ? 'bg-atc-yellow' : 'bg-atc-purple'}`} />
+        <span className="text-subhead font-semibold">{status.isPending ? 'Checking AI…' : !st ? 'AI status is not available' : !st.configured ? 'AI is not set up' : u?.limited ? 'AI daily limit reached' : `AI: on (${st.label ?? st.model})`}</span>
+      </div>
+      {u && (
+        <dl className="mt-2.5 grid grid-cols-3 gap-x-3 gap-y-2 text-footnote">
+          <Stat k="AI requests today" v={`${u.today} of ${u.cap}`} />
+          <Stat k="Radio calls" v={radio ? `${radio.today} of ${radio.cap}` : '—'} />
+          <Stat k="Starts again" v={resets ?? '—'} />
+        </dl>
+      )}
+      {u && <p className="mt-2.5 text-caption text-atc-muted">Counted in {STORAGE_LABEL[u.storage]}. Answers served from the cache are free and are not counted. The cap is AI_DAILY_CAP in Cloudflare.</p>}
+    </Group>
+  )
+}
+
+function Stat({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-caption text-atc-muted">{k}</dt>
+      <dd className="truncate font-medium tabular-nums">{v}</dd>
+    </div>
   )
 }

@@ -29,7 +29,7 @@ import { startHistory, useHistory, type HistoryEntry } from '../live/history/sto
 import { Terms } from '../learn/Terms'
 import { useRadio } from '../live/radio/radioStore'
 import { releaseFocus } from '../live/radio/transcriber'
-import { AiHint, CallExtras, ExplainToggle, FadeSwap } from '../live/radio/understand/CallExtras'
+import { AiHint, CallExtras, ExplainToggle, FadeSwap, UnprocessedMark } from '../live/radio/understand/CallExtras'
 import { searchWithRaw, withUnderstanding } from '../live/radio/understand/search'
 import { useUnderstanding } from '../live/radio/understand/store'
 import { liveBuffer } from '../live/session'
@@ -481,9 +481,10 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
                             <span className="tabular-nums">{clock(it.at)}</span>
                           </span>
                           <span className="mt-0.5 block text-[21px] font-semibold leading-snug text-white/90">
-                            <FadeSwap swapKey={it.raw != null && it.text !== it.raw ? 'cleaned' : 'raw'}>
+                            <FadeSwap swapKey={it.unprocessed ? 'raw' : 'ready'}>
                               <Marked text={it.text} ranges={h.ranges} />
                             </FadeSwap>
+                            {it.unprocessed && <UnprocessedMark />}
                           </span>
                           {taxi && (
                             <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-atc-card/30 px-2 py-0.5 text-caption font-semibold text-[#C9BCFF]">

@@ -1,4 +1,4 @@
-/** A tiny task Settings uses to check that a key works. */
+/** A tiny task for checking by hand that the server's key works (the cheapest request there is). */
 import type { AiTask } from '../tasks'
 
 export const ping: AiTask<Record<string, never>> = {

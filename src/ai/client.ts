@@ -1,18 +1,27 @@
 /**
  * Browser side of the AI features: `askAi(task, input)` runs a named task on
- * `/api/ai` (see src/api/ai/tasks.ts) with this device's keys, de-duplicates
- * identical requests in flight, and keeps recent answers in memory.
+ * `/api/ai` (see src/api/ai/tasks.ts), de-duplicates identical requests in
+ * flight, and keeps recent answers in memory. The server holds the key; the
+ * browser sends none.
  *
  * Every feature must work, in a simpler form, when AI is unavailable: catch
  * `AiUnavailableError` and fall back (rules, raw text) rather than erroring.
+ * That includes the site's daily cap: once the server says it is reached,
+ * nothing more is sent for a while and callers fail fast.
  */
-import { aiHeaders, useAiSettings } from './aiSettings'
+import { useQuery } from '@tanstack/react-query'
+import { create } from 'zustand'
+import type { AiRefusal, AiStatusResponse } from '../api/ai/handler'
+import { useAiSettings } from './aiSettings'
 
 export class AiUnavailableError extends Error {
   readonly status: number
-  constructor(message: string, status: number) {
+  /** Why the server said no, when it gave a reason. */
+  readonly code: AiRefusal | null
+  constructor(message: string, status: number, code: AiRefusal | null = null) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -22,25 +31,82 @@ const MEMO_LIMIT = 300
 const memo = new Map<string, Answer>()
 const inflight = new Map<string, Promise<Answer>>()
 
+// ---------------------------------------------------------------------------
+// Limits the server has told us about
+// ---------------------------------------------------------------------------
+
+/** A cap may be raised, or the day may turn: ask again this often even when told to wait longer. */
+const RECHECK_MS = 10 * 60_000
+/** Any task. */
+const ALL = '*'
+
+type Block = { until: number; code: AiRefusal; message: string }
+const blocks = new Map<string, Block>()
+
+/** The site-wide or per-task daily cap, once the server has reported it; UI shows one quiet notice from this. */
+export type AiLimit = { code: 'daily_cap' | 'task_cap'; task: string | null; until: number }
+export const useAiLimit = create<{ limited: AiLimit | null }>(() => ({ limited: null }))
+
+/** The reason `task` should not be sent right now, or null. */
+export function aiBlocked(task: string, now = Date.now()): Block | null {
+  for (const key of [ALL, task]) {
+    const b = blocks.get(key)
+    if (!b) continue
+    if (now < b.until) return b
+    blocks.delete(key)
+    const limited = useAiLimit.getState().limited
+    if (limited && (limited.task ?? ALL) === key) useAiLimit.setState({ limited: null })
+  }
+  return null
+}
+
+function noteRefusal(task: string, status: number, code: AiRefusal | null, retryAfterS: number | undefined, message: string, now = Date.now()) {
+  const wait = Math.max(1, retryAfterS ?? 60) * 1000
+  if (code === 'daily_cap' || code === 'task_cap') {
+    const key = code === 'daily_cap' ? ALL : task
+    const until = now + Math.min(wait, RECHECK_MS)
+    blocks.set(key, { until, code, message })
+    useAiLimit.setState({ limited: { code, task: code === 'task_cap' ? task : null, until } })
+  } else if (code === 'rate_limited') blocks.set(ALL, { until: now + Math.min(wait, 60_000), code, message })
+  else if (code === 'not_configured' || code === 'origin' || status === 401) blocks.set(ALL, { until: now + 5 * 60_000, code: code ?? 'not_configured', message })
+}
+
+/** Forget what the server said (settings changed, or a test starting clean). */
+export function resetAiLimits() {
+  blocks.clear()
+  statusMemo = null
+  if (useAiLimit.getState().limited) useAiLimit.setState({ limited: null })
+}
+
+// ---------------------------------------------------------------------------
+// Asking
+// ---------------------------------------------------------------------------
+
 /** Run task `task` with `input`; resolves to the task's result (parsed JSON or text). */
 export async function askAi<T = unknown>(task: string, input: unknown, opts: { signal?: AbortSignal; fresh?: boolean } = {}): Promise<T> {
   const s = useAiSettings.getState()
   if (!s.enabled) throw new AiUnavailableError('AI features are switched off in Settings.', 0)
-  const key = JSON.stringify([task, input, s.provider, s.model])
+  const key = JSON.stringify([task, input])
   if (!opts.fresh) {
     const hit = memo.get(key)
     if (hit) return hit.result as T
     const pending = inflight.get(key)
     if (pending) return (await abortable(pending, opts.signal)).result as T
   }
+  const blocked = aiBlocked(task)
+  if (blocked) throw new AiUnavailableError(blocked.message, blocked.code === 'not_configured' ? 401 : 429, blocked.code)
   const p = (async () => {
     const res = await fetch('/api/ai', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...aiHeaders(s) },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ task, input }),
     })
-    const body = (await res.json().catch(() => null)) as { ok?: boolean; result?: unknown; error?: string; provider?: string; model?: string } | null
-    if (!res.ok || !body?.ok) throw new AiUnavailableError(body?.error ?? `AI request failed (${res.status})`, res.status)
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; result?: unknown; error?: string; provider?: string; model?: string; code?: AiRefusal; retryAfterS?: number } | null
+    if (!res.ok || !body?.ok) {
+      const message = body?.error ?? `AI request failed (${res.status})`
+      noteRefusal(task, res.status, body?.code ?? null, body?.retryAfterS, message)
+      throw new AiUnavailableError(message, res.status, body?.code ?? null)
+    }
     return { result: body.result, provider: body.provider ?? '', model: body.model ?? '' }
   })()
   // The request is shared by everyone asking the same thing, so one caller giving up
@@ -68,17 +134,63 @@ function abortable<T>(p: Promise<T>, signal: AbortSignal | undefined): Promise<T
   })
 }
 
-export type AiStatus = { configured: boolean; provider: 'anthropic' | 'openrouter' | null; model: string | null; keySource: 'device' | 'server' | null; server: { anthropic: boolean; openrouter: boolean } }
+// ---------------------------------------------------------------------------
+// Status
+// ---------------------------------------------------------------------------
 
-/** Which provider and model would answer right now (asks the server; never returns keys). */
-export async function getAiRunStatus(): Promise<AiStatus> {
-  const res = await fetch('/api/ai', { headers: aiHeaders() })
-  if (!res.ok) throw new Error(`AI status ${res.status}`)
-  return (await res.json()) as AiStatus
+export type AiStatus = AiStatusResponse
+
+/** Several parts of the app ask at once when it starts; they share one request. */
+const STATUS_SHARE_MS = 20_000
+let statusMemo: { at: number; p: Promise<AiStatus> } | null = null
+
+/** Whether AI is set up on the server, which model answers, and today's usage against the cap. */
+export function getAiRunStatus(): Promise<AiStatus> {
+  const now = Date.now()
+  if (statusMemo && now - statusMemo.at < STATUS_SHARE_MS) return statusMemo.p
+  const p = (async () => {
+    const res = await fetch('/api/ai')
+    if (!res.ok) throw new Error(`AI status ${res.status}`)
+    const status = (await res.json()) as AiStatus
+    // Already at the cap: treat it as if a request had just been refused, so nothing is sent to find that out.
+    if (status.configured && status.usage?.limited) noteRefusal(ALL, 429, 'daily_cap', Math.max(1, Math.ceil((Date.parse(status.usage.resetsAt) - Date.now()) / 1000)), 'AI daily limit reached')
+    return status
+  })()
+  statusMemo = { at: now, p }
+  p.catch(() => {
+    if (statusMemo?.p === p) statusMemo = null
+  })
+  return p
 }
 
-/** True when an AI feature should even try (switch on and some key known locally or on the server). */
-export function aiMaybeAvailable(status: AiStatus | undefined): boolean {
-  const s = useAiSettings.getState()
-  return s.enabled && (!!s.anthropicKey.trim() || !!s.openrouterKey.trim() || !!status?.configured)
+/** True when `task` (or any task) can be answered: AI set up, and no cap reached that the status knows of. */
+export function statusAllows(status: Pick<AiStatus, 'configured' | 'usage'> | undefined, task?: string): boolean {
+  if (!status?.configured) return false
+  if (status.usage?.limited) return false
+  const mine = task ? status.usage?.tasks?.[task] : undefined
+  return !mine || mine.today < mine.cap
+}
+
+/** The status, shared by Settings and every feature that asks whether AI is ready. */
+export function useAiStatus(enabled = true) {
+  // Asked rarely: every visitor's status check is a read of the site's shared counters.
+  return useQuery({ queryKey: ['ai-run-status'], queryFn: getAiRunStatus, staleTime: 5 * 60_000, retry: 0, enabled, refetchOnWindowFocus: false })
+}
+
+/** True when an AI feature should try: switched on here, set up on the server, and under the daily cap. */
+export function useAiReady(): boolean {
+  const on = useAiSettings((s) => s.enabled)
+  const capped = useAiLimit((s) => s.limited?.code === 'daily_cap')
+  const status = useAiStatus(on)
+  return on && !capped && statusAllows(status.data)
+}
+
+/** The same check outside React (alerts run from store subscriptions). */
+export async function aiReadyNow(): Promise<boolean> {
+  if (!useAiSettings.getState().enabled || aiBlocked(ALL)) return false
+  try {
+    return statusAllows(await getAiRunStatus())
+  } catch {
+    return false
+  }
 }

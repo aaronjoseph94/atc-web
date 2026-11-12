@@ -5,8 +5,8 @@
  * 1. Validate and rate-limit (per client, in this isolate's memory: a
  *    best-effort guard against a stuck button or a script, not a wall).
  * 2. Triage: the `triageFeedback` AI task with the server's own key
- *    (ANTHROPIC_API_KEY or OPENROUTER_API_KEY), else keyword rules. Keys
- *    typed into Settings on a device are never sent here.
+ *    (ANTHROPIC_API_KEY or OPENROUTER_API_KEY) while the site's daily AI
+ *    cap has room, else keyword rules.
  * 3. With GITHUB_FEEDBACK_TOKEN and GITHUB_FEEDBACK_REPO set, open an issue
  *    with the triage as labels; with GITHUB_FEEDBACK_SCREENSHOT_BRANCH also
  *    set, store the map picture on that branch and link it from the issue.
@@ -144,11 +144,18 @@ export function issueLabels(t: Triage): string[] {
   return ['feedback', t.category, `severity: ${t.severity}`, ...(t.area !== 'other' ? [`area: ${t.area}`] : [])]
 }
 
-type Deps = { fetch?: typeof fetch; now?: number; limiter?: RateLimiter; id?: string }
+type Deps = {
+  fetch?: typeof fetch
+  now?: number
+  limiter?: RateLimiter
+  id?: string
+  /** Asked before a model is used (the site's daily AI cap); false sends the report to the keyword rules. */
+  aiAllowed?: () => Promise<boolean>
+}
 
-async function runTriage(body: FeedbackBody, env: FeedbackEnv): Promise<{ triage: Triage; source: 'ai' | 'rules' }> {
-  const ai = resolveAi(env, {})
-  if (ai) {
+async function runTriage(body: FeedbackBody, env: FeedbackEnv, aiAllowed?: () => Promise<boolean>): Promise<{ triage: Triage; source: 'ai' | 'rules' }> {
+  const ai = resolveAi(env)
+  if (ai && (!aiAllowed || (await aiAllowed().catch(() => false)))) {
     try {
       const out = await runAi(ai, {
         system: triageFeedback.system,
@@ -204,7 +211,7 @@ export async function handleFeedback(raw: string, env: FeedbackEnv, clientKey: s
   }
 
   const id = deps.id ?? `fb-${now.toString(36)}-${crypto.randomUUID().slice(0, 6)}`
-  const { triage: t, source } = await runTriage(body, env)
+  const { triage: t, source } = await runTriage(body, env, deps.aiAllowed)
 
   let issue: { number: number; url: string } | null = null
   let screenshot: 'stored' | 'dropped' | 'none' = body.screenshot ? 'dropped' : 'none'

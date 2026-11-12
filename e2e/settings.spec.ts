@@ -1,4 +1,5 @@
 import { JFK } from './support/fixtures'
+import { AI_ON } from './support/stubs'
 import { expect, test } from './support/test'
 
 test('settings persist across a reload', async ({ app, page }) => {
@@ -39,4 +40,59 @@ test('settings persist across a reload', async ({ app, page }) => {
   await page.goto('/')
   await app.waitForMap()
   await expect(page.getByRole('button', { name: /^Change airport\./ })).toHaveText('YYC')
+})
+
+test.describe('AI in Settings', () => {
+  test('no key fields; keys saved by an older version are deleted on startup; the status says it is not set up', async ({ app, page, stubs }) => {
+    // What a browser that used the old "paste your key" settings has stored.
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('e2e-ai-seeded')) {
+        sessionStorage.setItem('e2e-ai-seeded', '1')
+        localStorage.setItem('atc-web.ai.v1', JSON.stringify({ state: { provider: 'anthropic', model: 'claude-opus-5-5', anthropicKey: 'sk-ant-LEFTOVER', openrouterKey: 'sk-or-LEFTOVER', enabled: true }, version: 0 }))
+      }
+    })
+    await app.open('JFK')
+    const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }))
+    expect(stored).not.toContain('LEFTOVER')
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('atc-web.ai.v1')!).state)).toEqual({ enabled: true })
+
+    await page.getByRole('button', { name: 'Menu' }).click()
+    await page.getByRole('menuitem', { name: 'Settings' }).click()
+    const sheet = page.getByRole('dialog', { name: 'Settings' })
+    await expect(sheet.getByRole('status', { name: 'AI status' })).toContainText('AI is not set up')
+    await expect(sheet.getByRole('status', { name: 'AI status' })).toContainText('add the secret ANTHROPIC_API_KEY')
+    await expect(sheet.getByRole('switch', { name: 'AI features' })).toHaveAttribute('aria-checked', 'true')
+    await expect(sheet.getByRole('textbox')).toHaveCount(0)
+    await expect(sheet.getByText(/API key/)).toHaveCount(0)
+    await expect(sheet.getByRole('radiogroup', { name: 'AI provider' })).toHaveCount(0)
+    await expect(sheet.getByRole('combobox', { name: 'AI model' })).toHaveCount(0)
+    // Nothing the page sends carries a key.
+    expect(stubs.apiCalls.filter((c) => /key/i.test(c))).toEqual([])
+  })
+
+  test.describe('with AI and AirNav set up in Cloudflare', () => {
+    test.use({ stubOptions: { airnav: { configured: true, used: 4, today: 1, credits: 100, cap: 90, dailyCap: 3, storage: 'kv' } } })
+
+    test('the status names the model, and diagnostics show today’s usage and the AirNav credits', async ({ app, page }) => {
+      await page.route(/\/api\/ai$/, (route) =>
+        route.request().method() === 'GET'
+          ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(AI_ON) })
+          : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'not in this test', status: 503 }) }),
+      )
+      await app.open('JFK')
+      await page.getByRole('button', { name: 'Menu' }).click()
+      await page.getByRole('menuitem', { name: 'Settings' }).click()
+      const sheet = page.getByRole('dialog', { name: 'Settings' })
+      await expect(sheet.getByRole('status', { name: 'AI status' })).toHaveText('AI: on (Claude Opus 5.5, set in Cloudflare)')
+
+      await sheet.getByRole('button', { name: 'Data and diagnostics' }).click()
+      await expect(sheet.getByText('412 of 3000')).toBeVisible()
+      await expect(sheet.getByText('300 of 2100')).toBeVisible()
+      await expect(sheet.getByText('AirNav credits used: 4 of 100 (today 1 of 3)')).toBeVisible()
+
+      // Switching AI off on this device is remembered; nothing else about AI is stored.
+      await sheet.getByRole('switch', { name: 'AI features' }).click()
+      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('atc-web.ai.v1')!).state)).toEqual({ enabled: false })
+    })
+  })
 })

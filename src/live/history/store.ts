@@ -15,6 +15,10 @@ export type HistoryEntry = SearchItem & {
   airport: string
   durationMs: number
   speaker: 'pilot' | 'controller' | null
+  /** The words as recognised, when `text` is the AI's cleaned version (searched as well). */
+  raw?: string
+  /** Shown without the AI pass. */
+  unprocessed?: boolean
 }
 
 /** Saved history older than this is dropped. */
@@ -48,6 +52,8 @@ export function fromTransmission(t: Transmission): HistoryEntry {
     callsigns: [...new Set(t.callsigns.map((c) => c.callsign))],
     ids,
     speaker: t.speaker,
+    ...(t.raw != null && t.raw !== t.text ? { raw: t.raw } : {}),
+    ...(t.unprocessed ? { unprocessed: true } : {}),
   }
 }
 
@@ -89,14 +95,15 @@ export function startHistory(): () => void {
   void load(ph.airportIcao)
   void prune(STORE.entries, Date.now() - HISTORY_MS, DB_LIMIT)
 
-  // Text of each call as last recorded, so a call that is updated is recorded again.
+  // Each call as last recorded (words, speaker, processed or not), so a call that is updated is recorded again.
   const known = new Map<string, string>()
+  const stamp = (t: Transmission) => `${t.unprocessed ? 'u' : 'p'}|${t.speaker ?? ''}|${t.icao24 ?? ''}|${t.text}`
   const takeRadio = (log: Record<string, Transmission[]>) => {
     const out: HistoryEntry[] = []
     for (const list of Object.values(log))
       for (const t of list) {
-        if (t.status !== 'done' || !t.text || known.get(t.id) === t.text) continue
-        known.set(t.id, t.text)
+        if (t.status !== 'done' || !t.text || known.get(t.id) === stamp(t)) continue
+        known.set(t.id, stamp(t))
         out.push(fromTransmission(t))
       }
     record(out)

@@ -1,7 +1,7 @@
 /**
  * The glossary: every built-in ATC term, searchable, each opening to its
  * explanation and diagram, plus the Learn-mode switch. A word that isn't in
- * the glossary can be asked of the AI (when a key is set); its answer is
+ * the glossary can be asked of the AI (when the site has it set up); its answer is
  * marked with the sparkle and cached for a month.
  */
 import { ChevronDown, Search, Sparkles } from 'lucide-react'
@@ -96,7 +96,7 @@ function AskAi({ term, exact }: { term: string; exact: boolean }) {
   const ready = useAiReady()
   const [asked, setAsked] = useState(false)
   const answer = useAiTask('explainTerm', asked ? { term: term.toLowerCase() } : null, parseTerm, 30 * 86_400_000)
-  if (!ready) return exact ? null : <p className="mt-3 px-1 text-footnote text-white/55">“{term}” isn’t in the built-in glossary. With an AI key in Settings, the app can explain words like this too.</p>
+  if (!ready) return exact ? null : <p className="mt-3 px-1 text-footnote text-white/55">“{term}” isn’t in the built-in glossary.</p>
   if (!asked)
     return (
       <button type="button" className="pressable-soft mt-3 flex w-full items-center gap-2 rounded-2xl bg-atc-card/20 px-3.5 py-3 text-left text-subhead font-semibold ring-1 ring-inset ring-atc-card/50 hover:bg-atc-card/30" onClick={() => setAsked(true)}>
