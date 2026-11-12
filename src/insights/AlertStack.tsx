@@ -4,23 +4,15 @@
  * a button to look at the aircraft, and a close button. They go away on
  * their own; emergencies stay longer.
  */
-import { ArrowLeftRight, OctagonX, RotateCcw, Siren, Split, X, type LucideIcon } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { liveBuffer } from '../live/session'
 import { usePlayhead } from '../playback/playheadStore'
 import { usePresence } from '../ui/usePresence'
 import { AiMark } from './AiMark'
 import type { Alert } from './alerts'
-import type { AlertKind } from './insightSettings'
+import { ALERT_STYLE } from './alertStyle'
 import { useInsights } from './insightsStore'
-
-const STYLE: Record<AlertKind, { icon: LucideIcon; color: string }> = {
-  emergency: { icon: Siren, color: '#FF3B30' },
-  goaround: { icon: RotateCcw, color: '#FF9F0A' },
-  rto: { icon: OctagonX, color: '#FF6B4A' },
-  runway: { icon: ArrowLeftRight, color: '#64D2FF' },
-  diversion: { icon: Split, color: '#BF5AF2' },
-}
 
 export function AlertStack() {
   const showing = useInsights((s) => s.showing)
@@ -41,7 +33,7 @@ function AlertCard({ alert }: { alert: Alert }) {
   const hide = useInsights((s) => s.hide)
   const [leaving, setLeaving] = useState(false)
   const { mounted, closing } = usePresence(!leaving, 200)
-  const s = STYLE[alert.kind]
+  const s = ALERT_STYLE[alert.kind]
   const Icon = s.icon
   const canShow = !!alert.icao24 && !!liveBuffer.get(alert.icao24)
 

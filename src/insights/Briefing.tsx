@@ -77,8 +77,8 @@ export function BriefingBlock() {
   const brief = useBriefingText()
   if (!brief) return null
   return (
-    <section aria-label="Airport briefing" className="mb-2 rounded-2xl bg-atc-card/15 px-3.5 py-3 ring-1 ring-inset ring-atc-card/40">
-      <div className="flex items-center gap-1 text-caption font-semibold text-white/60">
+    <section aria-label="Airport briefing" className="mb-2 rounded-2xl bg-atc-card/[0.16] px-3.5 py-3 ring-1 ring-inset ring-atc-card/40">
+      <div className="flex items-center gap-1 text-caption font-semibold text-white/65">
         At the airport now
         {brief.ai && <AiMark />}
       </div>

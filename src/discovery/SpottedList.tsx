@@ -4,12 +4,13 @@
  * Recent activity in the Traffic list. A few show at once; tapping one
  * selects it while it's still in range.
  */
-import { ChevronDown, Shield, Sparkles, Star } from 'lucide-react'
+import { Shield, Sparkles, Star } from 'lucide-react'
 import { useState } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { useNow } from '../hooks/useNow'
 import { liveBuffer } from '../live/session'
 import { usePlayhead } from '../playback/playheadStore'
+import { Hint, MoreToggle } from '../ui/kit'
 import { SectionLabel } from '../ui/Panel'
 import { useSightingLine } from './aiLine'
 import type { Spot } from './spotter'
@@ -45,7 +46,7 @@ function Row({ s, now, onPick }: { s: Spot; now: number; onPick: (s: Spot) => vo
         type="button"
         aria-disabled={!here || undefined}
         title={here ? undefined : 'No longer in range'}
-        className="pressable-soft flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left enabled:hover:bg-white/[0.07] aria-disabled:cursor-default"
+        className="ui-row pressable-soft flex w-full items-start gap-3 aria-disabled:cursor-default"
         onClick={() => here && onPick(s)}
       >
         <Badge s={s} />
@@ -83,12 +84,10 @@ export function SpottedList({ onPick }: { onPick: () => void }) {
 
   if (!list.length && liveStatus !== 'ok') return null
   return (
-    <section aria-label="Spotted" className="-mx-1 mt-3">
-      <SectionLabel>
-        Spotted {list.length > 0 && <span className="font-normal tabular-nums text-white/30">{list.length}</span>}
-      </SectionLabel>
+    <section aria-label="Spotted" className="mt-5 first:mt-0">
+      <SectionLabel count={list.length || null}>Spotted</SectionLabel>
       {list.length === 0 ? (
-        <p className="mx-1 rounded-2xl bg-white/[0.05] px-3.5 py-3 text-footnote text-white/55">Unusual visitors show up here: giant freighters, classic jets, military flights.</p>
+        <Hint>Unusual visitors show up here: giant freighters, classic jets, military flights.</Hint>
       ) : (
         <>
           <ol className="flex flex-col">
@@ -105,10 +104,9 @@ export function SpottedList({ onPick }: { onPick: () => void }) {
             ))}
           </ol>
           {list.length > COLLAPSED && (
-            <button type="button" aria-expanded={all} className="pressable ml-1 mt-0.5 flex min-h-9 items-center gap-1 rounded-full px-2 text-footnote font-semibold text-[#C9BCFF] hover:text-white" onClick={() => setAll(!all)}>
+            <MoreToggle open={all} onToggle={() => setAll(!all)} className="ml-1 mt-0.5">
               {all ? 'Show less' : `Show all ${list.length}`}
-              <ChevronDown aria-hidden className={`size-4 transition-transform duration-[var(--duration-base)] ease-[var(--ease-out)] ${all ? 'rotate-180' : ''}`} strokeWidth={2.5} />
-            </button>
+            </MoreToggle>
           )}
         </>
       )}

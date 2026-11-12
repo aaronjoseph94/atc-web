@@ -3,12 +3,13 @@
  * pinned and recently opened airports up top as big tappable codes; then the
  * full list by country. Selecting switches to live mode at that airport.
  */
-import { LocateFixed, Pin, Search } from 'lucide-react'
+import { LocateFixed, Pin } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { AIRPORTS, getAirport, type AirportConfig } from '../api/airports'
 import { distanceM } from '../map/geo'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
+import { SearchField } from '../ui/kit'
 import { SectionLabel, Sheet } from '../ui/Panel'
 
 /** Nearest catalog airport to a position. */
@@ -58,7 +59,7 @@ export function AirportPicker() {
     const active = a.icao === value
     const pinned = favourites.includes(a.icao)
     return (
-      <li key={a.icao} className={`flex items-center rounded-2xl transition-colors duration-[var(--duration-fast)] ${active ? 'bg-atc-yellow/15 ring-1 ring-inset ring-atc-yellow/60' : 'bg-white/[0.05] hover:bg-white/[0.09]'}`}>
+      <li key={a.icao} className={`flex items-center transition-colors duration-[var(--duration-fast)] ${active ? 'rounded-2xl bg-atc-yellow/15 ring-1 ring-inset ring-atc-yellow/60' : 'ui-card hover:bg-white/[0.09]'}`}>
         <button type="button" aria-current={active || undefined} className="pressable-soft flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 text-left" onClick={() => setAirport(a.icao)}>
           {/* Wide enough for the widest code (MDW), so every name starts on the same line. */}
           <span className="w-14 shrink-0 font-display text-[26px] leading-none text-atc-yellow">{a.icao}</span>
@@ -80,27 +81,26 @@ export function AirportPicker() {
   return (
     <Sheet open={open} title="Airports" onClose={() => setPanel(null)}>
       <div className="flex gap-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-white/10 px-3 ring-1 ring-inset ring-transparent transition-shadow duration-[var(--duration-fast)] focus-within:ring-atc-yellow/70">
-          <Search className="size-4 shrink-0 text-atc-muted" />
-          <input
-            type="search"
+        <div className="min-w-0 flex-1">
+          <SearchField
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' || !results[0]) return
-              // Closing the sheet hands focus back to the "Change airport" button before this
-              // Enter's keypress arrives, which would press that button and reopen the picker.
-              e.preventDefault()
-              setAirport(results[0].icao)
-            }}
+            onChange={setQuery}
             placeholder="Code, airport or city"
-            aria-label="Search airports"
-            className="h-10 min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-atc-muted"
+            label="Search airports"
+            onEscape={() => (setQuery(''), true)}
+            onEnter={() => {
+              if (!results[0]) return false
+              // Handled here (and the key press stopped): closing the sheet hands focus back to the
+              // "Change airport" button before this Enter's keypress arrives, which would press
+              // that button and reopen the picker.
+              setAirport(results[0].icao)
+              return true
+            }}
           />
-        </label>
+        </div>
         <button
           type="button"
-          className="pressable flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-white/10 px-3 text-footnote font-semibold hover:bg-white/[0.15] disabled:opacity-60"
+          className="pressable flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-white/[0.08] px-3.5 text-footnote font-semibold ring-1 ring-inset ring-white/[0.07] hover:bg-white/[0.14] disabled:opacity-60"
           onClick={locate}
           disabled={locating}
         >

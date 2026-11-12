@@ -725,6 +725,195 @@ body,
     translate: calc(var(--pane-dir, 1) * 16px) 0;
   }
 }
+/*
+ * The panel kit: one card, one inset well and one list row for every panel
+ * and sheet, so a card in the weather sheet is the same card as in the flight
+ * view. (Badges, the search field and the lamp's markup are in src/ui/kit.tsx.)
+ *
+ *  - `ui-card`: a block of content on the panel: a faint lift and a hairline rim.
+ *  - `ui-well`: the same, a step quieter, for things inside a card.
+ *  - `ui-row`:  a tappable line in a list: no fill until hovered or pressed.
+ */
+@utility ui-card {
+  border-radius: 1rem;
+  background-color: rgb(255 255 255 / 0.05);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+@utility ui-well {
+  border-radius: 0.75rem;
+  background-color: rgb(255 255 255 / 0.035);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+@utility ui-row {
+  border-radius: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  @media (hover: hover) {
+    &:hover:not([aria-disabled='true'], :disabled) {
+      background-color: rgb(255 255 255 / 0.07);
+    }
+  }
+  &[aria-current],
+  &[data-active] {
+    background-color: rgb(255 255 255 / 0.09);
+  }
+}
+
+/*
+ * The on-air lamp (src/ui/kit.tsx `Lamp`). Off: a dark socket. Waiting: amber,
+ * breathing. Live: steady red with a soft glow. Speaking: the speaker's
+ * colour (`--lamp`, set inline from src/ui/speaker.ts) sending out slow, soft
+ * rings, the same mellow pulse the map draws around whoever is talking.
+ */
+.lamp {
+  --lamp: var(--color-atc-live);
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--lamp);
+  transition:
+    background-color 500ms var(--ease-out),
+    box-shadow 500ms var(--ease-out);
+}
+.lamp[data-state='off'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.35);
+}
+.lamp[data-state='waiting'] {
+  --lamp: #ffb340;
+  animation: var(--animate-pulse-dot);
+}
+.lamp[data-state='live'] {
+  box-shadow: 0 0 7px 1px color-mix(in srgb, var(--lamp) 55%, transparent);
+}
+.lamp[data-state='speaking'] {
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--lamp) 70%, transparent);
+}
+.lamp[data-state='speaking']::before,
+.lamp[data-state='speaking']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--lamp);
+  animation: lamp-wave 2.6s var(--ease-out) infinite;
+}
+.lamp[data-state='speaking']::after {
+  animation-delay: 1.3s;
+}
+@keyframes lamp-wave {
+  from {
+    opacity: 0.55;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 3.2;
+  }
+}
+/* On devices already short of frame time the lamp just glows. */
+.glass-off .lamp[data-state='speaking']::before,
+.glass-off .lamp[data-state='speaking']::after {
+  animation: none;
+  opacity: 0;
+}
+
+/* Bars that bounce while a call's audio plays (`Equalizer`). */
+.eq-bar {
+  height: 100%;
+  animation: eq 0.8s ease-in-out infinite alternate;
+}
+@keyframes eq {
+  from {
+    transform: scaleY(0.25);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/*
+ * The side panel's layers. Selecting a flight slides its page in over the
+ * tabs from the right while the tabs step back; going back reverses it.
+ */
+.dock-tabs {
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    translate var(--duration-base) var(--ease-out);
+}
+.dock-tabs[data-under] {
+  opacity: 0;
+  translate: -1rem 0;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-exit);
+  pointer-events: none;
+}
+@starting-style {
+  .dock-tabs {
+    opacity: 0;
+    translate: -1rem 0;
+  }
+}
+.dock-layer {
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    translate 380ms var(--ease-sheet);
+}
+.dock-layer[data-closing] {
+  opacity: 0;
+  translate: 2.5rem 0;
+  transition-duration: var(--duration-exit-fast), var(--duration-exit);
+  transition-timing-function: var(--ease-exit);
+  pointer-events: none;
+}
+@starting-style {
+  .dock-layer {
+    opacity: 0;
+    translate: 3rem 0;
+  }
+}
+
+/* The collapsed panel's rail: it fades in as the panel slides away. */
+.dock-rail {
+  transition:
+    opacity var(--duration-base) var(--ease-out) 120ms,
+    translate var(--duration-sheet) var(--ease-sheet) 60ms;
+}
+.dock-rail[data-hidden] {
+  opacity: 0;
+  translate: 1rem 0;
+  pointer-events: none;
+  transition-delay: 0ms;
+  transition-duration: var(--duration-exit-fast);
+}
+@starting-style {
+  .dock-rail {
+    opacity: 0;
+    translate: 1rem 0;
+  }
+}
+/* The rail has its own "show panel" button, so the top bar's copy steps aside while the rail is up. */
+.dock-rail-on #map-chrome [aria-label='Show side panel'] {
+  display: none;
+}
+
+/* The flight page's small title appears in its top bar once the big one has scrolled away. */
+.mini-title {
+  opacity: 0;
+  translate: 0 6px;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    translate var(--duration-base) var(--ease-out);
+  pointer-events: none;
+}
+[data-scrolled] > .mini-title {
+  opacity: 1;
+  translate: 0 0;
+}
+
 /* Honour OS-level reduced motion in addition to the in-app setting. */
 @media (prefers-reduced-motion: reduce) {
   *,

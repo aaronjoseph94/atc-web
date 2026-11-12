@@ -37,7 +37,7 @@ test('the traffic list searches and selects', async ({ app, page }) => {
   await rows.first().getByRole('button').click()
   await expect.poll(() => app.playhead((s) => s.selectedIcao)).toBe(JFK.helicopter.icao24)
   if (app.docked) {
-    await expect(app.dockTab(JFK.helicopter.callsign)).toHaveAttribute('aria-selected', 'true')
+    await expect(app.flightDetail()).toContainText(JFK.helicopter.callsign)
   } else {
     await expect(panel).toBeHidden()
     await expect(app.flightCard(JFK.helicopter.callsign)).toBeVisible()
@@ -63,8 +63,9 @@ test('takeoffs and landings are listed under recent activity, not in the transcr
   await expect(transcript.getByRole('toolbar', { name: 'Filters' }).getByRole('button', { name: 'Tower log' })).toHaveCount(0)
   await expect(transcript.getByText(text)).toHaveCount(0)
 
-  // The traffic panel lists it, colour-coded as a takeoff.
-  await openPanel('traffic')
+  // The traffic sheet lists it (the side panel's Now tab on a wide screen), colour-coded as a takeoff.
+  if (app.docked) await app.dockTab('Now').click()
+  else await openPanel('traffic')
   const panel = app.view('traffic', 'Traffic at JFK')
   const row = panel.getByRole('region', { name: 'Recent activity' }).getByRole('listitem').filter({ hasText: text })
   await expect(row).toBeVisible()

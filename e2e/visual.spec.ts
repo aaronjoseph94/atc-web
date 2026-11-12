@@ -113,7 +113,7 @@ test.describe('screens for review (not compared)', () => {
     await expect(page.getByRole('button', { name: 'Open the radio transcript' })).toContainText('JetBlue', { timeout: 45_000 })
     await shot('07-radio-caption')
     await page.getByRole('button', { name: 'Open the radio transcript' }).click()
-    if (app.docked) await expect(app.dockTab('Transcript')).toHaveAttribute('aria-selected', 'true')
+    if (app.docked) await expect(app.dockTab('Radio')).toHaveAttribute('aria-selected', 'true')
     const transcript = app.view('transcripts', 'Transcripts')
     await expect(transcript.getByRole('searchbox', { name: 'Search transcripts' })).toBeVisible()
     await expect(transcript.getByRole('listitem').filter({ hasText: 'JetBlue' })).toBeVisible()

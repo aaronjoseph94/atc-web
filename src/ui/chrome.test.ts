@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { chooseGlass, contrast, downgrade, GLASS_TINT, medianFrame, over, type Rgb } from './glass'
-import { clampDockWidth, DOCK_DEFAULT, DOCK_INSET, DOCK_MAX, DOCK_MIN, dockReserve } from './layout'
+import { clampDockWidth, DOCK_DEFAULT, DOCK_INSET, DOCK_MAX, DOCK_MIN, DOCK_RAIL, dockReserve } from './layout'
 import { mapStateFor } from './mapStatus'
 import { fadeEdges } from './scrollFade'
 import { sheetStretch } from './useSheetDrag'
@@ -68,8 +68,8 @@ describe('dock width', () => {
     expect(clampDockWidth(DOCK_MAX, 1024)).toBeLessThan(DOCK_MAX)
     expect(clampDockWidth(DOCK_MAX, 1024)).toBeGreaterThanOrEqual(DOCK_MIN)
   })
-  it('reserves nothing while hidden', () => {
-    expect(dockReserve(false, 400, 1440)).toBe(0)
+  it('reserves only its rail while tucked away', () => {
+    expect(dockReserve(false, 400, 1440)).toBe(DOCK_RAIL + DOCK_INSET)
     expect(dockReserve(true, 400, 1440)).toBe(400 + DOCK_INSET)
   })
 })
