@@ -10,6 +10,7 @@
 import { useSettings } from '../settings/settingsStore'
 import { SectionLabel } from '../ui/Panel'
 import airlinerTop from './art/airliner-top.webp'
+import helicopterSide from './art/helicopter-side.webp'
 import { formatLength } from './format'
 import { aircraftProfile, type TypeFacts } from './types'
 
@@ -54,12 +55,14 @@ export function AircraftPanel({ type, category, registration, dbName, dbManufact
     <section aria-label="Aircraft" className="mt-5">
       <SectionLabel>Aircraft</SectionLabel>
       <div className="ui-card overflow-hidden px-4 pb-3.5 pt-3">
-        {/* The owner's artwork: one generic airliner, seen from above, for every fixed-wing type. Helicopters have none yet. */}
-        {!isHeli && (
-          <div className="mb-3 flex justify-center pt-1">
+        {/* The owner's artwork: one generic airliner seen from above for every fixed-wing type, one helicopter from the side. */}
+        <div className="mb-3 flex justify-center pt-1">
+          {isHeli ? (
+            <img src={helicopterSide} alt="" width={640} height={217} loading="lazy" decoding="async" draggable={false} className="h-24 w-auto max-w-full select-none drop-shadow-[0_10px_14px_rgba(0,0,0,0.45)]" />
+          ) : (
             <img src={airlinerTop} alt="" width={560} height={526} loading="lazy" decoding="async" draggable={false} className="h-32 w-auto select-none drop-shadow-[0_10px_14px_rgba(0,0,0,0.45)]" />
-          </div>
-        )}
+          )}
+        </div>
         <h3 className="truncate text-subhead font-semibold leading-tight">{title}</h3>
         <p className="mt-0.5 truncate text-caption text-white/50">
           {registration && (
