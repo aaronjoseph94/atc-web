@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { speakerColors } from '../../ui/speaker'
 import { tabBadge, type TabSignals } from './tabs'
 
-const quiet: TabSignals = { live: true, count: 0, category: null, unread: 0, alerts: 0, air: { listening: false, speaking: false, speaker: null, colors: speakerColors(null) } }
+const quiet: TabSignals = { live: true, count: 0, unread: 0, alerts: 0, air: { listening: false, speaking: false, speaker: null, colors: speakerColors(null) } }
 
 describe('tabBadge', () => {
   it('says nothing when there is nothing to say', () => {
@@ -27,7 +27,7 @@ describe('tabBadge', () => {
     expect(tabBadge('traffic', false, { ...quiet, live: false, count: 26 })).toBeNull()
   })
 
-  it('carries the flight category on Weather', () => {
-    expect(tabBadge('weather', false, { ...quiet, category: 'IFR' })).toEqual({ kind: 'category', category: 'IFR', said: ', IFR' })
+  it('leaves Weather plain: the station bar already shows the category', () => {
+    expect(tabBadge('weather', false, { ...quiet, count: 26, unread: 3, alerts: 1 })).toBeNull()
   })
 })

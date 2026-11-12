@@ -6,7 +6,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { getAirport } from '../../api/airports'
-import type { Metar } from '../../api/types'
 import { useInsights } from '../../insights/insightsStore'
 import { useHistory } from '../../live/history/store'
 import { statusText, useRadio } from '../../live/radio/radioStore'
@@ -95,12 +94,6 @@ export function useTrafficCounts(active = true): TrafficCounts {
     return () => window.clearInterval(id)
   }, [active, live, airportIcao])
   return live ? counts : NO_TRAFFIC
-}
-
-/** "300° 9" / "Calm" / "Vrb 4G18": the wind as the station bar writes it. */
-export function windShort(m: Pick<Metar, 'windKt' | 'windDirDeg' | 'gustKt'>): string {
-  if (!m.windKt) return 'Calm'
-  return `${m.windDirDeg != null ? `${String(m.windDirDeg).padStart(3, '0')}°` : 'Vrb'} ${m.windKt}${m.gustKt ? `G${m.gustKt}` : ''}`
 }
 
 /** What the lamp shows for the radio's state. */

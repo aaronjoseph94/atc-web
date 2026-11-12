@@ -103,9 +103,10 @@ test.describe('desktop', () => {
     await expect(panel.getByRole('tabpanel')).toContainText('Runways')
 
     await app.tapAircraft(JFK.arrival.icao24)
-    // The flight's page covers the tabs; no card over the station bar.
+    // The flight's page covers the tabs' content (the tab row stays, none chosen); no card over the station bar.
     await expectFullView(app.flightDetail())
-    await expect(panel.getByRole('tab')).toHaveCount(0)
+    await expect(panel.getByRole('tabpanel')).toHaveCount(0)
+    await expect(panel.getByRole('tab', { selected: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /^Change airport\./ })).toBeVisible()
 
     // Back to the tabs: the aircraft stays selected, folded into a strip above them.

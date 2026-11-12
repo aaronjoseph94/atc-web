@@ -55,8 +55,12 @@ test('a recorded scene plays, seeks and goes back to live', async ({ app, page }
   await expect.poll(async () => (await audio(page))?.paused).toBe(false)
 
   // The transcript lists every call (a sheet on phones, the side panel on wide screens).
-  await page.getByRole('button', { name: 'Menu' }).click()
-  await page.getByRole('menuitem', { name: /^Transcript/ }).click()
+  // Beside the side panel, the transcript is its Radio tab; elsewhere it is in the menu.
+  if (app.docked) await app.dockTab('Radio').click()
+  else {
+    await page.getByRole('button', { name: 'Menu' }).click()
+    await page.getByRole('menuitem', { name: /^Transcript/ }).click()
+  }
   const transcript = app.view('transcripts', 'Transcript')
   await expect(transcript).toBeVisible()
   if (app.docked) await expect(app.dockTab('Radio')).toHaveAttribute('aria-selected', 'true')

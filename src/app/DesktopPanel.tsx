@@ -2,16 +2,17 @@
  * The side panel docked on the right on wide screens (≥ 1024 px): the app's
  * control room.
  *
- * Top to bottom: a header that echoes the yellow station bar (airport sign,
- * channel, on-air lamp, weather, play); four tabs (Now, Radio, Traffic,
- * Weather) with what is new on each; and the chosen tab. Selecting a flight
- * slides its page in over the tabs; "back" (or any tab's key) returns to the
- * tabs with the flight still selected, folded into a purple strip above them.
+ * Top to bottom: one row with the four tabs (Now, Radio, Traffic, Weather),
+ * the menu and the hide button; then the chosen tab. The airport, channel,
+ * weather and play/pause are not repeated here: the yellow station bar under
+ * the map has them. Selecting a flight slides its page in under the tab row;
+ * "back" (or any tab) returns to the tabs with the flight still selected,
+ * folded into a purple strip above them.
  *
  * The same components the phone shows as sheets render here in their
  * `docked` mode. The panel can be dragged wider or narrower by its left
- * edge, and tucked away (`]`, or the button in its header) to a slim rail
- * that keeps the lamp, the play button and the tab badges in view.
+ * edge, and tucked away (`]`, or the button in its top row) to a slim rail
+ * that keeps the tab badges in view.
  *
  * Requests to open those panels (keyboard shortcuts, the menu, the status
  * pill, the weather chip) are routed here instead of opening a modal, and
@@ -29,7 +30,6 @@ import { NowTab } from './panel/NowTab'
 import { PanelHeader } from './panel/PanelHeader'
 import { PanelRail } from './panel/PanelRail'
 import { usePanel } from './panel/panelStore'
-import { PanelTabs } from './panel/PanelTabs'
 import { TAB_LABEL, tabId, tabPanelId } from './panel/tabs'
 import { TrafficPanel } from './TrafficPanel'
 import { TranscriptsView } from './TranscriptsView'
@@ -185,13 +185,12 @@ export function DesktopPanel() {
         className="dock glass-sheet grain absolute bottom-3 right-3 top-[max(0.75rem,var(--safe-top))] z-30 flex flex-col overflow-hidden rounded-[1.6rem] shadow-pop ring-1 ring-white/[0.09]"
       >
         <ResizeHandle width={w} vw={vw} />
-        <PanelHeader onCollapse={() => setCollapsed(true)} />
+        <PanelHeader tab={tab} flightShown={flightShown} onPick={pick} onCollapse={() => setCollapsed(true)} />
         <div className="relative min-h-0 flex-1">
           {body.mounted && tabsBody.mounted && (
             <div className="dock-tabs flex h-full flex-col" data-under={flightShown ? '' : undefined} inert={flightShown}>
               {selected && !flightShown && <FlightChip onOpen={() => setShowFlight(true)} />}
-              <PanelTabs tab={tab} onPick={pick} />
-              <div className="relative mt-2 grid min-h-0 flex-1" style={{ ['--pane-dir' as string]: swap.dir }}>
+              <div className="relative grid min-h-0 flex-1" style={{ ['--pane-dir' as string]: swap.dir }}>
                 {[swap.current, swap.leaving].map((v) =>
                   v ? (
                     <div key={v} role="tabpanel" id={tabPanelId(v)} aria-labelledby={tabId(v)} className="dock-pane min-h-0 min-w-0 [grid-area:1/1]" data-closing={v === swap.leaving ? '' : undefined} inert={v === swap.leaving}>
