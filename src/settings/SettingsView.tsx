@@ -113,7 +113,7 @@ export function SettingsView() {
 
       <Group className="mt-6">
         <button type="button" className="pressable-soft -mx-3.5 flex min-h-12 w-[calc(100%+1.75rem)] items-center justify-between rounded-2xl px-3.5 text-left text-subhead font-medium hover:bg-white/[0.04]" onClick={() => setPanel('layers')}>
-          Map style and labels
+          Map labels and overlays
           <ChevronRight className="size-4 text-white/40" />
         </button>
         <button type="button" className="pressable-soft -mx-3.5 flex min-h-12 w-[calc(100%+1.75rem)] items-center justify-between rounded-2xl px-3.5 text-left text-subhead font-medium hover:bg-white/[0.04]" onClick={openFeedback}>

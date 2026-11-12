@@ -11,7 +11,7 @@ export const SHORTCUTS: [string, string][] = [
   ['T', 'Radio transcript'],
   ['W', 'Weather and ATIS'],
   ['R', 'Replay'],
-  ['L', 'Map layers'],
+  ['L', 'Map labels and overlays'],
   ['M', 'Menu'],
   ['F', 'Follow the selected flight'],
   ['H', 'Show the whole airfield'],

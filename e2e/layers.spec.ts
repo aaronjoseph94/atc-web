@@ -20,7 +20,7 @@ test('the map sheet toggles procedures, lighting and style', async ({ app, page 
   })
   await app.waitForCameraIdle()
 
-  await page.getByRole('button', { name: 'Map layers' }).click()
+  await page.evaluate(() => window.__atc.playhead.getState().setPanel('layers'))
   const sheet = page.getByRole('dialog', { name: 'Map' })
   await expect(sheet).toBeVisible()
 
@@ -49,10 +49,11 @@ test('the map sheet toggles procedures, lighting and style', async ({ app, page 
   await sheet.getByRole('switch', { name: 'Approach paths' }).click()
   await expect.poll(() => visibility(page, 'apt-approach')).toBe('none')
 
-  // Map style: the ground colour changes.
+  // There is one map style, navy: no style picker, and an old stored choice still draws navy.
+  await expect(sheet.getByRole('radiogroup', { name: 'Map style' })).toHaveCount(0)
   const ground = () => page.evaluate(() => JSON.stringify(window.__atc.mapHandle.current!.getPaintProperty('bg', 'background-color')))
   const navy = await ground()
-  await sheet.getByRole('radiogroup', { name: 'Map style' }).getByRole('radio', { name: /Graphite/ }).click()
-  await expect.poll(() => app.settings((s) => s.mapTheme)).toBe('graphite')
-  await expect.poll(ground).not.toBe(navy)
+  await page.evaluate(() => window.__atc.settings.getState().update('mapTheme', 'graphite'))
+  await page.waitForTimeout(500)
+  expect(await ground()).toBe(navy)
 })

@@ -260,9 +260,10 @@ export const MAP_THEMES: { id: MapTheme; label: string; hint: string; usOnly: bo
 ]
 
 /** Themes backed by US-government rasters have nothing to show elsewhere. */
-export function effectiveTheme(theme: MapTheme, isUs: boolean): MapTheme {
-  const meta = MAP_THEMES.find((t) => t.id === theme)
-  return meta?.usOnly && !isUs ? 'navy' : theme
+export function effectiveTheme(_theme: MapTheme, _isUs: boolean): MapTheme {
+  // The owner chose one look for the app: the navy airfield chart. The other
+  // styles stay defined (tests, and an easy way back) but are never drawn.
+  return 'navy'
 }
 
 /** Transparent square the runway keep-out layer is made of, and its size in pixels. */

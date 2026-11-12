@@ -104,7 +104,7 @@ test.describe('screens for review (not compared)', () => {
     await shot('05-traffic')
     if (!app.docked) await app.view('traffic', 'Traffic at JFK').getByRole('button', { name: 'Close' }).first().click()
 
-    await page.getByRole('button', { name: 'Map layers' }).click()
+    await page.evaluate(() => window.__atc.playhead.getState().setPanel('layers'))
     await app.settled(page.getByRole('dialog', { name: 'Map' }))
     await shot('06-layers')
     await page.getByRole('dialog', { name: 'Map' }).getByRole('button', { name: 'Close' }).click()

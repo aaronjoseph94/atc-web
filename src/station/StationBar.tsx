@@ -17,6 +17,7 @@ import type { FlightCategory } from '../api/types'
 import { Timeline } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
 import { reducedMotion } from '../ui/motion'
+import { SelectedLastCall } from './LastCall'
 import { RadioButton, RadioStatusLine } from './RadioButton'
 import { Waveform } from './Waveform'
 
@@ -102,6 +103,7 @@ export function StationBar() {
   const clip = usePlayhead((s) => s.clip)
   const setPanel = usePlayhead((s) => s.setPanel)
   const radioLive = useRadio((s) => s.on && (s.status === 'live' || s.status === 'buffering'))
+  const selected = usePlayhead((s) => !!s.selectedIcao)
   const glow = useTransmitGlow(radioLive && mode === 'live')
 
   const airport = getAirport(airportIcao)
@@ -175,6 +177,7 @@ export function StationBar() {
         <RadioButton label={stationText} />
       </div>
       <RadioStatusLine />
+      {selected && <SelectedLastCall />}
       <div className="pb-[var(--safe-bottom)]">
         <Waveform active={radioLive} source="live" />
       </div>

@@ -181,3 +181,22 @@ test.describe('live radio', () => {
     await expect.poll(async () => (await camera(page, id)).zoom, { timeout: 30_000 }).toBeLessThan(home.zoom + 0.5)
   })
 })
+
+test.describe('last call in the station bar', () => {
+  test('a tapped aircraft shows its latest call in the yellow bar', async ({ app, page, stubs }) => {
+    test.skip(!app.docked, 'Beside the side panel only: on a phone the flight card covers the bar')
+    stubs.transcribeQueue.push({ text: CALLS[0].text })
+    await app.open('JFK')
+    await page.getByRole('button', { name: /^Listen live to / }).click()
+    await expect.poll(async () => (await radio(page)).calls, { timeout: 45_000 }).toBeGreaterThan(0)
+
+    await app.tapAircraft(JFK.departure.icao24)
+    const last = page.getByLabel(`Latest radio call for ${JFK.departure.callsign}`)
+    await expect(last).toBeVisible()
+    await expect(last).toContainText('turn left heading', { ignoreCase: true })
+
+    // An aircraft nobody has talked to yet says so.
+    await app.tapAircraft(JFK.parked.icao24)
+    await expect(page.getByLabel(`Latest radio call for ${JFK.parked.callsign}`)).toContainText('No radio calls heard')
+  })
+})
