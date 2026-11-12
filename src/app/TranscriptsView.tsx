@@ -281,7 +281,8 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
     const ro = new ResizeObserver(() => setHeadH(el.offsetHeight))
     ro.observe(el)
     return () => ro.disconnect()
-  }, [docked])
+    // Mounted once per layout: the docked view has no sticky header (`head` stays empty there).
+  }, [])
 
   // Open at the newest.
   useLayoutEffect(() => {
