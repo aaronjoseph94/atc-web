@@ -58,9 +58,9 @@ export function AircraftPanel({ type, category, registration, dbName, dbManufact
         {/* The owner's artwork: one generic airliner seen from above for every fixed-wing type, one helicopter from the side. */}
         <div className="mb-3 flex justify-center pt-1">
           {isHeli ? (
-            <img src={helicopterSide} alt="" width={640} height={217} loading="lazy" decoding="async" draggable={false} className="h-24 w-auto max-w-full select-none drop-shadow-[0_10px_14px_rgba(0,0,0,0.45)]" />
+            <img src={helicopterSide} alt="Side view of a helicopter" width={640} height={217} loading="lazy" decoding="async" draggable={false} className="h-24 w-auto max-w-full select-none drop-shadow-[0_10px_14px_rgba(0,0,0,0.45)]" />
           ) : (
-            <img src={airlinerTop} alt="" width={560} height={526} loading="lazy" decoding="async" draggable={false} className="h-32 w-auto select-none drop-shadow-[0_10px_14px_rgba(0,0,0,0.45)]" />
+            <img src={airlinerTop} alt="Top view of an airliner" width={560} height={526} loading="lazy" decoding="async" draggable={false} className="h-32 w-auto select-none drop-shadow-[0_10px_14px_rgba(0,0,0,0.45)]" />
           )}
         </div>
         <h3 className="truncate text-subhead font-semibold leading-tight">{title}</h3>

@@ -5,7 +5,7 @@ import { expect, test, type Locator } from './support/test'
 async function expectFullView(detail: Locator) {
   const aircraft = detail.getByRole('region', { name: 'Aircraft' })
   await expect(aircraft).toBeVisible()
-  await expect(aircraft.getByRole('img', { name: /^Side view of / })).toBeVisible()
+  await expect(aircraft.getByRole('img', { name: /^(Side|Top) view of / })).toBeVisible()
   const flight = detail.getByRole('region', { name: 'Flight', exact: true })
   await expect(flight).toContainText('DL 1210')
   await expect(flight).toContainText('Delta Air Lines')
@@ -166,7 +166,7 @@ test('helicopters and light aircraft get their own drawing', async ({ app }) => 
     }
     await app.openFlightDetail()
     const detail = app.flightDetail()
-    await expect(detail.getByRole('img', { name: /^Side view of / })).toBeVisible()
+    await expect(detail.getByRole('img', { name: /^(Side|Top) view of / })).toBeVisible()
     await expect(detail.getByRole('region', { name: 'Aircraft' })).toContainText(ac.drawing)
     await detail.getByRole('button', { name: 'Close flight' }).click()
     await expect.poll(() => app.playhead((s) => s.selectedIcao)).toBeNull()
