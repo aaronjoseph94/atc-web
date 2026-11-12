@@ -21,6 +21,10 @@ export const DURATION = {
   sheet: 460,
   /** Sheets and popovers leaving: always quicker than arriving. */
   exit: 220,
+  /** Text and numbers settling: a word resolving, a digit changing, a skeleton giving way. */
+  reveal: 400,
+  /** A short status line swapping its words: each half (out, then in). */
+  swap: 140,
 } as const
 
 /**

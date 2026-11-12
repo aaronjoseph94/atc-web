@@ -239,7 +239,7 @@ function Hint() {
 function Toast() {
   const toast = usePlayhead((s) => s.toast)
   const setToast = usePlayhead((s) => s.setToast)
-  const { mounted, closing } = usePresence(!!toast, 200)
+  const { mounted, closing } = usePresence(!!toast, DURATION.exit)
   // Keep showing the last message while it fades out.
   const [last, setLast] = useState(toast)
   if (toast && toast !== last) setLast(toast)
@@ -257,7 +257,7 @@ function Toast() {
     <div
       role={shown.tone === 'error' ? 'alert' : 'status'}
       data-closing={closing ? '' : undefined}
-      className={`motion-pop pointer-events-auto absolute left-1/2 top-[calc(max(0.75rem,var(--safe-top))+3.6rem)] z-[60] flex w-max max-w-[min(92%,26rem)] -translate-x-1/2 origin-top items-center gap-3 rounded-2xl py-2.5 pl-4 text-subhead font-medium shadow-pop ring-1 ${
+      className={`motion-toast pointer-events-auto absolute left-1/2 top-[calc(max(0.75rem,var(--safe-top))+3.6rem)] z-[60] flex w-max max-w-[min(92%,26rem)] -translate-x-1/2 origin-top items-center gap-3 rounded-2xl py-2.5 pl-4 text-subhead font-medium shadow-pop ring-1 ${
         shown.tone === 'error' ? 'bg-[#3a1418]/95 text-white ring-atc-live/50 backdrop-blur-xl' : 'glass-pop text-white ring-white/[0.12]'
       } ${shown.action ? 'pr-2.5' : 'pr-4'}`}
     >

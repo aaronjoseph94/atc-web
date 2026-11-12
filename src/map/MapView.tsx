@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Map as MapLibreMap, RasterTileSource } from 'maplibre-gl'
 import type { MapRef } from 'react-map-gl/maplibre'
 import { getAirport } from '../api/airports'
+import { watchBaseMap } from './baseMapRetry'
 import { getAircraft } from '../api/client'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
@@ -51,6 +52,10 @@ function onMapRef(ref: MapRef | null) {
   const map = ref?.getMap()
   if (map) installImageResolver(map, STYLE_IMAGES)
 }
+
+/** Screens narrower than this (phones) frame the airfield a step closer than a full fit. */
+const PHONE_WIDTH = 640
+const PHONE_ZOOM_BOOST = 0.5
 
 /** Extra zoom applied when the camera closes in on a talking/selected aircraft. */
 const FOCUS_ZOOM_BOOST = 1.5
@@ -167,13 +172,24 @@ export function MapView() {
     }
   }, [data, dataUpdatedAt, isError, isPending, mode, ends, airport.elevationFt, setLive])
 
+  // A base map whose tile index failed to load is asked for again (see baseMapRetry.ts).
+  useEffect(() => (map ? watchBaseMap(map) : undefined), [map])
+
   // ---- camera ---------------------------------------------------------------
   const duration = useCallback((ms: number) => (reduceMotion ? 0 : ms), [reduceMotion])
 
   const goHome = useCallback(
     (ms = 1100, easing: (t: number) => number = CAMERA_EASE) => {
       if (!map) return
-      map.fitBounds(airport.bounds, { padding: 36, maxZoom: 14.4, duration: duration(ms), easing, essential: true, bearing: 0 })
+      // On a phone the whole airfield fits only at a zoom where taxiways are hairlines and the
+      // infield grass is not yet in the tiles; come in a step closer and let the edges run off screen.
+      const narrow = map.getContainer().clientWidth < PHONE_WIDTH
+      const cam = map.cameraForBounds(airport.bounds, { padding: 36, maxZoom: 14.4 })
+      if (!cam || cam.zoom == null) {
+        map.fitBounds(airport.bounds, { padding: 36, maxZoom: 14.4, duration: duration(ms), easing, essential: true, bearing: 0 })
+        return
+      }
+      map.easeTo({ center: cam.center, zoom: Math.min(14.4, cam.zoom + (narrow ? PHONE_ZOOM_BOOST : 0)), bearing: 0, duration: duration(ms), easing, essential: true })
     },
     [map, airport, duration],
   )

@@ -57,7 +57,7 @@ export function Menu() {
         tabIndex={-1}
         onKeyDown={onKeyDown}
         data-closing={closing ? '' : undefined}
-        className={`motion-pop absolute w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none ${docked ? 'right-14 top-[calc(max(0.75rem,var(--safe-top))+3.25rem)]' : 'right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] md:right-4'}`}
+        className={`motion-menu absolute w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none ${docked ? 'right-14 top-[calc(max(0.75rem,var(--safe-top))+3.25rem)]' : 'right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] md:right-4'}`}
       >
         {mode === 'playback' ? (
           <Item icon={Radio} label="Back to live" onClick={exitPlayback} />
