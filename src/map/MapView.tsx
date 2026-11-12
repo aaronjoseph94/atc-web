@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Map as MapLibreMap, RasterTileSource } from 'maplibre-gl'
 import type { MapRef } from 'react-map-gl/maplibre'
 import { getAirport } from '../api/airports'
+import { watchBaseMap } from './baseMapRetry'
 import { getAircraft } from '../api/client'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
@@ -170,6 +171,9 @@ export function MapView() {
       setLive('loading')
     }
   }, [data, dataUpdatedAt, isError, isPending, mode, ends, airport.elevationFt, setLive])
+
+  // A base map whose tile index failed to load is asked for again (see baseMapRetry.ts).
+  useEffect(() => (map ? watchBaseMap(map) : undefined), [map])
 
   // ---- camera ---------------------------------------------------------------
   const duration = useCallback((ms: number) => (reduceMotion ? 0 : ms), [reduceMotion])
