@@ -69,25 +69,16 @@ export function DesktopPanel() {
   const setTab = useDock((s) => s.setTab)
   const setCollapsed = useDock((s) => s.setCollapsed)
   const selected = usePlayhead((s) => s.selectedIcao)
-  const airportIcao = usePlayhead((s) => s.airportIcao)
-  const panel = usePlayhead((s) => s.panel)
-  const setPanel = usePlayhead((s) => s.setPanel)
   const vw = useViewportWidth()
   const w = clampDockWidth(width, vw)
   const aside = useRef<HTMLElement>(null)
-  // The search box is the panel's: typing shows the traffic list filtered by it.
-  const [search, setSearch] = useState('')
 
   // A new selection brings the flight's page in; going back to the tabs keeps the selection (and the camera on it).
   const [showFlight, setShowFlight] = useState(!!selected)
   const [lastSelected, setLastSelected] = useState(selected)
   if (selected !== lastSelected) {
     setLastSelected(selected)
-    if (selected) {
-      setShowFlight(true)
-      // Picked from the search results: the flight takes the panel, the search is done.
-      setSearch('')
-    }
+    if (selected) setShowFlight(true)
   }
   const flightShown = !!selected && showFlight
   const swap = useSwap(tab)
@@ -183,8 +174,6 @@ export function DesktopPanel() {
     setCollapsed(false)
   }
 
-  const iconBtn = 'has-tooltip pressable relative grid size-9 shrink-0 place-items-center rounded-full text-white/70 hover:bg-white/10 hover:text-white'
-
   return (
     <>
       <aside
@@ -229,7 +218,7 @@ export function DesktopPanel() {
 const Pane = memo(function Pane({ view, onPick }: { view: DockTab; onPick: (t: DockTab) => void }) {
   if (view === 'now') return <NowTab go={onPick} />
   if (view === 'transcripts') return <TranscriptsView docked />
-  if (view === 'traffic') return <TrafficPanel docked search={search} />
+  if (view === 'traffic') return <TrafficPanel docked />
   return <WeatherPanel docked />
 })
 

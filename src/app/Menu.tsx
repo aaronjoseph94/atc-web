@@ -1,5 +1,5 @@
 /** The "⋯" menu: a popover under the button, like a native context menu. */
-import { BookOpen, CircleHelp, CloudSun, Copyright, FileText, History, Layers, List, MessageSquareText, Pin, PinOff, Radio, Settings, Sunrise, type LucideIcon } from 'lucide-react'
+import { BookOpen, CircleHelp, CloudSun, Copyright, FileText, History, List, MessageSquareText, Pin, PinOff, Radio, Settings, Sunrise, type LucideIcon } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { OSM_CREDIT } from '../api/credits'
@@ -24,7 +24,6 @@ export function Menu() {
   const toggleFavourite = useSettings((s) => s.toggleFavourite)
   const docked = useDockActive()
 
-  const docked = useDockActive()
   const close = () => setPanel(null)
   const { mounted, closing } = usePresence(open, 180)
   const ref = useDialog(open, close)
