@@ -31,8 +31,12 @@ export type Transmission = {
   /** Epoch ms when the call started (as heard in the stream). */
   at: number
   durationMs: number
-  /** Empty while the transcript is on its way. */
+  /** The call as shown: the AI's cleaned words when it had some, else the words as recognised. */
   text: string
+  /** The words as recognised, kept (for searching) when `text` is the cleaned version. */
+  raw?: string
+  /** Shown as recognised, without the AI pass: AI is off or over its daily limit, or the answer did not come in time. */
+  unprocessed?: boolean
   status: 'transcribing' | 'done'
   speaker: Speaker | null
   /** Callsigns named in the call, matched to live aircraft where possible. */
@@ -56,7 +60,7 @@ type RadioState = {
   /** Somebody is transmitting right now (the segmenter's view of the stream). */
   speaking: boolean
   transcripts: TranscriptStatus
-  /** Calls waiting for their transcript. */
+  /** Calls waiting for their transcript, or transcribed and waiting for the AI pass before they are shown. */
   pending: number
   /** Heard calls per station id, oldest first. */
   log: Record<string, Transmission[]>

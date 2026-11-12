@@ -20,12 +20,12 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 - **Channel switcher.** Every published position at the airport: one tower per runway, each ground sector, approach, departure, clearance, ATIS.
 - **Weather.** Decoded METAR, a wind rose against the runways, head- and cross-wind per runway, and the real digital ATIS, which can be read aloud.
 - **Traffic list** with search by flight, airline, type or tail number.
-- **Spotting.** Unusual visitors are scored as they arrive (outsize freighters like the An-124 or Dreamlifter, classic trijets, A380s and 747s away from the big gateways, military and government VIP flights) and listed under *Spotted* in the traffic list, with a small star on their map tag and an occasional toast ("Rare: Antonov An-124 Ruslan inbound to ORD"). The scoring is built-in rules (`src/discovery/rarity.ts`); with an AI key, one line on why it's notable is written per type and airport. Private aircraft are judged by type only; owners are never looked up. Toasts and stars can be switched off in Settings > Spotting.
+- **Spotting.** Unusual visitors are scored as they arrive (outsize freighters like the An-124 or Dreamlifter, classic trijets, A380s and 747s away from the big gateways, military and government VIP flights) and listed under *Spotted* in the traffic list, with a small star on their map tag and an occasional toast ("Rare: Antonov An-124 Ruslan inbound to ORD"). The scoring is built-in rules (`src/discovery/rarity.ts`); with AI set up by the site owner, one line on why it's notable is written per type and airport. Private aircraft are judged by type only; owners are never looked up. Toasts and stars can be switched off in Settings > Spotting.
 
 **Replay**
 - **Rewind.** The app records the traffic it shows; scrub back through the last 45 minutes at up to 8×, with logged events as markers on the timeline.
 - **Recorded scenes.** Three scripted tower exchanges (O'Hare departures, a go-around at JFK, parallel arrivals at SFO) with synthesized radio audio, word-by-word subtitles, a chat-style transcript per flight, and aircraft moving on the real runways.
-- **Radio explanations.** A built-in phrasebook translates calls ("hold short 27C" → "stop before runway 27C"). Set `AI_API_KEY` and a model writes the summary instead.
+- **Radio explanations.** A built-in phrasebook translates calls ("hold short 27C" → "stop before runway 27C"). With AI set up by the site owner (see below), live calls are cleaned up and explained by a model before they are shown.
 
 **Everywhere**
 - **Send feedback** (menu or Settings): a few words, optionally a picture of the map, and the app's context (airport, channel, selected flight, version, screen size, recent errors) go to `/api/feedback`, which triages them and can open a GitHub issue (see below).
@@ -42,7 +42,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 | Data | adsb.fi + adsb.lol + adsb.one + airplanes.live merged, OpenSky last resort (health-aware failover); adsbdb + hexdb; aviationweather.gov + NOAA; FAA NASR. Every source and its terms: [docs/data-sources.md](docs/data-sources.md) |
 | Tooling | oxlint, Vitest, Wrangler; Python + Piper for the replay clips |
 
-No paid APIs, fonts, icon packs or tile services are used, and no accounts or keys are needed.
+No paid APIs, fonts, icon packs or tile services are needed, and no accounts or keys. Two optional extras use the owner's own accounts, set as Cloudflare secrets: the AI features and a last-resort AirNav flight lookup (see [docs/ai-setup.md](docs/ai-setup.md)).
 
 ## Project layout
 
@@ -118,6 +118,8 @@ npm run deploy
 
 Functions under `functions/` are picked up automatically; no environment variables or secrets are required. Live transcripts use the Workers AI binding declared in `wrangler.toml` (`[ai] binding = "AI"`); without it, and in `npm run dev`, `/api/transcribe` answers 501 and the radio plays without captions.
 
+Two optional extras are switched on with Cloudflare secrets: the AI features (`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`) and a last-resort flight lookup (`AIRNAV_ODAPI_TOKEN`). Step-by-step instructions, the daily caps that protect the bill, and the optional KV namespace that makes those caps exact are in [docs/ai-setup.md](docs/ai-setup.md).
+
 ## Data sources & credits
 
 - Traffic: [adsb.lol](https://adsb.lol), [adsb.fi](https://adsb.fi), [OpenSky Network](https://opensky-network.org). Community ADS-B feeds, no keys.
@@ -125,7 +127,7 @@ Functions under `functions/` are picked up automatically; no environment variabl
 - Aerial imagery: [USGS The National Map](https://www.usgs.gov/programs/national-geospatial-program/national-map) (public domain).
 - Charts, US runways and frequencies: [FAA Aeronautical Information Services](https://www.faa.gov/air_traffic/flight_info/aeronav/) (US government work). Canadian airports and field elevations: [OurAirports](https://ourairports.com/data/) (public domain). Snapshot in `src/api/airportData.json`.
 - Weather: [aviationweather.gov](https://aviationweather.gov) (US National Weather Service). ATIS text: [atis.info](https://atis.info). Radar: NOAA NEXRAD via the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/).
-- Routes and airframes: [adsbdb.com](https://www.adsbdb.com).
+- Routes and airframes: [adsbdb.com](https://www.adsbdb.com), [hexdb.io](https://hexdb.io); when the owner has set a token, [AirNav Radar](https://www.airnavradar.com) for a flight none of the free sources know.
 - Aircraft drawings: outlines traced from public-domain [Openclipart](https://openclipart.org) silhouettes or drawn for this project; see `src/aircraft/CREDITS.md`.
 - Fonts: SF Pro where the system has it, otherwise Inter; Archivo for airport codes and callsigns (Google Fonts, OFL). Icons: Lucide (ISC); runway takeoff and landing pictograms from Google Material Icons (Apache 2.0). Sign plates: self-authored, drawn at runtime.
 - Replay audio is synthetic: voiced with [Piper](https://github.com/OHF-Voice/piper1-gpl) using the LibriTTS and Cori Samuel voices (CC BY 4.0) and the Joe voice (CC0), then run through a radio effect. No real ATC recordings are redistributed.
@@ -133,17 +135,26 @@ Functions under `functions/` are picked up automatically; no environment variabl
 
 Everything here is shown for interest. It is not for navigation or flight planning.
 
-## AI summaries (optional)
+## AI features (optional, set up by the site owner)
 
-`POST /api/summarize` explains a flight's recent radio calls. With no key it uses the built-in phrasebook. To use your own account, set these as Pages environment variables (or in the shell before `npm run dev`):
+The AI features (radio calls cleaned up and explained before they are shown, airport briefings, flight stories, weather in plain words, the line on why a sighting is notable) run through one endpoint, `POST /api/ai`, with the tasks in `src/api/ai/tasks/`. The key is a Cloudflare secret, `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`; there is nothing to type into the app and the browser never holds or sends a key. Settings > AI has an on/off switch for the device and a read-only line: "AI: on (Claude Opus 5.5, set in Cloudflare)" or "AI is not set up". See [docs/ai-setup.md](docs/ai-setup.md) for the exact steps.
 
-| Variable | Example |
-| --- | --- |
-| `AI_API_KEY` | your OpenRouter or Anthropic key |
-| `AI_BASE_URL` | `https://openrouter.ai/api/v1` (default) or `https://api.anthropic.com` |
-| `AI_MODEL` | `anthropic/claude-haiku-5.5` (default) or `claude-haiku-5-5` |
+| Secret or variable | Default | What |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` | none | The key. Without one, everything works without AI |
+| `AI_PROVIDER` | `auto` | `anthropic`, `openrouter` or `auto` |
+| `AI_MODEL` | `claude-opus-5-5` | Model for every task (translated to OpenRouter's names there) |
+| `AI_DAILY_CAP` | `3000` | Most AI requests a day for the whole site; the radio task is held to 70% of it (`AI_TASK_CAPS` changes that) |
+| `AI_RATE_BURST`, `AI_RATE_PER_MIN` | `20`, `60` | Per-visitor rate limit |
+| `AI_KV` (KV binding) | none | Optional KV namespace that makes the caps one worldwide count; without it each Cloudflare data centre counts on its own |
 
-The key never reaches the browser. Identical requests are cached at the edge.
+Because every visitor spends the owner's key, `/api/ai` only answers this site's own pages, rate limits each visitor and stops at the daily cap with `429 AI daily limit reached`; the app then falls back (radio calls are shown as heard, marked "unprocessed") and says so once. Answers to identical requests are cached at the edge and are not counted. `GET /api/ai` reports today's count and the cap, as does Settings > Data and diagnostics.
+
+**Radio calls and AI.** A transcribed call is held back for the AI pass and published (transcript, caption, history, highlight, taxi route) with the cleaned words and the AI's speaker already in place. If no answer comes within about eight seconds the call is shown as recognised with a small "unprocessed" mark, and upgraded in place when the answer arrives. When AI is off, not set up or over its cap, nothing waits. The raw words stay searchable.
+
+`POST /api/summarize` (a flight's recent calls in a replay) is the older endpoint: built-in phrasebook by default, or a model when `AI_API_KEY` (with `AI_BASE_URL`, `AI_MODEL`) is set; it counts against the same daily cap.
+
+For local development export the same names in the shell before `npm run dev`.
 
 ## Feedback (optional set-up)
 
@@ -154,7 +165,7 @@ The key never reaches the browser. Identical requests are cached at the edge.
 | `GITHUB_FEEDBACK_TOKEN` | Fine-grained token for the repo with *Issues: read and write* (and *Contents: read and write* for screenshots) |
 | `GITHUB_FEEDBACK_REPO` | `owner/repo` that receives the issues |
 | `GITHUB_FEEDBACK_SCREENSHOT_BRANCH` | Optional: an existing branch where map screenshots are stored and linked from the issue; without it screenshots are dropped |
-| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` | Optional: the server's own key, for AI triage (keys typed into Settings on a device are never sent to this endpoint) |
+| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` | Optional: the site's AI key (see above), also used for AI triage; counted against the daily AI cap |
 
 Without the GitHub variables the triage goes back to the sender and into the Functions log.
 

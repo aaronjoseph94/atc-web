@@ -7,7 +7,6 @@
  * These used to sit among the radio calls in the transcript; they live here,
  * with the traffic, so the transcript is only what was said on the radio.
  */
-import { ChevronDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { AirlineLogo } from '../airline/AirlineLogo'
 import { useNow } from '../hooks/useNow'
@@ -16,20 +15,15 @@ import { liveBuffer } from '../live/session'
 import { usePlayhead } from '../playback/playheadStore'
 import { EventBadge } from '../ui/EventBadge'
 import { eventStyle } from '../ui/eventStyle'
+import { Hint, MoreToggle } from '../ui/kit'
 import { SectionLabel } from '../ui/Panel'
 import { recentActivity, type Activity } from './activity'
+import { agoShort } from './panel/overview'
 
 /** Rows shown before "Show all", and the most "Show all" opens. */
 const COLLAPSED = 3
 const LIMIT = 20
 
-/** `just now`, `12 min ago`, then the clock time. */
-function ago(at: number, now: number): string {
-  const min = Math.round((now - at) / 60_000)
-  if (min < 1) return 'just now'
-  if (min < 60) return `${min} min ago`
-  return new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
 
 function Row({ a, now, onPick }: { a: Activity; now: number; onPick: (a: Activity) => void }) {
   const style = eventStyle(a.kind)
@@ -40,7 +34,7 @@ function Row({ a, now, onPick }: { a: Activity; now: number; onPick: (a: Activit
         type="button"
         aria-disabled={!here || undefined}
         title={here ? undefined : 'No longer in range'}
-        className="pressable-soft flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left enabled:hover:bg-white/[0.07] aria-disabled:cursor-default"
+        className="ui-row pressable-soft flex w-full items-start gap-3 aria-disabled:cursor-default"
         onClick={() => here && onPick(a)}
       >
         <EventBadge kind={a.kind} size={26} className="mt-0.5" />
@@ -50,7 +44,7 @@ function Row({ a, now, onPick }: { a: Activity; now: number; onPick: (a: Activit
             <span className="font-semibold" style={{ color: style.color }}>
               {style.label}
             </span>
-            <span>· {ago(a.at, now)}</span>
+            <span>· {agoShort(a.at, now)}</span>
           </span>
           <span className={`mt-0.5 block text-subhead font-semibold leading-snug ${here ? 'text-white/90' : 'text-white/55'}`}>{a.text}</span>
         </span>
@@ -59,7 +53,8 @@ function Row({ a, now, onPick }: { a: Activity; now: number; onPick: (a: Activit
   )
 }
 
-export function ActivityList({ onPick }: { onPick: () => void }) {
+/** `hideEmpty`: show nothing until there is something to list (the side panel's Now tab). */
+export function ActivityList({ onPick, hideEmpty = false }: { onPick: () => void; hideEmpty?: boolean }) {
   const airport = usePlayhead((s) => s.airportIcao)
   const events = usePlayhead((s) => s.events)
   const liveStatus = usePlayhead((s) => s.liveStatus)
@@ -70,12 +65,12 @@ export function ActivityList({ onPick }: { onPick: () => void }) {
   const list = useMemo(() => recentActivity(history, events, airport, LIMIT), [history, events, airport])
   const shown = all ? list : list.slice(0, COLLAPSED)
 
-  if (!list.length && liveStatus !== 'ok') return null
+  if (!list.length && (hideEmpty || liveStatus !== 'ok')) return null
   return (
-    <section aria-label="Recent activity" className="-mx-1 mt-3">
+    <section aria-label="Recent activity" className="mt-5 first:mt-0">
       <SectionLabel>Recent activity</SectionLabel>
       {list.length === 0 ? (
-        <p className="mx-1 rounded-2xl bg-white/[0.05] px-3.5 py-3 text-footnote text-white/55">Takeoffs, landings and go-arounds show up here as they happen.</p>
+        <Hint>Takeoffs, landings and go-arounds show up here as they happen.</Hint>
       ) : (
         <>
           <ol className="flex flex-col">
@@ -92,10 +87,9 @@ export function ActivityList({ onPick }: { onPick: () => void }) {
             ))}
           </ol>
           {list.length > COLLAPSED && (
-            <button type="button" aria-expanded={all} className="pressable ml-1 mt-0.5 flex min-h-9 items-center gap-1 rounded-full px-2 text-footnote font-semibold text-[#C9BCFF] hover:text-white" onClick={() => setAll(!all)}>
+            <MoreToggle open={all} onToggle={() => setAll(!all)} className="ml-1 mt-0.5">
               {all ? 'Show less' : `Show all ${list.length}`}
-              <ChevronDown aria-hidden className={`size-4 transition-transform duration-[var(--duration-base)] ease-[var(--ease-out)] ${all ? 'rotate-180' : ''}`} strokeWidth={2.5} />
-            </button>
+            </MoreToggle>
           )}
         </>
       )}

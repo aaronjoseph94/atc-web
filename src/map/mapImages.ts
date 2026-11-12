@@ -12,6 +12,7 @@ import { shapeFor } from '../aircraft/classify'
 import { maskToSdf } from '../aircraft/distance'
 import { paintPrepared, prepareAircraft, silhouetteRGBA } from '../aircraft/render'
 import { getShape, SHAPE_IDS, type Shape, type ShapeId } from '../aircraft/shapes'
+import { drawVehicle, VEHICLE_KINDS, VEHICLE_MAX_LENGTH, vehicleDrawScale, vehicleKind, vehicleOutline, type VehicleKind } from '../aircraft/vehicles'
 import { BANK_DRAWN, bankSpanScale } from './fx/geometry'
 import { ensureFxImage } from './fx/sprites'
 import { ART_PX, artTierPx, artTiers } from './mapStyle'
@@ -40,14 +41,17 @@ const REFERENCE_LENGTH = 39.5 // the narrow-body drawing (737-800)
  * Relative drawn size per class, so a 747 reads bigger than a Cessna. Real
  * size compressed (to the power 0.62, about what the reference app does), with
  * a floor so light aircraft and helicopters stay easy to see and tap (the
- * helicopter a little larger, so its rotor disc reads).
+ * helicopter a little larger, so its rotor disc reads). Vehicles follow the
+ * same rule from the longest of them (a fire engine); the smaller ones are
+ * drawn smaller inside the same box (`vehicleDrawScale`).
  */
 export const ICON_SCALE = Object.fromEntries(
   SHAPE_IDS.map((id) => {
     const s = getShape(id)
-    const rel = (Math.max(s.span, s.length) / REFERENCE_LENGTH) ** 0.62
+    const rel = ((id === 'ac-vehicle' ? VEHICLE_MAX_LENGTH : Math.max(s.span, s.length)) / REFERENCE_LENGTH) ** 0.62
     const floor = id === 'ac-vehicle' || id === 'ac-dot' ? 0 : id === 'ac-heli' ? 0.68 : 0.62
-    const fixed: Partial<Record<ShapeId, number>> = { 'ac-vehicle': 0.4, 'ac-dot': 0.42 }
+    // The dot (a parked aircraft nobody knows the heading of) is kept small: a row of them shouldn't outweigh the aircraft drawn around it.
+    const fixed: Partial<Record<ShapeId, number>> = { 'ac-dot': 0.35 }
     return [id, Math.round((fixed[id] ?? Math.max(floor, rel)) * 1000) / 1000]
   }),
 ) as Record<AircraftIcon, number>
@@ -62,11 +66,16 @@ function artSizes(id: ShapeId): { px: number; suffix: string }[] {
 export const ROTOR_FRAMES = 3
 const ROTOR_FRAME_MS = 70
 
+/** Image id suffix per kind of vehicle (the operations car is the plain `ac-vehicle`). */
+const VEHICLE_SUFFIX: Record<VehicleKind, string> = { car: '', tug: '-vt', truck: '-vs', fire: '-vf' }
+
 /**
  * Image id to draw for an aircraft this frame: helicopters in the air cycle
- * through rotor frames (held still when motion is reduced).
+ * through rotor frames (held still when motion is reduced), and a ground
+ * vehicle (`who`) gets the drawing for its kind: tug, truck, fire engine or car.
  */
-export function iconImage(icon: AircraftIcon, airborne: boolean, tMs: number, reduceMotion: boolean): string {
+export function iconImage(icon: AircraftIcon, airborne: boolean, tMs: number, reduceMotion: boolean, who?: { category?: string | null; callsign?: string | null }): string {
+  if (icon === 'ac-vehicle') return who ? `${icon}${VEHICLE_SUFFIX[vehicleKind(who)]}` : icon
   if (icon !== 'ac-heli' || !airborne || reduceMotion) return icon
   const f = Math.floor(tMs / ROTOR_FRAME_MS) % ROTOR_FRAMES
   return f === 0 ? icon : `${icon}-r${f}`
@@ -87,6 +96,7 @@ export function shapeOfImage(id: string): ShapeId | null {
     .replace(/-(hi|sdf)$/, '')
     .replace(/-(pk|b[LR][12])$/, '')
     .replace(/-r\d+$/, '')
+    .replace(/-v[tsf]$/, '')
   return (SHAPE_IDS as string[]).includes(base) ? (base as ShapeId) : null
 }
 
@@ -103,6 +113,7 @@ export function bankOfImage(id: string): { dir: 'L' | 'R'; level: 1 | 2 } | null
  * and coloured twice.
  */
 function addShape(map: MapLibreMap, id: ShapeId) {
+  if (id === 'ac-vehicle') return addVehicles(map)
   const shape = getShape(id)
   const maxDim = Math.max(shape.span, shape.length)
   const list = frames(id)
@@ -125,6 +136,39 @@ function addShape(map: MapLibreMap, id: ShapeId) {
     if (map.hasImage(`${f.id}-sdf`)) continue
     const mask = silhouetteRGBA(shape, SDF, SDF, (SDF * FILL) / maxDim, f.angle)
     map.addImage(`${f.id}-sdf`, new ImageData(maskToSdf(mask.data, SDF, SDF) as Uint8ClampedArray<ArrayBuffer>, SDF, SDF), { sdf: true, pixelRatio: SDF / BOX })
+  }
+}
+
+/**
+ * Ground vehicles: one drawing per kind (`src/aircraft/vehicles.ts`), in its
+ * own colours, with a yellow-rimmed copy for the highlighted one and a mask
+ * for the shadow. All share the `ac-vehicle` box, sized for the longest.
+ */
+function addVehicles(map: MapLibreMap) {
+  const paint = (kind: VehicleKind, px: number, how: 'plain' | 'selected' | 'mask'): ImageData => {
+    const canvas = document.createElement('canvas')
+    canvas.width = px
+    canvas.height = px
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+    const ppm = ((px * FILL) / VEHICLE_MAX_LENGTH) * vehicleDrawScale(kind)
+    ctx.setTransform(ppm, 0, 0, ppm, px / 2, px / 2)
+    if (how === 'mask') {
+      ctx.fillStyle = '#fff'
+      vehicleOutline(ctx, kind)
+      ctx.fill()
+    } else drawVehicle(ctx, kind, how === 'selected')
+    return ctx.getImageData(0, 0, px, px)
+  }
+  for (const kind of VEHICLE_KINDS) {
+    const id = `ac-vehicle${VEHICLE_SUFFIX[kind]}`
+    for (const { px, suffix } of artSizes('ac-vehicle')) {
+      if (!map.hasImage(`${id}${suffix}`)) map.addImage(`${id}${suffix}`, paint(kind, px, 'plain'), { pixelRatio: px / BOX })
+      if (!map.hasImage(`${id}-hi${suffix}`)) map.addImage(`${id}-hi${suffix}`, paint(kind, px, 'selected'), { pixelRatio: px / BOX })
+    }
+    if (!map.hasImage(`${id}-sdf`)) {
+      const mask = paint(kind, SDF, 'mask')
+      map.addImage(`${id}-sdf`, new ImageData(maskToSdf(mask.data, SDF, SDF) as Uint8ClampedArray<ArrayBuffer>, SDF, SDF), { sdf: true, pixelRatio: SDF / BOX })
+    }
   }
 }
 

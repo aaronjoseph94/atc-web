@@ -21,6 +21,7 @@ import { sunElevation, SUNSET_ELEVATION } from '../map/lighting/sun'
 import { usePlayhead } from '../playback/playheadStore'
 import { useSettings, type AltitudeUnit } from '../settings/settingsStore'
 import { CATEGORY_COLOR, useWeather } from '../station/StationBar'
+import { Hint } from '../ui/kit'
 import { PanelFrame, SectionLabel } from '../ui/Panel'
 import { EmptyState, OfflineArt, StateAction, WeatherSkeleton } from '../ui/States'
 import { atisForScreen, phonetic, readableAtis } from './atis'
@@ -90,7 +91,7 @@ function Hero({ metar, ageMs, night, heights }: { metar: Metar; ageMs: number; n
   return (
     <section
       aria-label="Current conditions"
-      className="relative overflow-hidden rounded-[1.375rem] p-4 ring-1 ring-inset ring-white/[0.08]"
+      className="relative overflow-hidden rounded-2xl p-4 ring-1 ring-inset ring-white/[0.08]"
       // A wash of the category colour from the top corner, over the panel's own glass.
       style={{ background: `radial-gradient(130% 110% at 0% 0%, color-mix(in srgb, ${tint} 30%, transparent), transparent 62%), linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.03))` }}
     >
@@ -114,7 +115,8 @@ function Hero({ metar, ageMs, night, heights }: { metar: Metar; ageMs: number; n
       <p className="mt-2 text-body font-semibold">{conditionsLine(metar, heights)}</p>
       {metar.tempC != null && (
         <p className="mt-0.5 text-footnote tabular-nums text-white/55">
-          {signed(toF(metar.tempC))}°F{metar.dewpointC != null ? ` · Dew point ${signed(metar.dewpointC)}°C` : ''}
+          {/* The dew point has its own tile below, with the spread. */}
+          {signed(toF(metar.tempC))}°F
         </p>
       )}
     </section>
@@ -123,9 +125,9 @@ function Hero({ metar, ageMs, night, heights }: { metar: Metar; ageMs: number; n
 
 function Tile({ icon: Icon, label, children, hint, tone, className = '' }: { icon: LucideIcon; label: string; children: ReactNode; hint?: ReactNode; tone?: 'warn'; className?: string }) {
   return (
-    <div className={`min-w-0 rounded-2xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-inset ring-white/[0.06] ${className}`}>
+    <div className={`ui-card min-w-0 px-3 py-2.5 ${className}`}>
       <div className="flex items-center gap-1.5 text-caption font-medium text-white/55">
-        <Icon aria-hidden className="size-3.5 shrink-0" strokeWidth={2.25} />
+        <Icon aria-hidden className="size-4 shrink-0" strokeWidth={2} />
         <span className="truncate">{label}</span>
       </div>
       <div className="mt-1 truncate text-title3 font-semibold tabular-nums">{children}</div>
@@ -154,9 +156,9 @@ function CloudStack({ metar, heights }: { metar: Metar; heights: AltitudeUnit })
   const ceiling = ceilingOf(metar.clouds)
   const layers = metar.clouds.filter((c) => coverOktas(c.cover) > 0).sort((a, b) => (b.baseFt ?? 0) - (a.baseFt ?? 0))
   return (
-    <div className="min-w-0 rounded-2xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-inset ring-white/[0.06] row-span-2 flex flex-col">
+    <div className="ui-card row-span-2 flex min-w-0 flex-col px-3 py-2.5">
       <div className="flex items-center gap-1.5 text-caption font-medium text-white/55">
-        <Cloud aria-hidden className="size-3.5 shrink-0" strokeWidth={2.25} />
+        <Cloud aria-hidden className="size-4 shrink-0" strokeWidth={2} />
         Ceiling
       </div>
       <div className="mt-1 truncate text-title3 font-semibold tabular-nums">{ceiling != null ? formatHeight(ceiling, heights) : 'None'}</div>
@@ -229,7 +231,7 @@ function AtisCard({ atis, speech, now }: { atis: Atis; speech: ReturnType<typeof
   const text = raw ? atis.text : atisForScreen(atis.text)
   const updated = atis.updatedAt ? Date.parse(atis.updatedAt) : NaN
   return (
-    <div className="rounded-2xl bg-white/[0.05] ring-1 ring-inset ring-white/[0.06]">
+    <div className="ui-card">
       <div className="flex items-center gap-3 p-3.5 pb-2.5">
         <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-atc-yellow font-display text-[28px] leading-none text-black shadow-[inset_0_-2px_0_rgb(0_0_0/0.12)]" aria-hidden>
           {atis.code || '?'}
@@ -318,7 +320,8 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
               Couldn’t refresh just now; showing the last report.
             </p>
           )}
-          <BriefingBlock />
+          {/* The side panel has the briefing on its Now tab. */}
+          {!docked && <BriefingBlock />}
           {metar ? (
             <>
               <Hero metar={metar} ageMs={now - Date.parse(metar.observedAt)} night={night} heights={heights} />
@@ -342,9 +345,7 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
               ))}
             </div>
           ) : (
-            <p className="rounded-2xl bg-white/[0.05] p-3.5 text-footnote text-atc-muted ring-1 ring-inset ring-white/[0.06]">
-              {airport.group === 'US' ? 'No digital ATIS right now.' : 'Digital ATIS: US airports only.'}
-            </p>
+            <Hint>{airport.group === 'US' ? 'No digital ATIS right now.' : 'Digital ATIS: US airports only.'}</Hint>
           )}
 
           {taf && (

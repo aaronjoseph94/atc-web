@@ -5,3 +5,16 @@ pages_build_output_dir = "dist"
 # Workers AI, for live radio transcripts (functions/api/transcribe.ts).
 [ai]
 binding = "AI"
+
+# Secrets (set in the Cloudflare dashboard or with `wrangler pages secret put`,
+# never in this file): ANTHROPIC_API_KEY or OPENROUTER_API_KEY for the AI
+# features, AIRNAV_ODAPI_TOKEN for the last-resort flight lookup.
+# See docs/ai-setup.md.
+
+# Optional: one worldwide count for the daily AI cap and the AirNav credits
+# (without it each Cloudflare data centre counts on its own). Create a KV
+# namespace (`npx wrangler kv namespace create atc-web-counters`), put its id
+# below and uncomment. Left commented out because a made-up id breaks deploys.
+# [[kv_namespaces]]
+# binding = "AI_KV"
+# id = "<the namespace id>"

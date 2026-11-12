@@ -5,7 +5,7 @@ import { expect, test, type Locator } from './support/test'
 async function expectFullView(detail: Locator) {
   const aircraft = detail.getByRole('region', { name: 'Aircraft' })
   await expect(aircraft).toBeVisible()
-  await expect(aircraft.getByRole('img', { name: /^Side view of / })).toBeVisible()
+  await expect(aircraft.getByRole('img', { name: /^(Side|Top) view of / })).toBeVisible()
   const flight = detail.getByRole('region', { name: 'Flight', exact: true })
   await expect(flight).toContainText('DL 1210')
   await expect(flight).toContainText('Delta Air Lines')
@@ -91,39 +91,67 @@ test.describe('phone', () => {
 test.describe('desktop', () => {
   test.skip(({ isMobile }) => isMobile, 'the docked side panel is the wide-screen layout')
 
-  test('a selected aircraft fills the side panel; its tabs switch views and keep the selection', async ({ app, page }) => {
+  test('a selected aircraft slides in over the tabs; going back keeps the selection', async ({ app, page }) => {
     await app.open('JFK')
     const panel = app.sidePanel()
     await expect(panel).toBeVisible()
-    // With nothing selected: Transcript, Traffic, Weather.
-    await expect(panel.getByRole('tab')).toHaveText(['Transcript', 'Traffic', 'Weather'])
+    // With nothing selected: Now (the overview, chosen), Radio, Traffic, Weather.
+    const tabs = ['Now', 'Radio', 'Traffic', 'Weather']
+    await expect(panel.getByRole('tab')).toHaveCount(tabs.length)
+    for (const name of tabs) await expect(app.dockTab(name)).toBeVisible()
+    await expect(app.dockTab('Now')).toHaveAttribute('aria-selected', 'true')
+    await expect(panel.getByRole('tabpanel')).toContainText('Runways')
 
     await app.tapAircraft(JFK.arrival.icao24)
-    // The flight takes the panel, with its own tab first; no card over the station bar.
-    await expect(app.dockTab(JFK.arrival.callsign)).toHaveAttribute('aria-selected', 'true')
+    // The flight's page covers the tabs' content (the tab row stays, none chosen); no card over the station bar.
     await expectFullView(app.flightDetail())
+    await expect(panel.getByRole('tabpanel')).toHaveCount(0)
+    await expect(panel.getByRole('tab', { selected: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /^Change airport\./ })).toBeVisible()
 
-    // Another tab: the panel changes, the aircraft stays selected.
+    // Back to the tabs: the aircraft stays selected, folded into a strip above them.
+    await app.flightDetail().getByRole('button', { name: 'Back to Now' }).click()
+    await expect(app.flightDetail()).toBeHidden()
     await app.dockTab('Traffic').click()
     await expect(app.dockTab('Traffic')).toHaveAttribute('aria-selected', 'true')
     await expect(panel.getByRole('searchbox', { name: 'Search traffic' })).toBeVisible()
     expect(await app.playhead((s) => s.selectedIcao)).toBe(JFK.arrival.icao24)
     await app.dockTab('Weather').click()
     await expect(panel).toContainText(/300°\s*·\s*9\s*kt/)
-    await app.dockTab(JFK.arrival.callsign).click()
+    await panel.getByRole('button', { name: `Back to flight ${JFK.arrival.callsign}` }).click()
     await expect(app.flightDetail()).toBeVisible()
+    await expect(app.flightDetail().getByRole('button', { name: 'Back to Weather' })).toBeVisible()
 
     // Closing the flight hands the panel back to the tabs.
     await app.flightDetail().getByRole('button', { name: 'Close flight' }).click()
     await expect.poll(() => app.playhead((s) => s.selectedIcao)).toBeNull()
-    await expect(panel.getByRole('tab')).toHaveText(['Transcript', 'Traffic', 'Weather'])
+    await expect(panel.getByRole('tab')).toHaveCount(tabs.length)
 
-    // Tucked away and brought back.
+    // Tucked away to its rail (which keeps the tabs in reach) and brought back.
     await panel.getByRole('button', { name: 'Hide side panel' }).click()
     await expect(panel).toHaveAttribute('data-collapsed', '')
+    await expect(app.dockRail()).toBeVisible()
     await page.keyboard.press(']')
     await expect(panel).not.toHaveAttribute('data-collapsed')
+    await page.keyboard.press(']')
+    await expect(panel).toHaveAttribute('data-collapsed', '')
+    await app.dockRail().getByRole('button', { name: /^Open Traffic/ }).click()
+    await expect(panel).not.toHaveAttribute('data-collapsed')
+    await expect(app.dockTab('Traffic')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('the tabs are a tab list: arrow keys move along them', async ({ app, page }) => {
+    await app.open('JFK')
+    await app.dockTab('Now').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(app.dockTab('Radio')).toHaveAttribute('aria-selected', 'true')
+    await expect(app.dockTab('Radio')).toBeFocused()
+    await page.keyboard.press('End')
+    await expect(app.dockTab('Weather')).toHaveAttribute('aria-selected', 'true')
+    await page.keyboard.press('ArrowRight')
+    await expect(app.dockTab('Now')).toHaveAttribute('aria-selected', 'true')
+    // The chosen tab's panel is named by it.
+    await expect(app.sidePanel().getByRole('tabpanel', { name: /^Now/ })).toBeVisible()
   })
 })
 
@@ -138,7 +166,7 @@ test('helicopters and light aircraft get their own drawing', async ({ app }) => 
     }
     await app.openFlightDetail()
     const detail = app.flightDetail()
-    await expect(detail.getByRole('img', { name: /^Side view of / })).toBeVisible()
+    await expect(detail.getByRole('img', { name: /^(Side|Top) view of / })).toBeVisible()
     await expect(detail.getByRole('region', { name: 'Aircraft' })).toContainText(ac.drawing)
     await detail.getByRole('button', { name: 'Close flight' }).click()
     await expect.poll(() => app.playhead((s) => s.selectedIcao)).toBeNull()

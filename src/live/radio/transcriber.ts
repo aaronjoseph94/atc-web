@@ -4,19 +4,27 @@
  * Each segment from the player is encoded and sent to `/api/transcribe`
  * (Whisper on Workers AI), with a hint listing the callsigns actually
  * around the airport. The text that comes back is searched for callsigns,
- * matched to live aircraft, given a speaker, logged per station, and
- * published: caption line, highlight ring and camera focus.
+ * matched to live aircraft and given a speaker. It is then held at the gate
+ * (./gate.ts) for the AI pass (./understand), for a few seconds at most, and
+ * only then published: logged per station, put on the caption line, and the
+ * highlight ring and camera pointed at the aircraft. So what is shown is the
+ * processed call, or, when AI is off, over its limit or too slow, the call
+ * as recognised, marked unprocessed.
  */
 import { getAirport, resolveStation } from '../../api/airports'
 import type { RadioFeed } from '../../api/radioFeeds'
 import type { StationKind } from '../../api/types'
 import { usePlayhead } from '../../playback/playheadStore'
 import { liveBuffer } from '../session'
-import { findCallsigns, guessSpeaker, splitCalls, writtenCallsign } from './callsigns'
+import { findCallsigns, guessSpeaker, splitCalls } from './callsigns'
+import { createGate } from './gate'
+import { hintCallsigns } from './hints'
 import { matchMentions } from './match'
 import { onSegment } from './player'
 import { useRadio, type Transmission } from './radioStore'
 import type { Segment } from './segmenter'
+import type { Understanding } from './understand/result'
+import { applyUnderstanding, requestUnderstanding, routeTaxiFrom, settleCall } from './understand/understand'
 import { transmissionWav } from './wav'
 
 /** Uploads in flight at once, and calls allowed to wait behind them. */
@@ -25,9 +33,9 @@ const MAX_WAITING = 3
 /** After a 429, wait this long before sending more. */
 const BACKOFF_MS = 20_000
 /** How long the camera and highlight stay on an aircraft after its call is captioned. */
-export const HOLD_MS = 9_000
-/** Most callsigns listed in the recognition hint. */
-const HINT_LIMIT = 24
+export const HOLD_MS = 5_000
+/** Longest a transcribed call waits for the AI pass before it is shown as recognised. */
+export const AI_WAIT_MS = 8_000
 
 type Job = { seg: Segment; feed: RadioFeed; endedAt: number; stationId: string; airport: string; kind: StationKind | undefined; facility: string }
 
@@ -37,36 +45,18 @@ let pausedUntil = 0
 let seq = 0
 let focusTimer = 0
 
-/** Callsigns worth naming to the recogniser: the ones this station is likely to be talking to. */
-export function hintCallsigns(kind: StationKind | undefined, elevationFt: number): string {
-  const all = liveBuffer.sample()
-  const relevant = all.filter((a) => {
-    const agl = a.onGround || a.altitudeFt == null ? 0 : a.altitudeFt - elevationFt
-    if (kind === 'GND' || kind === 'CLD') return a.onGround
-    if (kind === 'APP' || kind === 'DEP') return !a.onGround
-    if (kind === 'TWR') return a.onGround || agl < 5000
-    return true
-  })
-  // Moving aircraft are the likeliest to be on frequency; parked ones last.
-  relevant.sort((x, y) => (y.speedKt ?? 0) - (x.speedKt ?? 0))
-  const names: string[] = []
-  for (const a of relevant) {
-    const w = writtenCallsign(a.callsign)
-    if (w && !names.includes(w)) names.push(w)
-    if (names.length >= HINT_LIMIT) break
-  }
-  return names.join(', ')
-}
+/** Calls waiting for a transcript, plus those transcribed and held for the AI pass. */
+const syncPending = () => useRadio.getState().patch({ pending: inFlight + queue.length + gate.waiting })
 
 function pump() {
   const st = useRadio.getState()
   while (inFlight < CONCURRENCY && queue.length && Date.now() >= pausedUntil && st.transcripts !== 'unavailable') {
     const job = queue.shift()!
     inFlight++
-    useRadio.getState().patch({ pending: inFlight + queue.length })
+    syncPending()
     void send(job).finally(() => {
       inFlight--
-      useRadio.getState().patch({ pending: inFlight + queue.length })
+      syncPending()
       pump()
     })
   }
@@ -124,10 +114,32 @@ type TranscribeBody = { text?: string; segments?: { start: number; end: number; 
 
 export type CallMeta = { stationId: string; airport: string; kind: StationKind | undefined; endedAt: number; durationMs: number; words?: Transmission['words'] }
 
-/** A transcript in, a logged and published call out: who it names, who said it. */
+type Held = { call: Transmission; words?: Transmission['words'] }
+
+const gate = createGate<Held, Understanding>({
+  waitMs: AI_WAIT_MS,
+  // Order matters within a channel; channels do not wait for each other.
+  channel: (h) => `${h.call.airport}|${h.call.stationId}`,
+  process: (h) => requestUnderstanding(h.call),
+  publish: (h, u) => {
+    const call = settleCall(h.call, u)
+    publish(call, h.words)
+    // The taxi watcher has just seen the published words; this covers a clearance only the answer could read.
+    if (u) routeTaxiFrom(call, u, call.text)
+  },
+  upgrade: (h, u) => applyUnderstanding(h.call, u),
+  onChange: () => syncPending(),
+})
+
+/**
+ * A transcript in: who it names and who said it are worked out at once, then
+ * the call waits at the gate for the AI pass and is published (logged,
+ * captioned, highlighted) with the answer, or without it after `AI_WAIT_MS`.
+ * Returns the call as attributed, before the AI pass.
+ */
 export function ingest(text: string, meta: CallMeta): Transmission {
   const call = attribute(text, meta)
-  publish(call, meta.words)
+  gate.submit({ call, words: meta.words })
   return call
 }
 
@@ -156,7 +168,7 @@ function attribute(text: string, job: CallMeta): Transmission {
 }
 
 /**
- * Log a finished call and, if it is on the channel being listened to, put it
+ * Log a call that has been through the gate and, if it is on the channel being listened to, put it
  * on the caption line and point the highlight (and the automatic camera) at
  * whoever it concerns. A call naming nobody keeps the current focus a little
  * longer: it is usually the other half of the same exchange ("roger").
@@ -207,7 +219,7 @@ export function startTranscriber(): () => void {
     queue.push({ seg, feed, endedAt, stationId: ph.stationId, airport: airport.icao, kind: station?.kind, facility })
     // Behind by more than a few calls: the oldest are stale, skip them.
     while (queue.length > MAX_WAITING) queue.shift()
-    useRadio.getState().patch({ pending: inFlight + queue.length })
+    syncPending()
     pump()
   })
 }
@@ -215,5 +227,5 @@ export function startTranscriber(): () => void {
 /** Forget queued work (channel or airport changed). */
 export function clearQueue() {
   queue = []
-  useRadio.getState().patch({ pending: inFlight })
+  syncPending()
 }

@@ -3,7 +3,9 @@
 Every outside service the app uses, what it costs, what its terms ask of us, and how the app stays inside them.
 Checked November 2026. Terms change; re-check before a public launch, and treat this as engineering notes, not legal advice.
 
-**Short version:** everything below is free and needs no API key. Most community sources are free for
+**Short version:** everything below is free and needs no API key, with two optional exceptions the owner can
+switch on with a Cloudflare secret (the AI features, and AirNav Radar as a last resort for flight details; set-up
+in [ai-setup.md](ai-setup.md)). Most community sources are free for
 **non-commercial** use only, so if the app ever makes money (ads, subscriptions, paid app), the rows marked
 "non-commercial" need a written OK or a paid plan first. Two things need the owner's action now:
 
@@ -20,6 +22,7 @@ Checked November 2026. Terms change; re-check before a public launch, and treat 
   Feeds with a per-second limit are not called again inside that interval.
 - `GET /api/health?airport=JFK` reports every source's status, latency and breaker state (also shown in
   Settings, "Data feed"). Add `&probe=all` to probe OpenSky too (off by default to save its daily allowance).
+  It also reports the AirNav credits used so far, from the app's own count: the health check never calls AirNav.
 - To rehearse an outage locally: `ATC_FAIL_SOURCES=adsb.fi,aviationweather.gov npm run dev` points those sources at a
   dead host; traffic and weather keep flowing from the others. The same variable works in Pages settings.
 
@@ -28,8 +31,8 @@ Checked November 2026. Terms change; re-check before a public launch, and treat 
 `src/api/aircraftHandler.ts`. The two healthiest feeds are asked at once and merged (freshest position per aircraft,
 missing details filled from the other), a slow feed is hedged with the next after 1.5 s, an empty answer is
 double-checked with one more feed, and the last good answer is served for up to 90 s if every feed fails.
-Response headers `X-Provider`, `X-Sources` and `X-Attribution` say which feeds answered; the map's attribution
-line credits them.
+Response headers `X-Provider`, `X-Sources` and `X-Attribution` say which feeds answered; the credits in Help ("Map data and
+credits", also reachable from the menu) name them. The map itself shows no attribution control.
 
 | Source | Endpoint used | Terms / licence | Limits | Attribution / permission |
 | --- | --- | --- | --- | --- |
@@ -57,6 +60,7 @@ picked by confidence (adsbdb 3, hexdb 2, feed 1.5; agreeing sources add up). The
 | [adsbdb.com](https://www.adsbdb.com) | `api.adsbdb.com/v0/aircraft/{hex}?callsign=…`, `/v0/callsign/{cs}` | Free, no key, code MIT. Airframe data from PlaneBase; **route data © David Taylor and Jim Mason: "may not be copied, published, or incorporated into other databases" without permission** | None published; we cache | Fine for per-flight lookups shown to a user. Don't bulk-download routes into our own database. Credited in Help. |
 | [hexdb.io](https://hexdb.io) | `hexdb.io/api/v2/aircraft/{hex}`, `/api/v2/routes/{callsign}` | Free, no key; no written terms. Data from PlaneBase/PlanePlotter, Jim Mason, Steve Hibberd, Airport-Data | None published; we cache | Credited in Help. Its routes carry `updated_at`; routes older than 18 months are ignored and adsbdb's route always wins. |
 | ADS-B feeds' own tables (adsb.fi, adsb.lol) | `opendata.adsb.fi/api/v2/hex/{hex}`, `api.adsb.lol/v2/hex/{hex}` | As in the ADS-B table | Same per-second limits | Only asked when neither database knows the airframe. Registration and type also arrive with every position (`r`, `t`). |
+| [AirNav Radar](https://www.airnavradar.com/api) On-Demand API (**paid, optional**) | `POST api.airnavradar.com/v2/flights/live` with `{ "modeSHexCodes": ["…"] }`, bearer token | Commercial API, pay per credit; needs the owner's token as the Cloudflare secret `AIRNAV_ODAPI_TOKEN` | The owner's credit balance (100 free credits). The app stops itself at 3 credits a day and 90 in total (`AIRNAV_DAILY_CAP`, `AIRNAV_TOTAL_CAP`) | **Last resort only**: asked once when a person opens a flight and none of the sources above know its route or its airframe; never by polling, health checks or tests; answers and "not known" are cached so a flight is not paid for twice. Credited in Help and the README. Set-up and the limits: [ai-setup.md](ai-setup.md#4-airnav-radar-as-a-last-resort-for-flight-details). The cost of one request is not published; the app counts the `cost` each answer reports. |
 | [airport-data.com](https://www.airport-data.com) (photos) | `airport-data.com/api/ac_thumb.json` | Photos are the photographers' copyright; the site asks for the photographer's name and a link back | — | Being removed from the app by another change. |
 
 ## Weather and ATIS
@@ -69,14 +73,14 @@ picked by confidence (adsbdb 3, hexdb 2, feed 1.5; agreeing sources add up). The
 | [aviationweather.gov](https://aviationweather.gov/data/api/) (NOAA/NWS) | `/api/data/metar?ids=…&format=json`, `/api/data/taf?ids=…&format=json` | US government data, public domain | **100 requests/min**, set a custom User-Agent; CORS not allowed (so server-side only) | None required; credited in Help. |
 | [NOAA tgftp](https://tgftp.nws.noaa.gov/data/) | `/data/observations/metar/stations/{ICAO}.TXT`, `/data/forecasts/taf/stations/{ICAO}.TXT` | US government data, public domain | None published; static files | None required. |
 | [atis.info](https://atis.info) | `atis.info/api/{ICAO}` | Free, no key, no written terms | None published; we cache 3 min | Credited in Help. US airports only. The other public D-ATIS API (datis.clowd.io) now redirects here, so there is no independent fallback; the panel works without ATIS. |
-| [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) NEXRAD tiles | `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png` | Free public service of Iowa State University; NOAA radar data | Be considerate; tiles are cached by the service worker | Credit IEM (map attribution). |
+| [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) NEXRAD tiles | `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png` | Free public service of Iowa State University; NOAA radar data | Be considerate; tiles are cached by the service worker | Credit IEM (Help > Map data and credits). |
 
 ## Map, imagery, charts, airport data
 
 | Source | Used for | Terms | Attribution |
 | --- | --- | --- | --- |
-| [OpenFreeMap](https://openfreemap.org) | Vector tiles (`tiles.openfreemap.org/planet`) and fonts | Free, no key, no request limits, commercial use allowed | Required: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors (shown by MapLibre) |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) (via OpenFreeMap) | Taxiway lines, holding bars, signs, gates, buildings | ODbL 1.0 | "© OpenStreetMap contributors" (shown) |
+| [OpenFreeMap](https://openfreemap.org) | Vector tiles (`tiles.openfreemap.org/planet`) and fonts | Free, no key, no request limits, commercial use allowed | Required: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. The map has no attribution control (owner's choice): the credit is under Help > Map data and credits, with "© OpenStreetMap" in the menu. OpenStreetMap's guidelines ask for the credit on or beside the map itself, so restoring a small on-map credit is the safe default if the app is published widely. |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) (via OpenFreeMap) | Taxiway lines, holding bars, signs, gates, buildings | ODbL 1.0 | "© OpenStreetMap contributors" (Help > Map data and credits, and the menu) |
 | [USGS The National Map](https://www.usgs.gov/programs/national-geospatial-program/national-map) | Aerial imagery (`basemap.nationalmap.gov`) | US government work, public domain | Credit requested (shown) |
 | [FAA Aeronautical Information Services](https://www.faa.gov/air_traffic/flight_info/aeronav/) | VFR sectional/terminal chart tiles (FAA's ArcGIS tile services) | US government work, public domain | Credit + "not for navigation" (shown) |
 | [FAA NASR](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) | Runway ends, controller frequencies (US) | US government work, public domain | Credited in Help |

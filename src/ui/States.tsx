@@ -134,7 +134,7 @@ export function EmptyState({ art, title, children, actions, compact = false }: {
       {art}
       <div>
         <p className="text-body font-semibold text-white">{title}</p>
-        {children && <p className="mx-auto mt-1 max-w-[19rem] text-footnote text-white/65">{children}</p>}
+        {children && <p className="mx-auto mt-1 max-w-[19rem] text-footnote leading-relaxed text-white/65">{children}</p>}
       </div>
       {actions && <div className="mt-1 flex flex-wrap justify-center gap-2">{actions}</div>}
     </div>
@@ -166,10 +166,10 @@ export function Bone({ className = '' }: { className?: string }) {
 /** Rows shaped like the traffic list (logo, callsign and type, altitude and speed). */
 export function ListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="mt-4 flex flex-col gap-1.5" role="status" aria-label="Loading">
-      <Bone className="mb-1 ml-1 h-3 w-20" />
+    <div className="mt-2 flex flex-col gap-1.5" role="status" aria-label="Loading">
+      <Bone className="mb-1.5 ml-1 h-3 w-20" />
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex min-h-14 items-center gap-3 rounded-2xl bg-white/[0.04] px-3 py-2" style={{ opacity: 1 - i * 0.12 }}>
+        <div key={i} className="ui-card flex min-h-14 items-center gap-3 px-3 py-2" style={{ opacity: 1 - i * 0.12 }}>
           <Bone className="h-6 w-9 rounded-md" />
           <span className="flex min-w-0 flex-1 flex-col gap-1.5">
             <Bone className="h-4 w-24" />
@@ -187,10 +187,10 @@ export function ListSkeleton({ rows = 6 }: { rows?: number }) {
 
 /** The weather panel's layout: summary card, wind dial with runways, the tiles, an ATIS card. */
 export function WeatherSkeleton() {
-  const card = 'rounded-2xl bg-white/[0.04] ring-1 ring-inset ring-white/[0.04]'
+  const card = 'ui-card'
   return (
     <div role="status" aria-label="Loading weather">
-      <div className={`${card} flex flex-col gap-3 rounded-[1.375rem] p-4`}>
+      <div className={`${card} flex flex-col gap-3 p-4`}>
         <span className="flex items-center justify-between">
           <Bone className="h-6 w-28 rounded-full" />
           <Bone className="h-3 w-14" />

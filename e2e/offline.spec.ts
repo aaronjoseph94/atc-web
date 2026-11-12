@@ -21,8 +21,12 @@ test.describe('feeds down', () => {
     await page.keyboard.press('/')
     await expect(app.view('traffic', 'Traffic at JFK')).toContainText('Live traffic is offline')
     if (!app.docked) await page.keyboard.press('Escape')
-    await page.getByRole('button', { name: 'Menu' }).click()
-    await page.getByRole('menuitem', { name: /^Weather/ }).click()
+    // Beside the side panel, Weather is one of its tabs; elsewhere it is in the menu.
+    if (app.docked) await app.dockTab('Weather').click()
+    else {
+      await page.getByRole('button', { name: 'Menu' }).click()
+      await page.getByRole('menuitem', { name: /^Weather/ }).click()
+    }
     const weather = app.view('weather', 'Weather at JFK')
     await expect(weather).toContainText('Weather isn’t available right now', { timeout: 30_000 })
     if (!app.docked) await weather.getByRole('button', { name: 'Close' }).first().click()

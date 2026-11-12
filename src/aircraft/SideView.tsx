@@ -1,8 +1,9 @@
 /**
- * Paints a generated side profile (`sideProfiles.ts`) as SVG: a white
- * fuselage with a soft top-to-belly shade and a darker belly line, windows
- * as a fine dotted row, shaded engines, and the fin in the airline's colour
- * when we know it (the same colour the map paints on the fin), else grey.
+ * Paints a generated side profile (`sideProfiles.ts`) as SVG, in one neutral
+ * finish whatever the operator: a soft white airframe shaded from the crown
+ * down to a light grey belly, cool grey wings and fin, a dark window line,
+ * shaded engines and dark tyres. No livery. Hairline edges are drawn at a
+ * constant screen width, so overlapping parts stay distinct at any size.
  *
  * It slides in from the left a few pixels and fades up when the aircraft
  * changes, unless motion is reduced.
@@ -13,48 +14,42 @@ import type { Part, PartRole, SideProfile } from './sideProfiles'
 
 type Props = {
   profile: SideProfile
-  /** Fin colour, `#rrggbb`; null or empty for neutral grey. */
-  fin?: string | null
   label: string
   className?: string
   /** Replays the entrance when this changes. */
   animKey?: string
 }
 
-/** Darken or lighten a `#rrggbb` by a factor (below 1 darkens). */
-function shade(hex: string, k: number): string {
-  const v = parseInt(hex.slice(1), 16)
-  const ch = (s: number) => Math.round(Math.min(255, Math.max(0, ((v >> s) & 255) * k)))
-  return `rgb(${ch(16)},${ch(8)},${ch(0)})`
-}
-
 const FLAT: Partial<Record<PartRole, string>> = {
-  intake: '#1C2230',
-  exhaust: '#5B6575',
-  pylon: '#C3CAD4',
-  glass: '#253045',
-  blade: '#3A4352',
-  spinner: '#E6EAF0',
+  intake: '#2A3342',
+  lip: '#F4F6F9',
+  exhaust: '#6A7484',
+  glass: '#1B2433',
+  blade: '#4A5363',
+  spinner: '#E9EDF2',
   hub: '#4A5363',
-  wheel: '#454E5C',
+  wheel: '#232A34',
+  wheelhub: '#9AA4B2',
 }
 
 const STROKE: Partial<Record<PartRole, string>> = {
-  windows: '#3A475B',
-  gear: '#8F99A8',
+  windows: '#334055',
+  gear: '#8A94A3',
   strut: '#B5BECA',
   skid: '#A3ACB9',
   mast: '#6E7887',
+  pillar: '#D9DEE5',
 }
 
-export function SideView({ profile, fin, label, className, animKey }: Props) {
+/** A hairline round a part, the same width on screen at any size. */
+const EDGE = { stroke: 'rgba(38,50,70,0.55)', strokeWidth: 0.6, vectorEffect: 'non-scaling-stroke' as const, strokeLinejoin: 'round' as const }
+
+export function SideView({ profile, label, className, animKey }: Props) {
   const id = useId().replace(/:/g, '')
   const reduced = useReducedMotion()
   const ref = useRef<SVGSVGElement>(null)
   const [x, y, w, h] = profile.box
-  const r = profile.height / 2
-  const finTop = fin ? shade(fin, 1.12) : '#A3ADBB'
-  const finBottom = fin ? shade(fin, 0.82) : '#7D8797'
+  const [bodyTop, bodyBottom] = profile.body
 
   useEffect(() => {
     const el = ref.current
@@ -71,36 +66,30 @@ export function SideView({ profile, fin, label, className, animKey }: Props) {
     return () => a.cancel()
   }, [animKey, reduced])
 
-  const fuselage = profile.parts.find((p) => p.role === 'fuselage')
-  // A hairline round parts that sit over the white fuselage, so they don't melt into it.
-  const edge = { stroke: 'rgba(72,84,102,0.45)', strokeWidth: r * 0.035, strokeLinejoin: 'round' as const }
-
   const paint = (p: Part, i: number) => {
     switch (p.role) {
       case 'fuselage':
-        return (
-          <g key={i}>
-            <path d={p.d} fill={`url(#${id}-body)`} />
-            {/* Belly: the lower fuselage a shade darker, with a fine line where it starts. */}
-            <g clipPath={`url(#${id}-clip)`}>
-              <rect x={x} y={profile.bellyY} width={w} height={h} fill="#AEB8C6" opacity={0.42} />
-              <line x1={x} x2={x + w} y1={profile.bellyY} y2={profile.bellyY} stroke="#8994A4" strokeWidth={r * 0.05} />
-            </g>
-          </g>
-        )
+      case 'fairing':
+        return <path key={i} d={p.d} fill={`url(#${id}-body)`} {...EDGE} />
       case 'fin':
-        return <path key={i} d={p.d} fill={`url(#${id}-fin)`} />
+        return <path key={i} d={p.d} fill={`url(#${id}-fin)`} {...EDGE} />
       case 'wing':
       case 'stab':
-        return <path key={i} d={p.d} fill={`url(#${id}-wing)`} {...edge} />
-      case 'fairing':
-        return <path key={i} d={p.d} fill="#C9D0DA" />
+        return <path key={i} d={p.d} fill={`url(#${id}-wing)`} {...EDGE} />
       case 'nacelle':
-        return <path key={i} d={p.d} fill={`url(#${id}-nacelle)`} {...edge} />
+        return <path key={i} d={p.d} fill={`url(#${id}-nacelle)`} {...EDGE} />
+      case 'core':
+        return <path key={i} d={p.d} fill={`url(#${id}-core)`} {...EDGE} />
+      case 'pylon':
+        return <path key={i} d={p.d} fill="#C9D0D9" {...EDGE} />
+      case 'door':
+        return <path key={i} d={p.d} fill="none" stroke="rgba(60,74,96,0.3)" strokeWidth={0.75} vectorEffect="non-scaling-stroke" />
       case 'prop':
-        return <path key={i} d={p.d} fill="rgba(214,224,240,0.26)" stroke="rgba(255,255,255,0.4)" strokeWidth={r * 0.03} />
+        return <path key={i} d={p.d} fill="rgba(206,216,232,0.16)" stroke="rgba(226,232,242,0.3)" strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
       case 'rotor':
-        return <path key={i} d={p.d} fill="#C6CEDA" />
+        return <path key={i} d={p.d} fill="#C6CEDA" {...EDGE} />
+      case 'spinner':
+        return <path key={i} d={p.d} fill={FLAT.spinner} {...EDGE} />
       default:
         if (p.stroke != null)
           return (
@@ -122,30 +111,32 @@ export function SideView({ profile, fin, label, className, animKey }: Props) {
   return (
     <svg ref={ref} viewBox={`${x} ${y} ${w} ${h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={label} className={className} style={{ overflow: 'visible' }}>
       <defs>
-        <linearGradient id={`${id}-body`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#FFFFFF" />
-          <stop offset="0.42" stopColor="#F3F5F8" />
-          <stop offset="0.78" stopColor="#D6DCE4" />
-          <stop offset="1" stopColor="#B4BDC9" />
+        {/* Crown highlight, white flanks, a cool grey belly: one gradient for the fuselage and its fairings. */}
+        <linearGradient id={`${id}-body`} gradientUnits="userSpaceOnUse" x1="0" y1={bodyTop} x2="0" y2={bodyBottom + (bodyBottom - bodyTop) * 0.06}>
+          <stop offset="0" stopColor="#E6EBF1" />
+          <stop offset="0.14" stopColor="#FFFFFF" />
+          <stop offset="0.52" stopColor="#F2F4F7" />
+          <stop offset="0.8" stopColor="#D3D9E1" />
+          <stop offset="1" stopColor="#AEB8C5" />
         </linearGradient>
-        <linearGradient id={`${id}-fin`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor={finTop} />
-          <stop offset="1" stopColor={finBottom} />
+        <linearGradient id={`${id}-fin`} x1="0" y1="0" x2="0.4" y2="1">
+          <stop offset="0" stopColor="#DCE2E9" />
+          <stop offset="1" stopColor="#F4F6F9" />
         </linearGradient>
         <linearGradient id={`${id}-wing`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#D3D9E1" />
-          <stop offset="1" stopColor="#8D98A8" />
+          <stop offset="0" stopColor="#EEF1F5" />
+          <stop offset="1" stopColor="#AAB4C2" />
         </linearGradient>
         <linearGradient id={`${id}-nacelle`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#FAFBFC" />
-          <stop offset="0.55" stopColor="#E1E6EC" />
-          <stop offset="1" stopColor="#9EA8B6" />
+          <stop offset="0" stopColor="#F2F4F7" />
+          <stop offset="0.3" stopColor="#FFFFFF" />
+          <stop offset="0.7" stopColor="#DCE1E8" />
+          <stop offset="1" stopColor="#A2ACBA" />
         </linearGradient>
-        {fuselage && (
-          <clipPath id={`${id}-clip`}>
-            <path d={fuselage.d} />
-          </clipPath>
-        )}
+        <linearGradient id={`${id}-core`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#B9C2CE" />
+          <stop offset="1" stopColor="#7E8898" />
+        </linearGradient>
       </defs>
       {profile.parts.map(paint)}
     </svg>

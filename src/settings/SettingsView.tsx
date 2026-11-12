@@ -7,14 +7,14 @@ import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, MessageSquareText } from 'lucide-react'
 import { useState } from 'react'
 import { AIRPORTS } from '../api/airports'
-import { getAiStatus, getHealth } from '../api/client'
+import { getHealth } from '../api/client'
 import { SpottingSettingsGroup, UnrecognisedDataGroup } from '../discovery/SpottingSettingsGroup'
 import { openFeedback } from '../feedback/store'
 import { usePlayhead } from '../playback/playheadStore'
 import { supportsHaptics } from '../ui/haptics'
 import { Group, Row, SectionLabel, Segmented, Sheet, Toggle } from '../ui/Panel'
 import { InsightSettingsGroup } from '../insights/InsightSettingsGroup'
-import { AiSettingsGroup } from './AiSettingsGroup'
+import { AiSettingsGroup, AiUsage } from './AiSettingsGroup'
 import { PerformanceSettings } from '../perf/PerformanceSettings'
 import { DEFAULT_SETTINGS, useSettings, type Settings } from './settingsStore'
 
@@ -189,7 +189,7 @@ export function SettingsView() {
           </Group>
           <PerformanceSettings />
           <BackendStatus />
-          <AiStatus />
+          <AiUsage />
           <UnrecognisedDataGroup />
         </div>
       )}
@@ -201,23 +201,6 @@ export function SettingsView() {
 // ---------------------------------------------------------------------------
 // Diagnostics
 // ---------------------------------------------------------------------------
-
-function AiStatus() {
-  const status = useQuery({ queryKey: ['ai-status'], queryFn: getAiStatus, staleTime: 60_000, retry: 0 })
-  const s = status.data
-  const on = s?.configured
-  return (
-    <Group className="py-3">
-      <div className="flex items-center gap-2">
-        <span className={`size-2 rounded-full ${on ? 'bg-atc-purple' : 'bg-atc-yellow'}`} />
-        <span className="text-subhead font-semibold">{status.isPending ? 'Checking…' : on ? 'AI radio summaries on' : 'Built-in radio phrasebook'}</span>
-      </div>
-      <p className="mt-1.5 text-footnote text-atc-muted">
-        {on ? `Replay summaries by ${s.model}.` : 'Built-in phrasebook. Set AI_API_KEY for AI summaries.'}
-      </p>
-    </Group>
-  )
-}
 
 function BackendStatus() {
   const airportIcao = usePlayhead((s) => s.airportIcao)
@@ -254,6 +237,20 @@ function BackendStatus() {
         </ul>
       )}
       <p className="mt-2.5 text-caption text-atc-muted">Community ADS-B and MLAT feeds, merged; a failing feed is skipped.</p>
+      {h?.airnav && (
+        <p className="mt-2 text-footnote" title="Used only when a flight is opened and the free sources know neither its route nor its airframe. Counted here, never by asking AirNav.">
+          {h.airnav.configured ? (
+            <>
+              <span className="font-medium tabular-nums">
+                AirNav credits used: {h.airnav.used} of {h.airnav.credits} (today {h.airnav.today} of {h.airnav.dailyCap})
+              </span>
+              <span className="text-atc-muted"> · stops at {h.airnav.cap}{h.airnav.storage === 'cache' ? ' · counted per region (approximate)' : ''}</span>
+            </>
+          ) : (
+            <span className="text-atc-muted">AirNav last-resort lookups: not set up</span>
+          )}
+        </p>
+      )}
     </Group>
   )
 }

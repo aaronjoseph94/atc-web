@@ -19,6 +19,8 @@ type BaseProps = {
   children: ReactNode
   /** Extra element rendered in the header, left of the close button. */
   headerExtra?: ReactNode
+  /** Pinned above the scrolling content (a search box, say): it never scrolls, so nothing peeks out around it. */
+  pinned?: ReactNode
   /** `dark` (default) panel colour, or pure black for reading views. */
   tone?: 'dark' | 'black'
 }
@@ -106,7 +108,7 @@ export function Grabber({ dark = false }: { dark?: boolean }) {
  * The shared body of `Sheet` and `FullPanel`. Mobile: a sheet from the bottom
  * edge that follows the finger. Desktop: a centred card that fades in.
  */
-function Overlay({ open, title, onClose, children, headerExtra, tone = 'dark', full }: BaseProps & { full: boolean }) {
+function Overlay({ open, title, onClose, children, headerExtra, pinned, tone = 'dark', full }: BaseProps & { full: boolean }) {
   // Kept mounted a little past the longest exit so it is never cut short.
   const { mounted, closing } = usePresence(open, DURATION.exit + 60)
   const dialog = useDialog(open, onClose)
@@ -151,6 +153,7 @@ function Overlay({ open, title, onClose, children, headerExtra, tone = 'dark', f
             <Header title={title} onClose={onClose} headerExtra={headerExtra} />
           </div>
         </div>
+        {pinned && <div className="shrink-0 px-4 pb-2 md:px-5">{pinned}</div>}
         <div ref={attachScroll} className="scroll-quiet scroll-fade @container min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1.5rem,var(--safe-bottom))] md:px-5">
           {children}
         </div>
@@ -177,21 +180,34 @@ export function FullPanel(props: BaseProps) {
 export function PanelFrame({ docked = false, ...props }: BaseProps & { docked?: boolean }) {
   if (!docked) return <FullPanel {...props} />
   return (
-    <div className="scroll-quiet scroll-fade @container h-full overflow-y-auto overscroll-contain px-4 pb-6 pt-3">
+    <div className="flex h-full flex-col">
       <h2 className="sr-only">{props.title}</h2>
-      {props.children}
+      {props.pinned && <div className="shrink-0 px-3 pb-2 pt-1">{props.pinned}</div>}
+      <div className="scroll-quiet scroll-fade @container min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-6 pt-1">{props.children}</div>
     </div>
   )
 }
 
-/** Small section label used inside panels. */
-export function SectionLabel({ children }: { children: ReactNode }) {
-  return <h3 className="mb-2 mt-6 px-1 text-footnote font-semibold text-white/55 first:mt-1">{children}</h3>
+/**
+ * The one section heading used in every panel and sheet: a quiet label, an
+ * optional count after it, and an optional note or action at the far end
+ * (kept out of the heading itself, so its name stays clean for screen readers).
+ */
+export function SectionLabel({ children, count, aside }: { children: ReactNode; count?: number | string | null; aside?: ReactNode }) {
+  return (
+    <div className="mb-2 mt-6 flex items-baseline gap-2 px-1 first:mt-1">
+      <h3 className="flex min-w-0 items-center gap-1.5 text-footnote font-semibold text-white/60">
+        <span className="truncate">{children}</span>
+        {count != null && <span className="font-normal tabular-nums text-white/45">{count}</span>}
+      </h3>
+      {aside != null && <div className="ml-auto shrink-0 text-caption text-white/50">{aside}</div>}
+    </div>
+  )
 }
 
 /** An inset, rounded group of rows, as in iOS settings. */
 export function Group({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl bg-white/[0.05] px-3.5 ${className}`}>{children}</div>
+  return <div className={`ui-card px-3.5 ${className}`}>{children}</div>
 }
 
 /** A key cap, for keyboard shortcuts. */

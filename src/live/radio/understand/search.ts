@@ -1,19 +1,22 @@
 /**
- * The transcript list with the AI's cleanup folded in: each call shows its
- * cleaned words, speaker and aircraft, while a search still finds what the
- * recogniser originally wrote (and then shows those words, lit).
+ * The transcript list and the AI pass: a call's entry already holds its
+ * processed words with the raw ones beside them, so a search still finds
+ * what the recogniser originally wrote (and then shows those words, lit).
+ * Entries saved by earlier versions hold the raw words only; for those the
+ * stored answer supplies the cleaned text, speaker and aircraft.
  */
 import { matchItem, type Filters, type Hit, type SearchItem } from '../../history/search'
 import type { Speaker } from '../callsigns'
 import type { StoredUnderstanding } from './store'
 
-type Entry = SearchItem & { speaker: Speaker | null }
+type Entry = SearchItem & { speaker: Speaker | null; raw?: string }
 
 /** An entry as shown: cleaned text (the raw kept beside it), the model's speaker, aircraft the cleanup found. */
 export function withUnderstanding<E extends Entry>(entries: E[], results: Record<string, Pick<StoredUnderstanding, 'cleaned' | 'speaker' | 'added'> | undefined>): (E & { raw?: string })[] {
   return entries.map((e) => {
     const u = e.source === 'radio' ? results[e.id] : undefined
-    if (!u) return e
+    // Already published with its answer (or without one): the entry is as it should be shown.
+    if (!u || e.raw != null) return e
     const added = u.added ?? []
     return {
       ...e,

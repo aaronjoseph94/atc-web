@@ -1,22 +1,16 @@
 /**
  * The optional AI line for a sighting: one call per type and airport (the
- * server caches it for a day), only for rows on screen, and only when a key
- * is configured. Without AI the deterministic line stays.
+ * server caches it for a day), only for rows on screen, and only when AI is
+ * set up on the server. Without AI the deterministic line stays.
  */
 import { useQuery } from '@tanstack/react-query'
-import { aiMaybeAvailable, askAi, getAiRunStatus } from '../ai/client'
-import { useAiSettings } from '../ai/aiSettings'
+import { askAi, useAiReady } from '../ai/client'
 import { getAirport } from '../api/airports'
 import { parseExplainSighting, type ExplainSightingInput } from '../api/ai/tasks/explainSighting'
 import { airportClass } from './rarity'
 import type { Spot } from './spotter'
 
-/** Same query as Settings > AI uses, so they share one status request. */
-export function useAiReady(): boolean {
-  const s = useAiSettings()
-  const status = useQuery({ queryKey: ['ai-run-status', s.provider, s.model, !!s.anthropicKey, !!s.openrouterKey], queryFn: getAiRunStatus, staleTime: 30_000, retry: 0 })
-  return s.enabled && aiMaybeAvailable(status.data)
-}
+export { useAiReady }
 
 /** What the AI is told: the type, the airport and the stable reasons (nothing about this session or flight). */
 export function sightingInput(spot: Pick<Spot, 'type' | 'name' | 'airport' | 'reasons'>): ExplainSightingInput | null {

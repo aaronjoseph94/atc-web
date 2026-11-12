@@ -1,11 +1,16 @@
 /**
- * Chrome along the top of the map: clear/back on the left, the status pill in
- * the middle (LIVE with aircraft count, TRACK while locked onto a flight,
- * REPLAY during playback); search and the menu on the right where no side
- * panel is showing (phones, or the panel tucked away).
+ * Chrome along the top of the map: the status pill in the middle (LIVE with
+ * the aircraft count, TRACK while locked onto a flight, REPLAY during
+ * playback) and the menu on the right. The left corner is empty until there
+ * is something to leave: a selected flight (clear) or a replay (back to live).
+ *
+ * There is no search button: the pill opens the traffic list, whose first row
+ * is the search field (also the Traffic tab on wide screens, the menu's
+ * Traffic entry, and the "/" key). The three-column grid keeps the pill
+ * centred whatever the corners hold.
  */
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, MoreHorizontal, PanelRightOpen, RotateCw, Search, WifiOff, X } from 'lucide-react'
+import { ChevronLeft, MoreHorizontal, PanelRightOpen, RotateCw, WifiOff, X } from 'lucide-react'
 import { useNow } from '../hooks/useNow'
 import { agoLabel } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
@@ -104,11 +109,7 @@ export function TopBar() {
             <ChevronLeft className="size-5" />
             <span className="rounded-full bg-atc-live-badge px-2 py-0.5 text-caption2 font-bold tracking-[0.06em]">LIVE</span>
           </button>
-        ) : docked ? null : (
-          <GlassButton label="Search traffic" shortcut="/" tooltip="right" onClick={() => setPanel('traffic')}>
-            <Search className="size-5" />
-          </GlassButton>
-        )}
+        ) : null}
       </div>
 
       <StatusPill />

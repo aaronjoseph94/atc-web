@@ -28,21 +28,41 @@ width, engine and tail positions) and are released with the rest of the app:
 - `ac-bizjet`: rear-engined business jet with a T-tail and winglets (Global 6000 proportions)
 - `ac-twin-piston`: light twin (Baron 58 proportions)
 - `ac-heli`: light twin helicopter airframe (H135 class), with the rotor drawn by the renderer
-- `ac-vehicle`, `ac-dot`: plain markers
+- `ac-vehicle`, `ac-dot`: plain markers (`ac-vehicle` is now only the shadow and tap shape of a ground vehicle)
+
+### Ground vehicles
+
+The four airside vehicles on the map (`vehicles.ts`: a yellow follow-me /
+operations car, a pushback tug, a fuel or service truck and an airport fire
+engine) are drawn at runtime as a handful of rounded boxes in canvas, from
+typical published sizes (car 4.9 x 2.0 m, conventional pushback tug about
+7.2 x 3.0 m, refueller about 10.4 x 2.6 m, 6x6 airport fire engine about
+11.6 x 3.0 m). They were drawn for this project; no outside artwork was
+traced or copied, and they are released with the rest of the app. Which one an
+ADS-B ground vehicle gets comes from its emitter category (`C1` emergency
+vehicle: the fire engine) and its callsign (`TUG…`, `FUEL…`); the rest get the
+car.
 
 ## Side views (flight view)
 
 The side profiles in the flight view's aircraft card are generated at runtime
-by `sideProfiles.ts` from per-class parameters (fuselage length and height,
-nose and tail-cone lengths, fin size and sweep, wing position, engine size and
-placement, window rows, gear), using each type's published length where we
-have it. They were drawn for this project from published dimensions and
-general arrangement; no outside artwork was traced or copied, and they are
+by `sideProfiles.ts`. Airliners, regional and business jets and turboprops
+come from one parametric drawing, set per family (737, A320, A220, 757, 767,
+777, 787, 747 with its upper deck, A380 with its full double deck, A330,
+A340 with four engines, A350, A300, E-jets, CRJ, ERJ, MD-80/717, ATR, Dash 8,
+King Air class, business jets) from published general-arrangement
+dimensions: fuselage length and height, wingspan, wing position, sweep and
+dihedral, fin height and sweep, winglet style, engine count, nacelle size and
+position, and gear bogies. Each type's own length and span are used where we
+have them. Light aircraft and helicopters have their own drawings. All are
+painted in one neutral finish (no airline livery) by `SideView.tsx`. They were
+drawn for this project; no outside artwork was traced or copied, and they are
 released with the rest of the app.
 
 Candidates looked at and not used: Plane Watch's silhouette set (CC BY-NC-SA,
 non-commercial), tar1090/dump1090 markers (GPL), and Wikimedia Commons
-silhouettes, which are mostly CC BY-SA or military types.
+silhouettes and profiles, which are mostly CC BY-SA (share-alike), military
+types, or carry airline liveries.
 
 ## Type facts
 

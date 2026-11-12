@@ -10,7 +10,7 @@ import { liveBuffer } from '../../session'
 import { loadNetwork } from '../../taxi/network'
 import { writtenCallsign, type Speaker } from '../callsigns'
 import { useRadio, type Transmission } from '../radioStore'
-import { hintCallsigns } from '../transcriber'
+import { hintCallsigns } from '../hints'
 
 /** Target size of the request's input, in characters of JSON. */
 export const INPUT_BUDGET = 2000

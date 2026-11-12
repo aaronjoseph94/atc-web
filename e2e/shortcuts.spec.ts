@@ -19,13 +19,13 @@ test('every panel has a key: sheets close with Escape, docked views switch tabs'
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
   }
-  // Transcript, traffic and weather live in the side panel at this width.
+  // The radio transcript, traffic and weather live in the side panel at this width.
   // (Keys are ignored while typing, so leave any search box first.)
   const blur = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
   const docked: [string, string][] = [
     ['/', 'Traffic'],
     ['w', 'Weather'],
-    ['t', 'Transcript'],
+    ['t', 'Radio'],
   ]
   for (const [key, tab] of docked) {
     await blur()

@@ -46,7 +46,7 @@ test.describe('screenshots', () => {
     await app.openFlightDetail()
     const detail = app.flightDetail()
     await app.settled(detail)
-    await expect(detail.getByRole('img', { name: /^Side view of / })).toBeVisible()
+    await expect(detail.getByRole('img', { name: /^(Side|Top) view of / })).toBeVisible()
     await detail.evaluate((el) => el.querySelector('.overflow-y-auto')?.scrollTo(0, 0))
     // The timeline is in clock time; its chart grows as the flight is watched. The story so far tells those times too.
     await expect(detail).toHaveScreenshot('flight-detail.png', { timeout: 60_000, mask: [detail.getByRole('region', { name: 'Flight timeline' }), detail.getByRole('region', { name: 'Story so far' })] })
@@ -108,7 +108,7 @@ test.describe('screens for review (not compared)', () => {
     await expect(page.getByRole('button', { name: 'Open the radio transcript' })).toContainText('JetBlue', { timeout: 45_000 })
     await shot('07-radio-caption')
     await page.getByRole('button', { name: 'Open the radio transcript' }).click()
-    if (app.docked) await expect(app.dockTab('Transcript')).toHaveAttribute('aria-selected', 'true')
+    if (app.docked) await expect(app.dockTab('Radio')).toHaveAttribute('aria-selected', 'true')
     const transcript = app.view('transcripts', 'Transcripts')
     await expect(transcript.getByRole('searchbox', { name: 'Search transcripts' })).toBeVisible()
     await expect(transcript.getByRole('listitem').filter({ hasText: 'JetBlue' })).toBeVisible()

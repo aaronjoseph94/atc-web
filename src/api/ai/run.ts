@@ -7,11 +7,11 @@
  *  - OpenRouter (the owner's choice for a second provider), through its own
  *    HTTP API; it reaches Claude and many other models with one key.
  *
- * Keys come from the request (typed into Settings > AI on this device, sent
- * per request in headers, never stored on the server) or, failing that, from
- * the Cloudflare environment (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`).
- * The legacy `AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` trio used by the
- * summary endpoint is honoured too.
+ * Keys live on the server only, as Cloudflare secrets (`ANTHROPIC_API_KEY`,
+ * `OPENROUTER_API_KEY`; see docs/ai-setup.md). The browser never sends or
+ * stores one. `AI_PROVIDER` and `AI_MODEL` pick the provider and model for
+ * everyone. The older single-key trio (`AI_API_KEY` / `AI_BASE_URL`) used by
+ * the summary endpoint still works as a fallback.
  */
 import Anthropic, { APIError, AuthenticationError, BadRequestError, RateLimitError } from '@anthropic-ai/sdk'
 
@@ -20,28 +20,22 @@ export type AiProvider = 'anthropic' | 'openrouter'
 export type AiEnv = {
   ANTHROPIC_API_KEY?: string
   OPENROUTER_API_KEY?: string
-  /** Model override for every task (Claude id, or OpenRouter id when the provider is OpenRouter). */
+  /** `anthropic`, `openrouter` or `auto` (default: Claude when its key is set, else OpenRouter). */
+  AI_PROVIDER?: string
+  /** Model for every task (Claude id, or an OpenRouter id when the provider is OpenRouter). */
   AI_MODEL?: string
   /** Legacy single-key setup (see summarizeHandler). */
   AI_API_KEY?: string
   AI_BASE_URL?: string
 }
 
-/** What the browser may send: keys typed in Settings, a provider preference and a model. */
-export type AiRequestOptions = {
-  anthropicKey?: string | null
-  openrouterKey?: string | null
-  provider?: AiProvider | 'auto' | null
-  model?: string | null
-}
+export type ResolvedAi = { provider: AiProvider; key: string; model: string }
 
-export type ResolvedAi = { provider: AiProvider; key: string; model: string; keySource: 'device' | 'server' }
-
-/** Claude models offered in Settings. The default is the current Opus. */
+/** The Claude models the owner can name in `AI_MODEL`, with the names shown in Settings. The default is the current Opus. */
 export const CLAUDE_MODELS = [
-  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', note: 'Best quality (default)' },
-  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', note: 'Faster, cheaper' },
-  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', note: 'Fastest, cheapest' },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
 ] as const
 export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5'
 /** On OpenRouter, the same models under its own names. */
@@ -51,40 +45,25 @@ export const OPENROUTER_MODEL_FOR: Record<string, string> = {
   'claude-haiku-5-5': 'anthropic/claude-haiku-5.5',
 }
 
-/** Request headers the browser uses to pass its settings (keys only over HTTPS, to our own origin). */
-export const AI_HEADERS = {
-  anthropicKey: 'x-atc-anthropic-key',
-  openrouterKey: 'x-atc-openrouter-key',
-  provider: 'x-atc-ai-provider',
-  model: 'x-atc-ai-model',
-} as const
-
-export function optionsFromHeaders(get: (name: string) => string | null): AiRequestOptions {
-  const provider = get(AI_HEADERS.provider)
-  return {
-    anthropicKey: get(AI_HEADERS.anthropicKey),
-    openrouterKey: get(AI_HEADERS.openrouterKey),
-    provider: provider === 'anthropic' || provider === 'openrouter' || provider === 'auto' ? provider : null,
-    model: get(AI_HEADERS.model),
-  }
+/** A model id as people would say it ("Claude Opus 5.5"); ids nobody listed are shown as they are. */
+export function modelLabel(model: string): string {
+  const id = Object.entries(OPENROUTER_MODEL_FOR).find(([, or]) => or === model)?.[0] ?? model
+  return CLAUDE_MODELS.find((m) => m.id === id)?.label ?? model
 }
 
-/** Which provider, key and model a request will use, or null when no key is available anywhere. */
-export function resolveAi(env: AiEnv, opts: AiRequestOptions = {}): ResolvedAi | null {
+/** Which provider, key and model the server will use, or null when no key is set. */
+export function resolveAi(env: AiEnv): ResolvedAi | null {
   const legacyAnthropic = env.AI_API_KEY && (!env.AI_BASE_URL || /anthropic\.com/.test(env.AI_BASE_URL)) ? env.AI_API_KEY : undefined
   const legacyOpenRouter = env.AI_API_KEY && env.AI_BASE_URL && /openrouter\.ai/.test(env.AI_BASE_URL) ? env.AI_API_KEY : undefined
-  const anthropic = opts.anthropicKey ? { key: opts.anthropicKey, src: 'device' as const } : env.ANTHROPIC_API_KEY || legacyAnthropic ? { key: (env.ANTHROPIC_API_KEY || legacyAnthropic)!, src: 'server' as const } : null
-  const openrouter = opts.openrouterKey ? { key: opts.openrouterKey, src: 'device' as const } : env.OPENROUTER_API_KEY || legacyOpenRouter ? { key: (env.OPENROUTER_API_KEY || legacyOpenRouter)!, src: 'server' as const } : null
-  const wanted = opts.provider && opts.provider !== 'auto' ? opts.provider : null
+  const anthropic = env.ANTHROPIC_API_KEY?.trim() || legacyAnthropic
+  const openrouter = env.OPENROUTER_API_KEY?.trim() || legacyOpenRouter
+  const wanted = (env.AI_PROVIDER ?? '').trim().toLowerCase()
+  // A named provider is used when its key exists; otherwise whichever key there is.
   const pick: AiProvider | null = wanted === 'openrouter' ? (openrouter ? 'openrouter' : anthropic ? 'anthropic' : null) : anthropic ? 'anthropic' : openrouter ? 'openrouter' : null
   if (!pick) return null
-  const base = opts.model || env.AI_MODEL || DEFAULT_CLAUDE_MODEL
-  if (pick === 'anthropic') {
-    const model = base.startsWith('claude-') ? base : DEFAULT_CLAUDE_MODEL
-    return { provider: 'anthropic', key: anthropic!.key, model, keySource: anthropic!.src }
-  }
-  const model = OPENROUTER_MODEL_FOR[base] ?? (base.includes('/') ? base : OPENROUTER_MODEL_FOR[DEFAULT_CLAUDE_MODEL])
-  return { provider: 'openrouter', key: openrouter!.key, model, keySource: openrouter!.src }
+  const base = env.AI_MODEL?.trim() || DEFAULT_CLAUDE_MODEL
+  if (pick === 'anthropic') return { provider: 'anthropic', key: anthropic!, model: base.startsWith('claude-') ? base : DEFAULT_CLAUDE_MODEL }
+  return { provider: 'openrouter', key: openrouter!, model: OPENROUTER_MODEL_FOR[base] ?? (base.includes('/') ? base : OPENROUTER_MODEL_FOR[DEFAULT_CLAUDE_MODEL]) }
 }
 
 export type RunAiArgs = {

@@ -15,8 +15,10 @@ import { handleFeedback, MAX_BODY } from '../src/api/feedbackHandler'
 import { buildHealth } from '../src/api/healthHandler'
 import { memoryCache } from '../src/api/sourceHealth'
 import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
-import { aiStatus as aiRunStatus, handleAiRun } from '../src/api/ai/handler'
-import { optionsFromHeaders } from '../src/api/ai/run'
+import { aiStatus as aiRunStatus, handleAiPost } from '../src/api/ai/handler'
+import { originHeaders } from '../src/api/ai/limits'
+import { airnavUsage } from '../src/api/airnav'
+import { memoryStorage, storeCounters } from '../src/api/storage'
 import { NOT_AVAILABLE } from '../src/api/transcribeHandler'
 import { fetchWeather } from '../src/api/weatherHandler'
 
@@ -37,6 +39,37 @@ const aiEnv = () => ({
   AI_BASE_URL: process.env.AI_BASE_URL,
   AI_MODEL: process.env.AI_MODEL,
 })
+
+/** The same keys and caps the deployed `/api/ai` reads from Cloudflare. */
+const aiRunEnv = () => ({
+  ...aiEnv(),
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  AI_PROVIDER: process.env.AI_PROVIDER,
+  AI_DAILY_CAP: process.env.AI_DAILY_CAP,
+  AI_TASK_CAPS: process.env.AI_TASK_CAPS,
+  AI_RATE_BURST: process.env.AI_RATE_BURST,
+  AI_RATE_PER_MIN: process.env.AI_RATE_PER_MIN,
+})
+
+/**
+ * This dev server's own origin. Node only sees the Host header, so the scheme
+ * is taken from the page that is asking when its host is ours (the dev server
+ * may be reached through an HTTPS tunnel or preview proxy).
+ */
+function devOrigin(host: string | undefined, page: string | null): string {
+  try {
+    const u = page ? new URL(page) : null
+    if (u && u.host === host) return u.origin
+  } catch {
+    // Not a URL: fall through to the plain answer.
+  }
+  return `http://${host ?? 'localhost'}`
+}
+
+/** Dev stand-ins for the shared storage: counts last until the dev server restarts. */
+const devStore = memoryStorage()
+const devCounters = storeCounters(devStore)
 
 function readBody(req: IncomingMessage, limit = 64_000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -79,7 +112,9 @@ export function apiDevPlugin(): Plugin {
 
           if (url.pathname === '/api/health') {
             const opts = { env: sourceEnv(), cache: devCache, probeAll: url.searchParams.get('probe') === 'all' }
-            return await send(res, jsonResponse(await buildHealth(airport, 'vite-dev', undefined, opts), 200, 'no-store'))
+            // The AirNav fallback is never called from the dev server (its credit count would not survive a restart); this only reports that.
+            const airnav = await airnavUsage({}, devCounters)
+            return await send(res, jsonResponse({ ...(await buildHealth(airport, 'vite-dev', undefined, opts)), airnav }, 200, 'no-store'))
           }
 
           if (url.pathname === '/api/weather') {
@@ -89,21 +124,30 @@ export function apiDevPlugin(): Plugin {
           if (url.pathname === '/api/flight') {
             const q = parseFlightQuery(url.searchParams.get('hex'), url.searchParams.get('callsign'))
             if (!q.hex && !q.callsign) return await send(res, jsonResponse({ error: 'hex or callsign required' }, 400, 'no-store'))
+            // Free sources only: `deep=1` (the paid AirNav last resort) is honoured on the deployed site alone.
             return await send(res, jsonResponse(await fetchFlightDetails(q.hex, q.callsign, devCache), 200, 'public, max-age=600'))
           }
 
           if (url.pathname === '/api/ai') {
-            const opts = optionsFromHeaders((n) => (req.headers[n] as string | undefined) ?? null)
-            const env = { ...aiEnv(), ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY }
-            if (req.method === 'GET') return await send(res, jsonResponse(aiRunStatus(env, opts), 200, 'no-store'))
+            const env = aiRunEnv()
+            if (req.method === 'GET') return await send(res, jsonResponse(await aiRunStatus(env, devCounters), 200, 'no-store'))
             let body: unknown
             try {
               body = JSON.parse(await readBody(req))
             } catch {
               return await send(res, jsonResponse({ ok: false, error: 'bad request', status: 400 }, 400, 'no-store'))
             }
-            const out = await handleAiRun(body, env, opts)
-            return await send(res, jsonResponse(out, out.ok ? 200 : out.status, 'no-store'))
+            const header = (n: string) => (req.headers[n] as string | undefined) ?? null
+            const from = originHeaders(header)
+            const out = await handleAiPost(body, env, {
+              self: devOrigin(req.headers.host, from.origin ?? from.referer),
+              from,
+              client: req.socket.remoteAddress ?? 'local',
+              counters: devCounters,
+              rates: devStore,
+              answers: devCache,
+            })
+            return await send(res, new Response(JSON.stringify(out.body), { status: out.status, headers: { 'content-type': 'application/json', ...out.headers } }))
           }
 
           if (url.pathname === '/api/feedback' && req.method === 'POST') {

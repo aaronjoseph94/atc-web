@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getShape } from '../../aircraft/shapes'
 import { bankedImage, bankOfImage, bankShape, shapeOfImage } from '../mapImages'
-import { arrivalScale, clipToLength, edgeOpacity, hideCoveredFins, litBits } from './aircraftFx'
+import { arrivalScale, clipToLength, DAY_STROBE_OPACITY, edgeOpacity, hideCoveredFins, lightOpacity, litBits, NIGHT_LIGHT_OPACITY } from './aircraftFx'
 import { bankAngle, bankLevel, TurnTracker } from './bank'
 import { beaconOn, phaseOf, STROBE_PERIOD_MS, strobeOn } from './blink'
 import { dominantColour } from './brand'
@@ -73,6 +73,20 @@ describe('litBits', () => {
   it('holds lights steady with reduced motion', () => {
     for (let t = 0; t < 2000; t += 50) expect(litBits({ ...base, tMs: t, reduceMotion: true })).toBe('NB')
     expect(litBits({ ...base, night: 0, tMs: 10, reduceMotion: true })).toBe('')
+  })
+})
+
+describe('lightOpacity', () => {
+  it('is almost invisible by day and never full strength at night', () => {
+    expect(lightOpacity(0, false)).toBe(DAY_STROBE_OPACITY)
+    expect(DAY_STROBE_OPACITY).toBeLessThan(0.2)
+    expect(lightOpacity(1, false)).toBe(NIGHT_LIGHT_OPACITY)
+    expect(NIGHT_LIGHT_OPACITY).toBeLessThan(0.8)
+  })
+  it('comes up with the dusk and is dimmer on a parked aircraft', () => {
+    expect(lightOpacity(0.3, false)).toBeLessThan(lightOpacity(0.6, false))
+    expect(lightOpacity(0.6, false)).toBeLessThan(lightOpacity(1, false))
+    expect(lightOpacity(1, true)).toBeLessThan(lightOpacity(1, false) * 0.6)
   })
 })
 

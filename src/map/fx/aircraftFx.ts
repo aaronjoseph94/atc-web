@@ -97,6 +97,26 @@ export function litBits(o: { night: number; parked: boolean; onGround: boolean; 
   return `N${s ? 'S' : ''}${b ? 'B' : ''}` as LightBits
 }
 
+/** Strength of the strobe glint by day: only just there. */
+export const DAY_STROBE_OPACITY = 0.14
+/** Strength of an aircraft's lights at full night; a parked aircraft's (cold and dark but for its position lights) are dimmer still. */
+export const NIGHT_LIGHT_OPACITY = 0.72
+const PARKED_LIGHT_FACTOR = 0.5
+/** The heat shimmer behind the engines on the takeoff roll: a hint by day, less at night. */
+const EXHAUST_DAY = 0.4
+const EXHAUST_NIGHT = 0.2
+
+/**
+ * How strongly an aircraft's lights are drawn (the layer's opacity for its
+ * light sprite). By day only the strobes show, as the faintest glint; after
+ * dark the lights come up with the night but stop well short of full
+ * strength, and a parked aircraft's are dimmer still.
+ */
+export function lightOpacity(night: number, parked: boolean): number {
+  if (night < 0.15) return DAY_STROBE_OPACITY
+  return NIGHT_LIGHT_OPACITY * Math.min(1, 0.3 + night) * (parked ? PARKED_LIGHT_FACTOR : 1)
+}
+
 export class AircraftFx {
   private readonly map: MapLibreMap
   private readonly turns = new TurnTracker()
@@ -151,8 +171,7 @@ export class AircraftFx {
       const bits = litBits({ night: this.night, parked, onGround: a.onGround, rolling, tMs: t, phase: this.phase(a.icao24), reduceMotion })
       if (bits) {
         lt = lightImage(icon, bits, /-(b[LR][12])$/.exec(shadowImage)?.[1] ?? '')
-        // By day the strobes are a faint glint; at night lights are full strength, a parked aircraft's dimmer.
-        lo = this.night < 0.15 ? 0.4 : Math.min(1, 0.3 + this.night) * (parked ? 0.6 : 1)
+        lo = lightOpacity(this.night, parked)
       }
     }
 
@@ -165,7 +184,7 @@ export class AircraftFx {
     const engines = anchors.engines.length > 0 && rolling
     const frame = reduceMotion ? 0 : (Math.floor((t + this.phase(a.icao24) * 1000) / SHIMMER_MS) % 2 as 0 | 1)
     const ex = engines ? exhaustImage(icon, frame) : ''
-    const exo = engines ? (0.6 - 0.3 * this.night) * ease((speed - ROLL_KT) / 25) : 0
+    const exo = engines ? (EXHAUST_DAY - (EXHAUST_DAY - EXHAUST_NIGHT) * this.night) * ease((speed - ROLL_KT) / 25) : 0
 
     // Airline colour on the fin, once zoomed in far enough to see it.
     const lv = anchors.fin && zoom >= LIVERY_MIN_ZOOM - 0.5 && !hi ? brandColour(a.callsign, a.icao24) : ''
