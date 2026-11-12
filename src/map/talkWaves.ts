@@ -1,8 +1,7 @@
 /**
- * The look of an aircraft that is on the radio: a faint steady glow under it
- * and two or three soft rings that swell slowly outwards and fade, in the
- * speaker's colour (pink while the tower talks to it, blue while its pilot
- * talks; see `ui/speaker.ts`).
+ * The look of an aircraft that is on the radio: a soft halo that breathes
+ * round it and a thin ring pinging outwards, in the speaker's colour (pink
+ * while the tower talks to it, blue while its pilot talks; see `ui/speaker.ts`).
  *
  * Everything here is plain numbers worked out from the clock, which
  * `AircraftLayer` pushes into circle layers as paint values. Nothing is sent
@@ -35,6 +34,8 @@ export type Ring = {
   stroke: number
   /** `circle-stroke-opacity`. */
   opacity: number
+  /** `circle-opacity` of the ring's fill (a ring drawn as a disc). */
+  fill: number
 }
 
 export type TalkWaves = {
@@ -71,28 +72,31 @@ export function waveTravel(p: number): number {
   return 1 - (1 - clamp(p, 0, 1)) ** 1.7
 }
 
+/** Breathing period of the halo, as in the earlier look the owner preferred (sin(t / 620)). */
+export const HALO_BREATH_MS = 620
+/** One ping, from the aircraft out to nothing. */
+export const PING_PERIOD_MS = 1500
+
 /**
- * The glow and rings at time `tMs` for an aircraft drawn `reachPx` across
- * (centre to wingtip). With reduced motion there are no rings: the glow
- * stands in, a little larger and steady.
+ * The look at time `tMs`, as the app had it before (the owner preferred it):
+ * two soft discs in the speaker's colour that breathe gently round the
+ * aircraft (`glow` the inner one, the first ring the outer one, drawn as a
+ * fill), and a thin ring that pings outwards and fades (the second ring).
+ * Sizes follow the aircraft a little, so a heavy isn't swamped and a light
+ * aircraft isn't buried. With reduced motion: steady discs, a still ring.
  */
 export function talkWaves(tMs: number, reachPx: number, reduceMotion: boolean): TalkWaves {
-  const { inner, outer } = waveExtent(reachPx)
-  if (reduceMotion) {
-    return {
-      glow: { radius: inner * 2.6, opacity: GLOW_OPACITY * 1.25 },
-      rings: Array.from({ length: WAVE_COUNT }, () => ({ radius: inner, stroke: 0, opacity: 0 })),
-    }
+  const s = clamp(reachPx / 18, 0.85, 1.6)
+  const wave = reduceMotion ? 0 : Math.sin(tMs / HALO_BREATH_MS)
+  const phase = reduceMotion ? 0.4 : (((tMs % PING_PERIOD_MS) + PING_PERIOD_MS) % PING_PERIOD_MS) / PING_PERIOD_MS
+  return {
+    glow: { radius: (20 + 2 * wave) * s, opacity: 0.36 + 0.06 * wave },
+    rings: [
+      { radius: (36 + 5 * wave) * s, stroke: 0, opacity: 0, fill: 0.2 + 0.05 * wave },
+      { radius: (12 + 34 * phase) * s, stroke: 2, opacity: reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6, fill: 0 },
+      { radius: 0, stroke: 0, opacity: 0, fill: 0 },
+    ],
   }
-  const rings: Ring[] = []
-  for (let i = 0; i < WAVE_COUNT; i++) {
-    const p = (((tMs / WAVE_PERIOD_MS + i / WAVE_COUNT) % 1) + 1) % 1
-    const r = inner + (outer - inner) * waveTravel(p)
-    rings.push({ radius: r * (1 - WAVE_SOFTNESS), stroke: r * WAVE_SOFTNESS, opacity: WAVE_PEAK * waveEnvelope(p) })
-  }
-  // The glow breathes very slightly, in step with a ring leaving.
-  const breath = Math.sin((2 * Math.PI * tMs) / WAVE_PERIOD_MS)
-  return { glow: { radius: inner * (2.3 + 0.08 * breath), opacity: GLOW_OPACITY * (1 + 0.1 * breath) }, rings }
 }
 
 /**

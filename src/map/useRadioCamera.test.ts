@@ -50,8 +50,8 @@ describe('radio camera', () => {
     expect(flyDuration(0.2, 2.6)).toBe(FLY_MAX_MS)
     expect(flyDuration(5, -4)).toBe(FLY_MAX_MS)
     expect(flyDuration(0.3, 1.5)).toBeGreaterThan(flyDuration(0.3, 0.5))
-    expect(FLY_MIN_MS).toBeGreaterThanOrEqual(1600)
-    expect(FLY_MAX_MS).toBeLessThanOrEqual(2200)
+    expect(FLY_MIN_MS).toBeGreaterThanOrEqual(400)
+    expect(FLY_MAX_MS).toBeLessThanOrEqual(1000)
   })
 
   it('leaves the camera alone when the aircraft is already framed', () => {

@@ -471,7 +471,10 @@ export function AircraftLayer(props: Props) {
           if (k >= 1) talkFrom = talkTo
           if (map.getPaintProperty(LAYER.talkGlow, 'circle-color') !== color) {
             map.setPaintProperty(LAYER.talkGlow, 'circle-color', color)
-            for (const id of TALK_WAVE_LAYERS) map.setPaintProperty(id, 'circle-stroke-color', color)
+            for (const id of TALK_WAVE_LAYERS) {
+              map.setPaintProperty(id, 'circle-stroke-color', color)
+              map.setPaintProperty(id, 'circle-color', color)
+            }
           }
         }
         const fade = (L.reduceMotion ? 1 : talkId ? talkFade(t, talkStart, null) : talkFade(t, ghostStart, ghostEnd)) * txFade
@@ -483,6 +486,7 @@ export function AircraftLayer(props: Props) {
           map.setPaintProperty(id, 'circle-radius', ring.radius)
           map.setPaintProperty(id, 'circle-stroke-width', ring.stroke)
           map.setPaintProperty(id, 'circle-stroke-opacity', ring.opacity * fade)
+          map.setPaintProperty(id, 'circle-opacity', ring.fill * fade)
         })
       }
 

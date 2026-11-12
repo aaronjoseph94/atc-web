@@ -10,7 +10,7 @@
  * controller, blue for a pilot) and breathes. In a replay the same row shows
  * the scene and plays or pauses it.
  */
-import { ChevronRight, ChevronsUpDown, Loader2, PanelRightClose, Pause, Play, VolumeX, Wind } from 'lucide-react'
+import { ChevronRight, ChevronsUpDown, Loader2, MoreHorizontal, PanelRightClose, Pause, Play, VolumeX, Wind } from 'lucide-react'
 import { formatMhz } from '../../api/airportData'
 import { getAirport, resolveStation } from '../../api/airports'
 import { useRadio } from '../../live/radio/radioStore'
@@ -124,6 +124,7 @@ export function PanelHeader({ onCollapse }: { onCollapse: () => void }) {
         </button>
       )}
       <PanelPlayButton />
+      <PanelMenuButton />
       <button
         type="button"
         aria-label="Hide side panel"
@@ -135,5 +136,25 @@ export function PanelHeader({ onCollapse }: { onCollapse: () => void }) {
         <Tooltip label="Hide panel" shortcut="]" side="left" />
       </button>
     </header>
+  )
+}
+
+/** The app menu (Replay, Transcript, Map, Settings…), opened from the panel's header beside the panel. */
+function PanelMenuButton() {
+  const open = usePlayhead((s) => s.panel === 'menu')
+  const setPanel = usePlayhead((s) => s.setPanel)
+  return (
+    <button
+      type="button"
+      aria-label="Menu"
+      aria-keyshortcuts="M"
+      aria-haspopup="menu"
+      aria-expanded={open}
+      className={`has-tooltip pressable relative grid size-8 shrink-0 place-items-center rounded-full hover:bg-white/10 hover:text-white ${open ? 'bg-white/15 text-white' : 'text-white/60'}`}
+      onClick={() => setPanel(open ? null : 'menu')}
+    >
+      <MoreHorizontal className="size-[18px]" />
+      {!open && <Tooltip label="Menu" shortcut="M" side="left" />}
+    </button>
   )
 }

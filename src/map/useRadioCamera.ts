@@ -8,8 +8,8 @@
  * map: once they drag, zoom or touch it mid-move, or follow a selected
  * flight, this steps aside until "Back to automatic map".
  *
- * The moves are meant to go unnoticed. They are slow (about two seconds),
- * start and stop softly, come in only as far as leaves the surroundings in
+ * The moves are quick (under a second) but soft, so they don't jolt: they
+ * start and stop gently, come in only as far as leaves the surroundings in
  * view, and don't happen at all when the aircraft is already comfortably in
  * frame. A move that something cuts short (the caption appearing changes the
  * map's padding, which stops camera animations) is picked up again from
@@ -27,14 +27,14 @@ import { metersPerDegLat, metersPerDegLon } from './geo'
 import type { LiveAircraft } from './livePositions'
 
 /** The move onto an aircraft takes between these, longer the further it has to come in. */
-export const FLY_MIN_MS = 1600
-export const FLY_MAX_MS = 2200
+export const FLY_MIN_MS = 550
+export const FLY_MAX_MS = 850
 /** The least time given to the rest of a move that something cut short. */
-const RESUME_MIN_MS = 900
+const RESUME_MIN_MS = 350
 /** Length of the move back to the airfield. */
-const HOME_MS = 2200
+const HOME_MS = 800
 /** Pause after the exchange ends before easing back out. */
-const RELEASE_DELAY_MS = 2400
+const RELEASE_DELAY_MS = 700
 /**
  * A beat between the call arriving and the camera starting to move: the
  * caption appears in the same instant and resizes the map's padding, and a

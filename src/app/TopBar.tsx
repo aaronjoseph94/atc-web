@@ -119,9 +119,12 @@ export function TopBar() {
             <PanelRightOpen className="size-5" />
           </GlassButton>
         )}
-        <GlassButton label="Menu" shortcut="M" tooltip={panel === 'menu' ? 'none' : 'left'} onClick={() => setPanel(panel === 'menu' ? null : 'menu')} active={panel === 'menu'}>
-          <MoreHorizontal className="size-5" />
-        </GlassButton>
+        {/* Beside the side panel the menu button lives in the panel's header instead. */}
+        {!(wide && !collapsed) && (
+          <GlassButton label="Menu" shortcut="M" tooltip={panel === 'menu' ? 'none' : 'left'} onClick={() => setPanel(panel === 'menu' ? null : 'menu')} active={panel === 'menu'}>
+            <MoreHorizontal className="size-5" />
+          </GlassButton>
+        )}
       </div>
     </div>
   )

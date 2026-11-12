@@ -15,7 +15,6 @@ import { ATC_COLORS } from '../ui/speaker'
 import { NOISE_IMAGE, SHEEN_IMAGE } from './atmosphere/textures'
 import { LIGHT_BAND_ZOOMS } from './fx/sprites'
 import { differs, formatColor, mixColor, nightShade, parseColor } from './lighting/color'
-import { WAVE_SOFTNESS } from './talkWaves'
 
 /** Ids other modules need to reference. */
 export const SRC = {
@@ -1149,16 +1148,17 @@ export const TALK_WAVE_LAYERS = ['ac-talk-wave-1', 'ac-talk-wave-2', 'ac-talk-wa
 const ANIMATED_LAYERS = new Set<string>([LAYER.halo, LAYER.haloOuter, LAYER.talkGlow, ...TALK_WAVE_LAYERS])
 
 /**
- * The aircraft on the radio (`tx`): a fully blurred disc for the steady glow,
- * and rings that are all stroke, feathered on both edges by `circle-blur`
- * (see `talkWaves.ts`). `AircraftLayer` animates radius, width and opacity as
+ * The aircraft on the radio (`tx`): two soft discs that breathe (the glow and
+ * the first ring, drawn as a fill) and a thin ring that pings outwards (see
+ * `talkWaves.ts`). `AircraftLayer` animates radius, width and opacity as
  * plain paint numbers and sets the speaker's colour; they start invisible.
  */
 function talkLayers(): LayerSpecification[] {
   const tx = ['==', ['get', 'tx'], 1]
   return [
-    { id: LAYER.talkGlow, type: 'circle', source: SRC.aircraft, filter: tx, paint: { 'circle-radius': 40, 'circle-color': ATC_COLORS.base, 'circle-opacity': 0, 'circle-blur': 1, 'circle-pitch-alignment': 'map' } },
-    ...TALK_WAVE_LAYERS.map((id) => ({ id, type: 'circle', source: SRC.aircraft, filter: tx, paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-opacity': 0, 'circle-blur': WAVE_SOFTNESS, 'circle-stroke-color': ATC_COLORS.base, 'circle-stroke-width': 8, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } })),
+    { id: LAYER.talkGlow, type: 'circle', source: SRC.aircraft, filter: tx, paint: { 'circle-radius': 20, 'circle-color': ATC_COLORS.base, 'circle-opacity': 0, 'circle-blur': 0.12, 'circle-pitch-alignment': 'map' } },
+    // The outer halo (a soft filled disc), then the thin ping ring (crisp), then a spare.
+    ...TALK_WAVE_LAYERS.map((id, i) => ({ id, type: 'circle', source: SRC.aircraft, filter: tx, paint: { 'circle-radius': 20, 'circle-color': ATC_COLORS.base, 'circle-opacity': 0, 'circle-blur': i === 0 ? 0.2 : 0, 'circle-stroke-color': ATC_COLORS.base, 'circle-stroke-width': 8, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } })),
   ] as unknown as LayerSpecification[]
 }
 

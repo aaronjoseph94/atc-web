@@ -1,6 +1,7 @@
 /** The "⋯" menu: a popover under the button, like a native context menu. */
 import { BookOpen, CircleHelp, CloudSun, Copyright, FileText, History, Layers, List, MessageSquareText, Pin, PinOff, Radio, Settings, Sunrise, type LucideIcon } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { OSM_CREDIT } from '../api/credits'
 import { openFeedback } from '../feedback/store'
 import { openCatchUp } from '../insights/hooks'
@@ -8,6 +9,7 @@ import { useLearn } from '../learn/learnStore'
 import { usePlayhead, type Panel } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
 import { Kbd, useDialog } from '../ui/Panel'
+import { useDockActive } from '../ui/layout'
 import { usePresence } from '../ui/usePresence'
 import { openCredits } from './helpSection'
 
@@ -21,6 +23,7 @@ export function Menu() {
   const pinned = useSettings((s) => s.favourites.includes(airportIcao))
   const toggleFavourite = useSettings((s) => s.toggleFavourite)
 
+  const docked = useDockActive()
   const close = () => setPanel(null)
   const { mounted, closing } = usePresence(open, 180)
   const ref = useDialog(open, close)
@@ -43,8 +46,8 @@ export function Menu() {
     items[next].focus()
   }
 
-  return (
-    <div className={`absolute inset-0 z-50 ${closing ? 'pointer-events-none' : ''}`}>
+  const menu = (
+    <div className={`${docked ? 'fixed z-[70]' : 'absolute z-50'} inset-0 ${closing ? 'pointer-events-none' : ''}`}>
       <button type="button" tabIndex={-1} aria-label="Close menu" className="absolute inset-0 cursor-default" onClick={close} />
       <div
         ref={ref}
@@ -53,7 +56,7 @@ export function Menu() {
         tabIndex={-1}
         onKeyDown={onKeyDown}
         data-closing={closing ? '' : undefined}
-        className="motion-pop absolute right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none md:right-4"
+        className={`motion-pop absolute ${docked ? 'right-[1.6rem] top-[4.1rem]' : 'right-3 top-[calc(max(0.75rem,var(--safe-top))+3.4rem)] md:right-4'} w-64 origin-top-right overflow-hidden rounded-2xl glass-pop py-1.5 shadow-pop ring-1 ring-white/[0.12] outline-none`}
       >
         {mode === 'playback' ? (
           <Item icon={Radio} label="Back to live" onClick={exitPlayback} />
@@ -106,6 +109,8 @@ export function Menu() {
       </div>
     </div>
   )
+  // Beside the side panel the menu drops from the panel header's button, over the panel, so it lives outside the map's box.
+  return docked ? createPortal(menu, document.body) : menu
 }
 
 function Divider() {

@@ -196,7 +196,7 @@ test.describe('last call in the station bar', () => {
     await expect(last).toContainText('turn left heading', { ignoreCase: true })
 
     // An aircraft nobody has talked to yet says so.
-    await app.tapAircraft(JFK.parked.icao24)
-    await expect(page.getByLabel(`Latest radio call for ${JFK.parked.callsign}`)).toContainText('No radio calls heard')
+    await app.tapAircraft(JFK.arrival.icao24)
+    await expect(page.getByLabel(`Latest radio call for ${JFK.arrival.callsign}`)).toContainText('No radio calls heard')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GLOW_OPACITY, TALK_FADE_IN_MS, TALK_FADE_OUT_MS, talkFade, talkWaves, WAVE_COUNT, waveEnvelope, waveExtent, WAVE_PEAK, WAVE_PERIOD_MS, WAVE_SOFTNESS, waveTravel } from './talkWaves'
+import { GLOW_OPACITY, PING_PERIOD_MS, TALK_FADE_IN_MS, TALK_FADE_OUT_MS, talkFade, talkWaves, WAVE_COUNT, waveEnvelope, waveExtent, WAVE_PEAK, WAVE_PERIOD_MS, waveTravel } from './talkWaves'
 
 describe('talk waves', () => {
   it('is slow and faint: a mellow pulse, not a blink', () => {
@@ -48,36 +48,34 @@ describe('talk waves', () => {
     for (const e of [far, mid, close]) expect(e.outer).toBeGreaterThan(e.inner + 25)
   })
 
-  it('draws rings as soft bands: stroke and blur take the same share of the radius', () => {
+  it('breathes a halo of two soft discs and pings a thin ring outwards (the earlier look)', () => {
     for (const t of [0, 400, 1300, 2500, 9000]) {
-      const w = talkWaves(t, 36, false)
-      expect(w.rings).toHaveLength(WAVE_COUNT)
-      for (const r of w.rings) {
-        expect(r.stroke / (r.radius + r.stroke)).toBeCloseTo(WAVE_SOFTNESS)
-        expect(r.opacity).toBeGreaterThanOrEqual(0)
-        expect(r.opacity).toBeLessThanOrEqual(WAVE_PEAK)
-      }
-      expect(w.glow.opacity).toBeGreaterThan(0)
+      const w = talkWaves(t, 18, false)
+      expect(w.rings).toHaveLength(3)
+      const [outer, ping, spare] = w.rings
+      expect(w.glow.radius).toBeGreaterThanOrEqual(18)
+      expect(w.glow.radius).toBeLessThanOrEqual(22)
+      expect(w.glow.opacity).toBeGreaterThanOrEqual(0.3)
+      expect(outer.fill).toBeGreaterThanOrEqual(0.15)
+      expect(outer.radius).toBeGreaterThan(w.glow.radius)
+      expect(ping.stroke).toBe(2)
+      expect(ping.opacity).toBeLessThanOrEqual(0.75)
+      expect(spare.opacity + spare.fill).toBe(0)
     }
+    // The ping repeats every PING_PERIOD_MS, growing from the aircraft outwards.
+    expect(talkWaves(100, 18, false).rings[1].radius).toBeLessThan(talkWaves(1200, 18, false).rings[1].radius)
+    expect(talkWaves(100 + PING_PERIOD_MS, 18, false).rings[1].radius).toBeCloseTo(talkWaves(100, 18, false).rings[1].radius, 5)
   })
 
-  it('staggers the rings and repeats every period', () => {
-    const a = talkWaves(700, 36, false)
-    const radii = a.rings.map((r) => r.radius + r.stroke)
-    expect(new Set(radii.map((r) => Math.round(r))).size).toBe(WAVE_COUNT)
-    const b = talkWaves(700 + WAVE_PERIOD_MS, 36, false)
-    a.rings.forEach((r, i) => expect(b.rings[i].radius).toBeCloseTo(r.radius, 5))
-    // A third of a period on, each ring is where its neighbour was.
-    const c = talkWaves(700 + WAVE_PERIOD_MS / WAVE_COUNT, 36, false)
-    expect(c.rings[0].radius).toBeCloseTo(a.rings[1].radius, 5)
+  it('sizes with the aircraft, within limits', () => {
+    expect(talkWaves(0, 40, false).glow.radius).toBeGreaterThan(talkWaves(0, 18, false).glow.radius)
+    expect(talkWaves(0, 400, false).glow.radius).toBeLessThanOrEqual(22 * 1.6 + 1e-9)
   })
 
-  it('holds still with reduced motion: a steady glow and no rings', () => {
-    const a = talkWaves(0, 36, true)
-    const b = talkWaves(1234, 36, true)
+  it('holds still with reduced motion', () => {
+    const a = talkWaves(0, 18, true)
+    const b = talkWaves(1234, 18, true)
     expect(a).toEqual(b)
-    expect(a.rings.every((r) => r.opacity === 0)).toBe(true)
-    expect(a.glow.opacity).toBeGreaterThan(GLOW_OPACITY)
   })
 
   it('fades in when a call starts and out after it ends', () => {

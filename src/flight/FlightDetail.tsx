@@ -9,7 +9,7 @@
  * so far, the aircraft, the timeline, and the conversation: live radio calls
  * that named it, a replayed scene's calls, or the tower's log.
  */
-import { ChevronLeft, ExternalLink, Pause, Play, X } from 'lucide-react'
+import { ChevronLeft, Pause, Play, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AircraftPanel } from '../aircraft/AircraftPanel'
 import { AirlineLogo } from '../airline/AirlineLogo'
@@ -277,20 +277,6 @@ export function FlightDetail({ docked = false, onBack, backLabel }: { docked?: b
             </section>
           )}
 
-          {flight.real && (
-            <a
-              href={`https://www.flightaware.com/live/flight/${encodeURIComponent(flight.callsign)}`}
-              target="_blank"
-              rel="noreferrer"
-              className="ui-card pressable-soft mt-6 flex items-center justify-between gap-3 px-3.5 py-3 hover:bg-white/[0.09]"
-            >
-              <span className="min-w-0">
-                <span className="block truncate text-footnote font-semibold">Look up {flight.callsign} on FlightAware</span>
-                <span className="block text-caption text-atc-muted">flightaware.com</span>
-              </span>
-              <ExternalLink className="size-4 shrink-0 text-white/50" />
-            </a>
-          )}
         </div>
       </div>
     </div>

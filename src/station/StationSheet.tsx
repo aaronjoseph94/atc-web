@@ -4,8 +4,8 @@
  * approach, departure…). The sheet grows out of the yellow station bar.
  * Channels a LiveATC feed carries are marked, and choosing one starts it.
  */
-import { AudioLines, ChevronDown, ExternalLink, Volume2 } from 'lucide-react'
-import { FAA_CYCLE_DATE, FREQUENCY_LABEL, FREQUENCY_ORDER, FREQUENCY_ROLE, formatMhz, icaoCode } from '../api/airportData'
+import { AudioLines, ChevronDown, Volume2 } from 'lucide-react'
+import { FAA_CYCLE_DATE, FREQUENCY_LABEL, FREQUENCY_ORDER, FREQUENCY_ROLE, formatMhz } from '../api/airportData'
 import { getAirport, resolveStation } from '../api/airports'
 import { feedFor } from '../api/radioFeeds'
 import type { Station } from '../api/types'
@@ -108,18 +108,6 @@ export function StationSheet() {
             </section>
           ))}
 
-          <a
-            href={`https://www.liveatc.net/search/?icao=${icaoCode(airport.icao) ?? airport.icao}`}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-6 flex items-center justify-between gap-3 rounded-2xl bg-black px-4 py-3.5 text-white transition hover:bg-black/85 active:scale-[0.99]"
-          >
-            <span>
-              <span className="block text-[15px] font-semibold">More feeds on LiveATC.net</span>
-              <span className="block text-xs text-white/65">Channels marked with bars play live here, streamed from LiveATC.net.</span>
-            </span>
-            <ExternalLink className="size-4 shrink-0" />
-          </a>
           <p className="mt-3 px-1 text-[11px] leading-relaxed text-black/55">
             {FAA_CYCLE_DATE && airport.group === 'US' ? `Frequencies from the FAA’s ${FAA_CYCLE_DATE} data cycle.` : 'Frequencies from OurAirports.'} For interest only, not for navigation.
           </p>

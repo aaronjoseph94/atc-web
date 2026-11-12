@@ -6,7 +6,7 @@
  * broadcast (readable, or read aloud), the forecast as a timeline, and the
  * raw reports for those who want them.
  */
-import { ChevronDown, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudMoon, CloudRain, CloudSnow, CloudSun, Eye, Gauge, ExternalLink, Moon, Mountain, Square, Sun, Thermometer, Volume2, type LucideIcon } from 'lucide-react'
+import { ChevronDown, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudMoon, CloudRain, CloudSnow, CloudSun, Eye, Gauge, Moon, Mountain, Square, Sun, Thermometer, Volume2, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { icaoCode } from '../api/airportData'
 import { getAirport } from '../api/airports'
@@ -361,22 +361,6 @@ export function WeatherPanel({ docked = false }: { docked?: boolean }) {
             </>
           )}
 
-          <SectionLabel>More about {airport.icao}</SectionLabel>
-          <div className="grid grid-cols-1 gap-1.5 @xl:grid-cols-3">
-            {[
-              ['Live tower radio', 'liveatc.net', `https://www.liveatc.net/search/?icao=${icao}`],
-              ['Official airport diagram', 'airnav.com', `https://www.airnav.com/airport/${icao}`],
-              ['Aeronautical chart', 'skyvector.com', `https://skyvector.com/airport/${airportIcao}`],
-            ].map(([label, host, href]) => (
-              <a key={href} href={href} target="_blank" rel="noreferrer" className="ui-card pressable-soft flex items-center justify-between gap-2 px-3.5 py-3 hover:bg-white/[0.09]">
-                <span className="min-w-0">
-                  <span className="block truncate text-footnote font-semibold">{label}</span>
-                  <span className="block text-caption text-atc-muted">{host}</span>
-                </span>
-                <ExternalLink className="size-4 shrink-0 text-white/50" />
-              </a>
-            ))}
-          </div>
           <p className="mt-4 px-1 text-caption text-atc-muted">Weather from aviationweather.gov (US National Weather Service); ATIS text via atis.info. For interest only, not for flight planning.</p>
         </>
       )}

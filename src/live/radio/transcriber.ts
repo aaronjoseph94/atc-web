@@ -33,7 +33,7 @@ const MAX_WAITING = 3
 /** After a 429, wait this long before sending more. */
 const BACKOFF_MS = 20_000
 /** How long the camera and highlight stay on an aircraft after its call is captioned. */
-export const HOLD_MS = 9_000
+export const HOLD_MS = 5_000
 /** Longest a transcribed call waits for the AI pass before it is shown as recognised. */
 export const AI_WAIT_MS = 8_000
 
