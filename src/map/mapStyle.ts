@@ -11,9 +11,11 @@
  */
 import type { LayerSpecification, Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import type { MapTheme } from '../settings/settingsStore'
+import { ATC_COLORS } from '../ui/speaker'
 import { NOISE_IMAGE, SHEEN_IMAGE } from './atmosphere/textures'
 import { LIGHT_BAND_ZOOMS } from './fx/sprites'
 import { differs, formatColor, mixColor, nightShade, parseColor } from './lighting/color'
+import { WAVE_SOFTNESS } from './talkWaves'
 
 /** Ids other modules need to reference. */
 export const SRC = {
@@ -43,7 +45,6 @@ export const SRC = {
   procHi: 'proc-hi',
   runwayUse: 'apt-runway-use',
   gateUse: 'apt-gate-use',
-  ripple: 'radio-ripple',
 } as const
 
 export const LAYER = {
@@ -56,9 +57,10 @@ export const LAYER = {
   trailGlow: 'ac-trail-glow',
   trail: 'ac-trail',
   shadow: 'ac-shadow',
-  ping: 'ac-ping',
   halo: 'ac-halo',
   haloOuter: 'ac-halo-outer',
+  // The aircraft on the radio: a steady glow and soft rings in the speaker's colour (see `talkWaves.ts`).
+  talkGlow: 'ac-talk-glow',
   hit: 'ac-hit',
   aircraft: 'ac-icon',
   label: 'ac-label',
@@ -519,15 +521,14 @@ function layers(p: Palette): LayerSpecification[] {
     // Parked aircraft's shadows, from their own source (see SRC.parked); on the ground they are never soft.
     sharpShadow(LAYER.parkedShadow, SRC.parkedShadows),
     // Landing lights thrown ahead of the nose, and heat shimmer behind the engines on the takeoff roll.
-    { id: LAYER.landing, type: 'symbol', source: SRC.aircraft, filter: ['>', ['coalesce', ['get', 'll'], 0], 0], layout: { 'icon-image': ['concat', 'fx-land-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 10, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.35], 14, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.85]] } },
+    { id: LAYER.landing, type: 'symbol', source: SRC.aircraft, filter: ['>', ['coalesce', ['get', 'll'], 0], 0], layout: { 'icon-image': ['concat', 'fx-land-', ['get', 'sh']], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 10, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.28], 14, ['*', ['get', 'o'], ['get', 'll'], chart ? 0 : 0.52]] } },
     { id: LAYER.exhaust, type: 'symbol', source: SRC.fx, filter: ['!=', ['coalesce', ['get', 'ex'], ''], ''], layout: { 'icon-image': ['get', 'ex'], 'icon-size': iconScale(acSize), 'icon-rotate': ['get', 'heading'], 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true }, paint: { 'icon-opacity': ['*', ['get', 'o'], ['get', 'exo']] } },
-    // Radio ripple between tower and aircraft, under the aircraft and their halos.
-    ...rippleLayers(),
     { id: LAYER.event, type: 'circle', source: SRC.events, paint: { 'circle-radius': ['get', 'r'], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2, 'circle-stroke-opacity': ['get', 'o'], 'circle-pitch-alignment': 'map' } },
-    { id: LAYER.ping, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'tx'], 1], paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#F5C518', 'circle-stroke-width': 2, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } },
-    // Two flat discs, one inside the other, under whoever is selected or being talked to.
-    { id: LAYER.haloOuter, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'hi'], 1], paint: { 'circle-radius': 34, 'circle-color': '#7C5CFC', 'circle-opacity': 0.2, 'circle-pitch-alignment': 'map' } },
-    { id: LAYER.halo, type: 'circle', source: SRC.aircraft, filter: ['==', ['get', 'hi'], 1], paint: { 'circle-radius': 19, 'circle-color': '#7C5CFC', 'circle-opacity': 0.34, 'circle-pitch-alignment': 'map' } },
+    // Two flat discs, one inside the other, under the selected aircraft. `AircraftLayer` sizes them to the aircraft and lets them breathe.
+    { id: LAYER.haloOuter, type: 'circle', source: SRC.aircraft, filter: SELECTED_ONLY, paint: { 'circle-radius': 34, 'circle-color': SELECT_HALO, 'circle-opacity': 0.16, 'circle-blur': 0.2, 'circle-pitch-alignment': 'map' } },
+    { id: LAYER.halo, type: 'circle', source: SRC.aircraft, filter: SELECTED_ONLY, paint: { 'circle-radius': 19, 'circle-color': SELECT_HALO, 'circle-opacity': 0.3, 'circle-blur': 0.12, 'circle-pitch-alignment': 'map' } },
+    // The aircraft on the radio wears the speaker's colour instead: a faint steady glow and soft rings swelling out of it.
+    ...talkLayers(),
     // Invisible, generous hit target so small icons are easy to tap.
     { id: LAYER.hit, type: 'circle', source: SRC.aircraft, paint: { 'circle-radius': 18, 'circle-opacity': 0 } },
     // Parked aircraft first, from their own source, so taxiing and airborne traffic draws over them.
@@ -658,6 +659,30 @@ function liveryLayer(id: string, source: string): LayerSpecification {
 }
 
 /** A callsign tag layer; `overlap` lets its tags draw over anything already placed (but still keep later layers' symbols off them). */
+/**
+ * How far above its aircraft a tag floats, in pixels by zoom, for a light
+ * aircraft, an airliner and a heavy. The drawing grows with zoom and with the
+ * class, so one distance for all put a 777's tag across its nose while a
+ * Cessna's hung well clear. Each sits just off the top of its own aircraft, as
+ * the reference does.
+ */
+export const TAG_OFFSET: [zoom: number, light: number, airliner: number, heavy: number][] = [
+  [9, 11, 12, 13.5],
+  [14, 14.5, 17.5, 20.5],
+  [16, 20, 27, 35],
+  [18, 42, 60, 80],
+]
+/** Drawn-size factors (`scale`) where an aircraft counts as an airliner, and as a heavy. */
+export const TAG_SIZE_BANDS = [0.85, 1.2] as const
+/** The highlighted aircraft is drawn a quarter bigger; its tag lifts by a little less (it may sit closer to the bigger drawing). */
+const TAG_HI_LIFT = 1.18
+
+function tagOffset(): unknown[] {
+  const up = (px: number) => ['literal', [0, -Math.round(px * 10) / 10]]
+  const pick = (light: number, airliner: number, heavy: number, k: number) => ['step', ['get', 'scale'], up(light * k), TAG_SIZE_BANDS[0], up(airliner * k), TAG_SIZE_BANDS[1], up(heavy * k)]
+  return ['interpolate', ['linear'], ['zoom'], ...TAG_OFFSET.flatMap(([z, l, a, h]) => [z, ['case', ['==', ['get', 'hi'], 1], pick(l, a, h, TAG_HI_LIFT), pick(l, a, h, 1)]])]
+}
+
 function tagLayer(id: string, filter: unknown[], overlap: boolean, source: string = SRC.aircraft): LayerSpecification {
   return {
     id,
@@ -668,7 +693,7 @@ function tagLayer(id: string, filter: unknown[], overlap: boolean, source: strin
       'icon-image': ['get', 'tag'],
       // Fixed anchor: collision-driven anchor changes would make the tags hop around.
       'icon-anchor': 'bottom',
-      'icon-offset': ['interpolate', ['linear'], ['zoom'], 9, ['literal', [0, -12]], 14, ['literal', [0, -17.5]], 16, ['literal', [0, -26]], 18, ['literal', [0, -49]]],
+      'icon-offset': tagOffset(),
       'icon-allow-overlap': overlap,
       'icon-ignore-placement': false,
       'icon-padding': 1,
@@ -874,7 +899,6 @@ export function buildStyle(theme: MapTheme): StyleSpecification {
       [SRC.procHi]: { type: 'geojson', data: empty },
       [SRC.runwayUse]: { type: 'geojson', data: empty },
       [SRC.gateUse]: { type: 'geojson', data: empty },
-      [SRC.ripple]: { type: 'geojson', data: empty },
       ...atmosphereSources(),
     },
     layers: layers(PALETTES[theme]),
@@ -891,7 +915,7 @@ export function applyTheme(map: MapLibreMap, theme: MapTheme) {
     const paint = (layer.paint ?? {}) as Record<string, unknown>
     for (const [prop, value] of Object.entries(paint)) {
       // Animated per frame by the aircraft layer; leave those alone.
-      if (layer.id === LAYER.halo || layer.id === LAYER.haloOuter || layer.id === LAYER.ping) continue
+      if (ANIMATED_LAYERS.has(layer.id)) continue
       map.setPaintProperty(layer.id, prop as never, value as never)
     }
     if (RUNTIME_VISIBILITY.has(layer.id)) continue
@@ -986,7 +1010,7 @@ export function nightPaint(theme: MapTheme, arid: boolean): NightPaint[] {
   const out: NightPaint[] = []
   day.forEach((l, i) => {
     const hidden = (l.layout as { visibility?: string } | undefined)?.visibility === 'none' && !RUNTIME_VISIBILITY.has(l.id)
-    if (hidden || l.id === LAYER.halo || l.id === LAYER.haloOuter || l.id === LAYER.ping) return
+    if (hidden || ANIMATED_LAYERS.has(l.id)) return
     const a = (l.paint ?? {}) as Record<string, unknown>
     const b = (night[i].paint ?? {}) as Record<string, unknown>
     for (const prop of Object.keys(a)) if (differs(a[prop], b[prop])) out.push({ layer: l.id, prop, day: a[prop], night: b[prop] })
@@ -1028,13 +1052,14 @@ const RUNWAY_LIGHT_MIN_ZOOM = 11.8
 
 /** Each light layer's zoom fade (none at the first zoom, full at the second) and opacity at full night. */
 const LIGHT_FADE: Record<string, [number, number, number]> = {
-  [LIGHT_LAYER.apronWash]: [LIGHT_MIN_ZOOM, 13.6, 0.04],
-  [LIGHT_LAYER.apron]: [LIGHT_MIN_ZOOM, 13.6, 0.2],
+  [LIGHT_LAYER.apronWash]: [LIGHT_MIN_ZOOM, 13.6, 0.035],
+  [LIGHT_LAYER.apron]: [LIGHT_MIN_ZOOM, 13.6, 0.15],
   // Taxiway lights outline every taxiway, so they come up more slowly than the rest, keeping the wide view calm.
-  [LIGHT_LAYER.taxiBloom]: [LIGHT_MIN_ZOOM, 14.2, 0.4],
-  [LIGHT_LAYER.taxiCore]: [LIGHT_MIN_ZOOM, 14.2, 0.9],
-  [LIGHT_LAYER.runwayBloom]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 0.45],
-  [LIGHT_LAYER.runwayCore]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 1],
+  // All of them sit well below full strength: thousands of points at once glare long before any one of them does.
+  [LIGHT_LAYER.taxiBloom]: [LIGHT_MIN_ZOOM, 14.4, 0.24],
+  [LIGHT_LAYER.taxiCore]: [LIGHT_MIN_ZOOM, 14.4, 0.68],
+  [LIGHT_LAYER.runwayBloom]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 0.26],
+  [LIGHT_LAYER.runwayCore]: [RUNWAY_LIGHT_MIN_ZOOM, 12.8, 0.8],
 }
 
 /** The opacity property of a light layer and its value at night factor `t` (0..1). */
@@ -1049,18 +1074,18 @@ function lightRadius(stops: [number, number][]): unknown[] {
 }
 
 const CORE_RADIUS: [number, number][] = [
-  [12, 0.75],
-  [13, 0.9],
-  [15, 1.4],
-  [17, 2.5],
-  [19, 4.6],
+  [12, 0.7],
+  [13, 0.85],
+  [15, 1.25],
+  [17, 2.1],
+  [19, 3.8],
 ]
 const BLOOM_RADIUS: [number, number][] = [
-  [12, 2],
-  [13, 2.6],
-  [15, 4.4],
-  [17, 8.5],
-  [19, 16],
+  [12, 1.8],
+  [13, 2.3],
+  [15, 3.6],
+  [17, 6.4],
+  [19, 11.5],
 ]
 
 /**
@@ -1111,19 +1136,28 @@ export function lightingLayers(): { layer: LayerSpecification; before: string }[
   ]
 }
 
+/** The violet under a selected aircraft: the selected tag's family, lifted to read on navy. */
+const SELECT_HALO = '#7C5CFC'
+/** Selected, and not the one on the radio (which wears the speaker's colour instead). */
+const SELECTED_ONLY = ['all', ['==', ['get', 'hi'], 1], ['!=', ['get', 'tx'], 1]]
+
+/** Ring layers of the talking-aircraft effect. */
+export const TALK_WAVE_LAYERS = ['ac-talk-wave-1', 'ac-talk-wave-2', 'ac-talk-wave-3'] as const
+
+/** Layers `AircraftLayer` repaints every frame; the day/night blend leaves them alone. */
+const ANIMATED_LAYERS = new Set<string>([LAYER.halo, LAYER.haloOuter, LAYER.talkGlow, ...TALK_WAVE_LAYERS])
+
 /**
- * The transmission ripple (`RippleLayer.tsx` writes the features): a faint
- * guide line between tower and aircraft, travelling arcs drawn twice (a wide
- * soft glow under a thin bright core) and a small light at the tower. Colour
- * and opacity come from each feature, so these layers never change at runtime.
+ * The aircraft on the radio (`tx`): a fully blurred disc for the steady glow,
+ * and rings that are all stroke, feathered on both edges by `circle-blur`
+ * (see `talkWaves.ts`). `AircraftLayer` animates radius, width and opacity as
+ * plain paint numbers and sets the speaker's colour; they start invisible.
  */
-export function rippleLayers(): LayerSpecification[] {
-  const opacity = (k: number): unknown => ['*', k, ['get', 'o']]
+function talkLayers(): LayerSpecification[] {
+  const tx = ['==', ['get', 'tx'], 1]
   return [
-    { id: 'radio-ripple-beam', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'beam'], layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(1), 'line-width': 2, 'line-blur': 0.8, 'line-dasharray': [1.4, 2.2] } },
-    { id: 'radio-ripple-glow', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'wave'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(0.38), 'line-width': 9, 'line-blur': 6 } },
-    { id: 'radio-ripple-wave', type: 'line', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'wave'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-opacity': opacity(0.85), 'line-width': 2, 'line-blur': 0.6 } },
-    { id: 'radio-ripple-tower', type: 'circle', source: SRC.ripple, filter: ['==', ['get', 'kind'], 'tower'], paint: { 'circle-radius': 4, 'circle-color': ['get', 'c'], 'circle-opacity': opacity(0.8), 'circle-blur': 0.35, 'circle-stroke-color': ['get', 'c'], 'circle-stroke-width': 6, 'circle-stroke-opacity': opacity(0.16), 'circle-pitch-alignment': 'map' } },
+    { id: LAYER.talkGlow, type: 'circle', source: SRC.aircraft, filter: tx, paint: { 'circle-radius': 40, 'circle-color': ATC_COLORS.base, 'circle-opacity': 0, 'circle-blur': 1, 'circle-pitch-alignment': 'map' } },
+    ...TALK_WAVE_LAYERS.map((id) => ({ id, type: 'circle', source: SRC.aircraft, filter: tx, paint: { 'circle-radius': 20, 'circle-color': 'rgba(0,0,0,0)', 'circle-opacity': 0, 'circle-blur': WAVE_SOFTNESS, 'circle-stroke-color': ATC_COLORS.base, 'circle-stroke-width': 8, 'circle-stroke-opacity': 0, 'circle-pitch-alignment': 'map' } })),
   ] as unknown as LayerSpecification[]
 }
 

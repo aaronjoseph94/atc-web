@@ -28,15 +28,15 @@ Checked November 2026. Terms change; re-check before a public launch, and treat 
 `src/api/aircraftHandler.ts`. The two healthiest feeds are asked at once and merged (freshest position per aircraft,
 missing details filled from the other), a slow feed is hedged with the next after 1.5 s, an empty answer is
 double-checked with one more feed, and the last good answer is served for up to 90 s if every feed fails.
-Response headers `X-Provider`, `X-Sources` and `X-Attribution` say which feeds answered; the map's attribution
-line credits them.
+Response headers `X-Provider`, `X-Sources` and `X-Attribution` say which feeds answered; the credits in Help ("Map data and
+credits", also reachable from the menu) name them. The map itself shows no attribution control.
 
 | Source | Endpoint used | Terms / licence | Limits | Attribution / permission |
 | --- | --- | --- | --- | --- |
-| [adsb.fi](https://adsb.fi) open data | `opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{nm}` | Personal, **non-commercial** use; no reselling; as-is ([terms](https://github.com/adsbfi/opendata)) | 1 request/s per IP; 4xx answers count towards a temporary ban | Must cite adsb.fi with a link (map attribution + Help). Contact them for commercial use or higher rates. |
-| [adsb.lol](https://adsb.lol) | `api.adsb.lol/v2/point/{lat}/{lon}/{nm}` | Open data under **ODbL 1.0** | "Dynamic", load-based; no key today. They say a key (free, for feeders) will be required in future. | ODbL attribution (map attribution + Help say "adsb.lol (ODbL)"). If a key becomes mandatory: feed data to adsb.lol or request a key at adsb.lol, then add it as a Pages secret. |
+| [adsb.fi](https://adsb.fi) open data | `opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{nm}` | Personal, **non-commercial** use; no reselling; as-is ([terms](https://github.com/adsbfi/opendata)) | 1 request/s per IP; 4xx answers count towards a temporary ban | Must cite adsb.fi with a link (Help > Map data and credits). Contact them for commercial use or higher rates. |
+| [adsb.lol](https://adsb.lol) | `api.adsb.lol/v2/point/{lat}/{lon}/{nm}` | Open data under **ODbL 1.0** | "Dynamic", load-based; no key today. They say a key (free, for feeders) will be required in future. | ODbL attribution (Help > Map data and credits says "adsb.lol (ODbL)"). If a key becomes mandatory: feed data to adsb.lol or request a key at adsb.lol, then add it as a Pages secret. |
 | [airplanes.live](https://airplanes.live) | `api.airplanes.live/v2/point/{lat}/{lon}/{nm}` | **Non-commercial**, no SLA | 1 request/s | **On** (the owner has their approval). Unapproved callers get 403 "Please contact us…"; if that appears, the failover skips it. `ATC_ENABLE_AIRPLANES_LIVE=0` switches it off. |
-| [OpenSky Network](https://opensky-network.org) | `opensky-network.org/api/states/all?lamin…` (anonymous) | Free for research and **non-commercial** use; commercial use needs a licence from OpenSky | Anonymous: 400 credits/day per IP (an airport-sized box costs 1), 10 s resolution | Credit "The OpenSky Network" (map attribution + Help). Used only when every other feed has errored. It has refused requests from Cloudflare's network before (HTTP 522), so don't count on it in production; a free OpenSky account (OAuth2 client credentials, 4,000 credits/day) is the upgrade path if needed. |
+| [OpenSky Network](https://opensky-network.org) | `opensky-network.org/api/states/all?lamin…` (anonymous) | Free for research and **non-commercial** use; commercial use needs a licence from OpenSky | Anonymous: 400 credits/day per IP (an airport-sized box costs 1), 10 s resolution | Credit "The OpenSky Network" (Help > Map data and credits). Used only when every other feed has errored. It has refused requests from Cloudflare's network before (HTTP 522), so don't count on it in production; a free OpenSky account (OAuth2 client credentials, 4,000 credits/day) is the upgrade path if needed. |
 
 Not used: ADS-B Exchange (its API is paid), FlightAware and Flightradar24 (paid, no redistribution).
 
@@ -62,14 +62,14 @@ picked by confidence (adsbdb 3, hexdb 2, feed 1.5; agreeing sources add up). The
 | [aviationweather.gov](https://aviationweather.gov/data/api/) (NOAA/NWS) | `/api/data/metar?ids=…&format=json`, `/api/data/taf?ids=…&format=json` | US government data, public domain | **100 requests/min**, set a custom User-Agent; CORS not allowed (so server-side only) | None required; credited in Help. |
 | [NOAA tgftp](https://tgftp.nws.noaa.gov/data/) | `/data/observations/metar/stations/{ICAO}.TXT`, `/data/forecasts/taf/stations/{ICAO}.TXT` | US government data, public domain | None published; static files | None required. |
 | [atis.info](https://atis.info) | `atis.info/api/{ICAO}` | Free, no key, no written terms | None published; we cache 3 min | Credited in Help. US airports only. The other public D-ATIS API (datis.clowd.io) now redirects here, so there is no independent fallback; the panel works without ATIS. |
-| [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) NEXRAD tiles | `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png` | Free public service of Iowa State University; NOAA radar data | Be considerate; tiles are cached by the service worker | Credit IEM (map attribution). |
+| [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) NEXRAD tiles | `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png` | Free public service of Iowa State University; NOAA radar data | Be considerate; tiles are cached by the service worker | Credit IEM (Help > Map data and credits). |
 
 ## Map, imagery, charts, airport data
 
 | Source | Used for | Terms | Attribution |
 | --- | --- | --- | --- |
-| [OpenFreeMap](https://openfreemap.org) | Vector tiles (`tiles.openfreemap.org/planet`) and fonts | Free, no key, no request limits, commercial use allowed | Required: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors (shown by MapLibre) |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) (via OpenFreeMap) | Taxiway lines, holding bars, signs, gates, buildings | ODbL 1.0 | "© OpenStreetMap contributors" (shown) |
+| [OpenFreeMap](https://openfreemap.org) | Vector tiles (`tiles.openfreemap.org/planet`) and fonts | Free, no key, no request limits, commercial use allowed | Required: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. The map has no attribution control (owner's choice): the credit is under Help > Map data and credits, with "© OpenStreetMap" in the menu. OpenStreetMap's guidelines ask for the credit on or beside the map itself, so restoring a small on-map credit is the safe default if the app is published widely. |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) (via OpenFreeMap) | Taxiway lines, holding bars, signs, gates, buildings | ODbL 1.0 | "© OpenStreetMap contributors" (Help > Map data and credits, and the menu) |
 | [USGS The National Map](https://www.usgs.gov/programs/national-geospatial-program/national-map) | Aerial imagery (`basemap.nationalmap.gov`) | US government work, public domain | Credit requested (shown) |
 | [FAA Aeronautical Information Services](https://www.faa.gov/air_traffic/flight_info/aeronav/) | VFR sectional/terminal chart tiles (FAA's ArcGIS tile services) | US government work, public domain | Credit + "not for navigation" (shown) |
 | [FAA NASR](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) | Runway ends, controller frequencies (US) | US government work, public domain | Credited in Help |

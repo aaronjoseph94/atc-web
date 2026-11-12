@@ -21,15 +21,17 @@ import type { ClipPack } from '../api/types'
 import { positionsAt, trackKeyFor, trailAt } from '../playback/interpolate'
 import { playbackInstant, usePlayhead } from '../playback/playheadStore'
 import type { LabelMode } from '../settings/settingsStore'
-import { ATC_COLORS, speakerColors, type SpeakerColors } from '../ui/speaker'
+import { speakerColors } from '../ui/speaker'
 import { metersPerDegLat, metersPerDegLon, metersPerPixel } from './geo'
 import { AircraftFx, hideCoveredFins, LIVERY_MIN_ZOOM } from './fx/aircraftFx'
 import type { LiveAircraft, LivePositionBuffer } from './livePositions'
 import { addImageHandler } from './imageResolver'
 import { loadPavement } from './motion/pavementLoader'
 import { ensureMapImages, ICON_REACH_PX, ICON_SCALE, iconFor, iconImage } from './mapImages'
-import { iconZoomFactor, LAYER, SRC } from './mapStyle'
+import { iconZoomFactor, LAYER, SRC, TALK_WAVE_LAYERS } from './mapStyle'
+import { formatColor, mixColor, parseColor, type Rgba } from './lighting/color'
 import { ParkedHeadings } from './parkedHeading'
+import { TALK_FADE_OUT_MS, talkFade, talkWaves } from './talkWaves'
 import { attachTagImages, tagKey } from './tagImages'
 import { inBox, SendGate, type GateItem } from './sendGate'
 import { noteSend, perfFrame, quality } from '../perf/governor'
@@ -69,6 +71,8 @@ const MAX_STALE_MS = 1000
 const PARKED_STALE_MS = 10_000
 /** Aircraft this far outside the view (as a fraction of its size) still count as on screen: tags and shadows reach past the point. */
 const VIEW_MARGIN = 0.12
+/** The talk waves take this long to turn from one speaker's colour to the other's. */
+const TALK_COLOR_MS = 520
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
@@ -150,8 +154,17 @@ export function AircraftLayer(props: Props) {
 
     const wakes = new Map<string, Feature<LineString>>()
     let wakesAt = 0
-    // Speaker colours last pushed to the halo layers (only re-sent when they change).
-    let haloTalk: SpeakerColors | null = null
+    // The aircraft on the radio and when its call began; and the one whose waves are still ebbing after its call ended.
+    let talkId: string | null = null
+    let talkStart = 0
+    let ghostId: string | null = null
+    let ghostStart = 0
+    let ghostEnd = 0
+    // The talking colour on the map now, where it is heading and since when (pink to blue glides rather than snaps).
+    let talkHex = ''
+    let talkFrom: Rgba | null = null
+    let talkTo: Rgba | null = null
+    let talkTurnAt = 0
     // What the trail and shadow sources last held, so unchanged data isn't sent again (each send re-tiles the source in the worker).
     let trailsMoving = false
     let shadowsOff = false
@@ -213,19 +226,35 @@ export function AircraftLayer(props: Props) {
       let fxKey = ''
       const reachK = ICON_REACH_PX * iconZoomFactor(zoom)
 
-      let anyHi = false
+      // A call starting or ending: the waves fade in, and ebb away on the aircraft for a moment after it ends.
+      if (active !== talkId) {
+        if (active) {
+          ghostId = null
+          talkStart = t
+        } else if (talkId && !L.reduceMotion) {
+          ghostId = talkId
+          ghostStart = talkStart
+          ghostEnd = t
+        }
+        talkId = active
+      }
+      if (ghostId && t - ghostEnd > TALK_FADE_OUT_MS) ghostId = null
+
+      let anySel = false
       let anyTx = false
-      // Fade of the highlighted and the transmitting aircraft, for their rings.
-      let hiFade = 0
+      // Fade of the selected and the transmitting aircraft, for their halo and waves.
+      let selFade = 0
       let txFade = 0
       for (let a of list) {
         const isSelected = a.icao24 === selected
         const transmitting = a.icao24 === active
         const hi = isSelected || transmitting
-        anyHi ||= hi
-        anyTx ||= transmitting
-        if (hi) hiFade = Math.max(hiFade, a.opacity)
-        if (transmitting) txFade = a.opacity
+        // Wears the talk waves: on the radio now, or just off it (a selected aircraft goes straight back to its selection halo).
+        const onAir = transmitting || (a.icao24 === ghostId && !isSelected)
+        anySel ||= isSelected && !onAir
+        anyTx ||= onAir
+        if (isSelected && !onAir) selFade = a.opacity
+        if (onAir) txFade = a.opacity
         // A parked aircraft with no reported heading is drawn nose-in to its terminal when there is one.
         const guess = !playing && a.headingKnown === false ? parkedHeadings.get(a.icao24) : null
         if (guess != null) a = { ...a, heading: guess, headingKnown: true }
@@ -261,7 +290,7 @@ export function AircraftLayer(props: Props) {
             scale: ICON_SCALE[icon] * fxa.scale * (icon === 'ac-dot' ? dotCap : 1),
             heading: icon === 'ac-dot' ? 0 : a.heading,
             hi: hi ? 1 : 0,
-            tx: transmitting ? 1 : 0,
+            tx: onAir ? 1 : 0,
             state,
             lbl: wantLabel ? 1 : 0,
             alert: alert ? 1 : 0,
@@ -309,6 +338,9 @@ export function AircraftLayer(props: Props) {
       const parked: Feature<Point>[] = []
       const parkedShadows: Feature<Point>[] = []
       const parkedItems: GateItem[] = []
+      // How far the talking and the selected aircraft's artwork reaches on screen, to size their waves and halo.
+      let txReach = 0
+      let selReach = 0
       for (let i = 0; i < features.length; i++) {
         const f = features[i]
         const p = f.properties!
@@ -316,6 +348,8 @@ export function AircraftLayer(props: Props) {
         it.heading = Number(p.heading) || 0
         it.scale = Number(p.scale) || 1
         it.reachPx = reachK * it.scale * (p.hi ? 1.25 : 1)
+        if (p.tx) txReach = it.reachPx
+        else if (p.hi) selReach = it.reachPx
         it.eo = Number(p.eo ?? 1)
         it.key += `|${p.icon}|${p.tag}|${p.hi}|${p.tx}|${p.state}|${p.lbl}|${p.alert}|${p.lv}|${p.ll}|${p.sub}`
         if (p.state === 0 && !p.hi) {
@@ -323,7 +357,7 @@ export function AircraftLayer(props: Props) {
           parkedItems.push(it)
           if (shadowOf[i]) parkedShadows.push(shadowOf[i]!)
           // The aircraft source keeps a bare point for it: the tap target (and hover) cover every aircraft.
-          movingF.push({ type: 'Feature', properties: { icao24: p.icao24, ps: 1, hi: 0, tx: 0, state: 0, o: p.o }, geometry: f.geometry })
+          movingF.push({ type: 'Feature', properties: { icao24: p.icao24, ps: 1, hi: 0, tx: p.tx, state: 0, o: p.o }, geometry: f.geometry })
         } else {
           movingF.push(f)
           movingItems.push(it)
@@ -399,34 +433,57 @@ export function AircraftLayer(props: Props) {
         trailsMoving = moving
       }
 
-      // ---- highlight rings ---------------------------------------------------
-      // The aircraft being talked about wears the speaker's colour (purple while
-      // ATC talks to it, blue while its pilot talks); a selected aircraft that
-      // nobody is talking to keeps the plain purple selection look.
+      // ---- selection halo and talk waves ---------------------------------------
+      // The aircraft on the radio wears soft waves in the speaker's colour (pink
+      // while the tower talks to it, blue while its pilot talks); a selected
+      // aircraft that nobody is talking to keeps the violet selection discs.
       // Only animated while someone wears them: each paint change re-evaluates the layer.
-      const wave = L.reduceMotion ? 0 : Math.sin(t / 620)
-      const talk = speakerColors(st.activeSpeaker)
-      if (talk !== haloTalk) {
-        haloTalk = talk
-        const color = ['case', ['==', ['get', 'tx'], 1], talk.base, ATC_COLORS.base]
-        map.setPaintProperty(LAYER.halo, 'circle-color', color as never)
-        map.setPaintProperty(LAYER.haloOuter, 'circle-color', color as never)
-        map.setPaintProperty(LAYER.ping, 'circle-stroke-color', talk.light)
-      }
       // Plain numbers, not expressions reading the feature: a data-driven paint value makes MapLibre
-      // re-cut the whole aircraft source on every change, which here would be every frame. The rings
-      // still fade with their aircraft (one dropping out of the feed) through `hiFade` and `txFade`.
-      if (anyHi) {
-        map.setPaintProperty(LAYER.halo, 'circle-opacity', (0.36 + 0.06 * wave) * hiFade)
-        map.setPaintProperty(LAYER.halo, 'circle-radius', 20 + 2 * wave)
-        map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', (0.2 + 0.05 * wave) * hiFade)
-        map.setPaintProperty(LAYER.haloOuter, 'circle-radius', 36 + 5 * wave)
+      // re-cut the whole aircraft source on every change, which here would be every frame. They
+      // still fade with their aircraft (one dropping out of the feed) through `selFade` and `txFade`.
+      if (anySel) {
+        const breath = L.reduceMotion ? 0 : Math.sin(t / 620)
+        // Sized to the aircraft, so close in the discs still ring it instead of hiding under it.
+        const inner = Math.max(19, Math.min(58, selReach * 1.1))
+        map.setPaintProperty(LAYER.halo, 'circle-opacity', (0.3 + 0.05 * breath) * selFade)
+        map.setPaintProperty(LAYER.halo, 'circle-radius', inner + 0.08 * inner * breath)
+        map.setPaintProperty(LAYER.haloOuter, 'circle-opacity', (0.16 + 0.04 * breath) * selFade)
+        map.setPaintProperty(LAYER.haloOuter, 'circle-radius', inner * (1.75 + 0.12 * breath))
       }
       if (anyTx) {
-        // Radar-style ping expanding from whoever is transmitting.
-        const phase = L.reduceMotion ? 0.4 : (t % 1500) / 1500
-        map.setPaintProperty(LAYER.ping, 'circle-radius', 12 + 34 * phase)
-        map.setPaintProperty(LAYER.ping, 'circle-stroke-opacity', (L.reduceMotion ? 0.35 : 0.75 * (1 - phase) ** 1.6) * txFade)
+        // Colour: the speaker's, gliding from one to the other when the pilot answers the tower.
+        const hex = speakerColors(st.activeSpeaker).base
+        const turned = (now: number) => {
+          const k = Math.min(1, (now - talkTurnAt) / TALK_COLOR_MS)
+          return k * k * (3 - 2 * k)
+        }
+        if (talkId && hex !== talkHex) {
+          const shown = talkTo && talkFrom ? mixColor(talkFrom, talkTo, turned(t)) : null
+          talkHex = hex
+          talkTo = parseColor(hex)
+          // A call that has only just begun has nothing on screen to glide from.
+          talkFrom = shown && t - talkStart > 120 && !L.reduceMotion ? shown : talkTo
+          talkTurnAt = t
+        }
+        if (talkTo && talkFrom) {
+          const k = turned(t)
+          const color = k >= 1 || talkFrom === talkTo ? talkHex : formatColor(mixColor(talkFrom, talkTo, k))
+          if (k >= 1) talkFrom = talkTo
+          if (map.getPaintProperty(LAYER.talkGlow, 'circle-color') !== color) {
+            map.setPaintProperty(LAYER.talkGlow, 'circle-color', color)
+            for (const id of TALK_WAVE_LAYERS) map.setPaintProperty(id, 'circle-stroke-color', color)
+          }
+        }
+        const fade = (L.reduceMotion ? 1 : talkId ? talkFade(t, talkStart, null) : talkFade(t, ghostStart, ghostEnd)) * txFade
+        const w = talkWaves(t - talkStart, txReach, L.reduceMotion)
+        map.setPaintProperty(LAYER.talkGlow, 'circle-radius', w.glow.radius)
+        map.setPaintProperty(LAYER.talkGlow, 'circle-opacity', w.glow.opacity * fade)
+        w.rings.forEach((ring, i) => {
+          const id = TALK_WAVE_LAYERS[i]
+          map.setPaintProperty(id, 'circle-radius', ring.radius)
+          map.setPaintProperty(id, 'circle-stroke-width', ring.stroke)
+          map.setPaintProperty(id, 'circle-stroke-opacity', ring.opacity * fade)
+        })
       }
 
       L.onFrame?.(list, dt)

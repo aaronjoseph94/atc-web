@@ -9,7 +9,6 @@ import type { Map as MapLibreMap, RasterTileSource } from 'maplibre-gl'
 import type { MapRef } from 'react-map-gl/maplibre'
 import { getAirport } from '../api/airports'
 import { getAircraft } from '../api/client'
-import { TRAFFIC_ATTRIBUTION } from '../api/credits'
 import { detectEvents } from '../live/events'
 import { eventState, liveBuffer, liveRecorder, mapHandle, resetLiveSession } from '../live/session'
 import { atOtherField } from '../live/radio/match'
@@ -33,7 +32,6 @@ import { RunwayGateLayer } from './RunwayGateLayer'
 import type { LiveAircraft } from './livePositions'
 import { ProceduresLayer } from './ProceduresLayer'
 import { applyGroundCover, applyTheme, buildStyle, effectiveTheme, KEEPOUT_IMAGE, KEEPOUT_PX, LAYER, radarTiles, themeHasVectorBase } from './mapStyle'
-import { RippleLayer } from './RippleLayer'
 import { useRadioCamera } from './useRadioCamera'
 
 /**
@@ -177,9 +175,9 @@ export function MapView() {
   const duration = useCallback((ms: number) => (reduceMotion ? 0 : ms), [reduceMotion])
 
   const goHome = useCallback(
-    (ms = 1100) => {
+    (ms = 1100, easing: (t: number) => number = CAMERA_EASE) => {
       if (!map) return
-      map.fitBounds(airport.bounds, { padding: 36, maxZoom: 14.4, duration: duration(ms), easing: CAMERA_EASE, essential: true, bearing: 0 })
+      map.fitBounds(airport.bounds, { padding: 36, maxZoom: 14.4, duration: duration(ms), easing, essential: true, bearing: 0 })
     },
     [map, airport, duration],
   )
@@ -254,10 +252,15 @@ export function MapView() {
 
   const onFrame = useCallback(
     (list: LiveAircraft[], dt: number) => {
-      if (!map || radioCamera(list, dt)) return
+      if (!map) return
+      const f = focus
+      if (radioCamera(list, dt)) {
+        // The radio camera is steering and brings the map home itself; a re-frame queued here would cut across it.
+        f.homeAt = 0
+        return
+      }
       const s = usePlayhead.getState()
       const now = performance.now()
-      const f = focus
 
       // Who should the camera be on? A locked selection wins; otherwise, in
       // automatic mode, whoever is being talked about.
@@ -367,7 +370,8 @@ export function MapView() {
           mapStyle={style}
           initialViewState={initialView}
           style={{ width: '100%', height: '100%' }}
-          attributionControl={{ compact: true, customAttribution: TRAFFIC_ATTRIBUTION }}
+          // No attribution control on the map: the credits are in the menu and under Help ("Map data and credits").
+          attributionControl={false}
           // A flat, top-down map only: no tilting by gesture, keyboard or accident.
           maxPitch={0}
           pitchWithRotate={false}
@@ -375,13 +379,7 @@ export function MapView() {
           minZoom={7}
           maxZoom={19}
           pixelRatio={pixelRatio}
-          onLoad={(e) => {
-            // The compact attribution starts expanded; begin collapsed so it doesn't sit on the map.
-            const attrib = e.target.getContainer().querySelector('.maplibregl-ctrl-attrib')
-            attrib?.classList.remove('maplibregl-compact-show')
-            attrib?.removeAttribute('open')
-            setMap(e.target)
-          }}
+          onLoad={(e) => setMap(e.target)}
           onError={(e) => {
             // Tile hiccups are routine; only a missing WebGL context is fatal.
             if (/webgl/i.test(String(e.error?.message ?? ''))) setFailed(true)
@@ -393,7 +391,6 @@ export function MapView() {
           <ProceduresLayer map={map} airportIcao={airportIcao} />
           <RunwayGateLayer map={map} airportIcao={airportIcao} />
           <TaxiRouteLayer map={map} />
-          <RippleLayer map={map} airport={airport} reduceMotion={reduceMotion} />
           <InstructionBadgeLayer map={map} />
           <AircraftLayer
             map={map}

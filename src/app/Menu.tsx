@@ -1,6 +1,7 @@
 /** The "⋯" menu: a popover under the button, like a native context menu. */
-import { BookOpen, CircleHelp, CloudSun, FileText, History, Layers, List, MessageSquareText, Pin, PinOff, Radio, Settings, Sunrise, type LucideIcon } from 'lucide-react'
+import { BookOpen, CircleHelp, CloudSun, Copyright, FileText, History, Layers, List, MessageSquareText, Pin, PinOff, Radio, Settings, Sunrise, type LucideIcon } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { OSM_CREDIT } from '../api/credits'
 import { openFeedback } from '../feedback/store'
 import { openCatchUp } from '../insights/hooks'
 import { useLearn } from '../learn/learnStore'
@@ -8,6 +9,7 @@ import { usePlayhead, type Panel } from '../playback/playheadStore'
 import { useSettings } from '../settings/settingsStore'
 import { Kbd, useDialog } from '../ui/Panel'
 import { usePresence } from '../ui/usePresence'
+import { openCredits } from './helpSection'
 
 export function Menu() {
   const open = usePlayhead((s) => s.panel === 'menu')
@@ -93,6 +95,14 @@ export function Menu() {
         <Item icon={Settings} label="Settings" onClick={go('settings')} />
         <Item icon={CircleHelp} label="Help" shortcut="?" onClick={go('help')} />
         <Item icon={MessageSquareText} label="Send feedback" onClick={openFeedback} />
+        <Item icon={Copyright} label="Map data and credits" onClick={openCredits} />
+        {/* The map shows no attribution control; the short credit its data asks for lives here. */}
+        <p className="mx-4 mt-1.5 border-t border-white/10 pb-1 pt-2 text-caption2 text-white/40">
+          Map data{' '}
+          <a href={OSM_CREDIT.href} target="_blank" rel="noreferrer" className="underline decoration-white/20 underline-offset-2 hover:text-white/70">
+            {OSM_CREDIT.name}
+          </a>
+        </p>
       </div>
     </div>
   )

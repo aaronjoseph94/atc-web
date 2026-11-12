@@ -73,20 +73,11 @@ export function AppShell() {
   useHapticFeedback()
   useSpotter()
 
-  // Publish the bottom stack's height so the map attribution can sit above it.
+  // Publish the bottom stack's height, so things on the map (its status card) can sit above it.
   useEffect(() => {
     const el = stack.current
     if (!el) return
-    const apply = () => {
-      const root = document.documentElement
-      root.style.setProperty('--bottom-stack', `${el.offsetHeight}px`)
-      // On wider screens the attribution button sits in the map's bottom-right corner, beside the floating
-      // bar. When the map area is too narrow for both (a 1024 px window with the side panel open), lift it
-      // above the bar as on phones. The stack is as wide as the map area, so this re-runs when that changes.
-      const bar = el.querySelector('[data-bar]')
-      const room = bar ? el.getBoundingClientRect().right - bar.getBoundingClientRect().right : Infinity
-      root.classList.toggle('attrib-lift', room < 56)
-    }
+    const apply = () => document.documentElement.style.setProperty('--bottom-stack', `${el.offsetHeight}px`)
     apply()
     const ro = new ResizeObserver(apply)
     ro.observe(el)
