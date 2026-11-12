@@ -89,3 +89,15 @@ describe('explainTransmission', () => {
     expect(s).toContain('confirmed')
   })
 })
+
+describe('flightPhase low over the field', () => {
+  it('calls a level aircraft just above the runway landing, not flying level', () => {
+    expect(flightPhase({ onGround: false, speedKt: 135, altitudeFt: 40, verticalRateFpm: -64 })).toBe('final')
+    expect(flightPhase({ onGround: false, speedKt: 140, altitudeFt: 300, verticalRateFpm: 0 })).toBe('final')
+    expect(flightPhase({ onGround: false, speedKt: 150, altitudeFt: 200, verticalRateFpm: 128 })).toBe('takeoff')
+  })
+  it('leaves hovering helicopters and higher level flight alone', () => {
+    expect(flightPhase({ onGround: false, speedKt: 20, altitudeFt: 300, verticalRateFpm: 0, category: 'A7' })).toBe('level')
+    expect(flightPhase({ onGround: false, speedKt: 250, altitudeFt: 3000, verticalRateFpm: 0 })).toBe('level')
+  })
+})

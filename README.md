@@ -137,13 +137,13 @@ Everything here is shown for interest. It is not for navigation or flight planni
 
 ## AI features (optional, set up by the site owner)
 
-The AI features (radio calls cleaned up and explained before they are shown, airport briefings, flight stories, weather in plain words, the line on why a sighting is notable) run through one endpoint, `POST /api/ai`, with the tasks in `src/api/ai/tasks/`. The key is a Cloudflare secret, `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`; there is nothing to type into the app and the browser never holds or sends a key. Settings > AI has an on/off switch for the device and a read-only line: "AI: on (Claude Opus 5.5, set in Cloudflare)" or "AI is not set up". See [docs/ai-setup.md](docs/ai-setup.md) for the exact steps.
+The AI features (radio calls cleaned up and explained before they are shown, airport briefings, flight stories, weather in plain words, the line on why a sighting is notable) run through one endpoint, `POST /api/ai`, with the tasks in `src/api/ai/tasks/`. The keys are Cloudflare secrets, `ANTHROPIC_API_KEY` and/or `OPENROUTER_API_KEY`; there is nothing to type into the app and the browser never holds or sends a key. Every feature runs on Claude Haiku 5.5 by default; Claude Sonnet 5.5 is the only alternative (no Opus). Settings > AI has an on/off switch, a Haiku / Sonnet picker and, when both keys are set, a Claude / OpenRouter / Auto picker, all remembered per device and sent with each request (headers `x-atc-ai-model`, `x-atc-ai-provider`; the server accepts only those two models and otherwise uses its default). It also shows which providers are set up in Cloudflare and a line such as "AI: on (Claude Haiku 5.5)" or "AI is not set up". See [docs/ai-setup.md](docs/ai-setup.md) for the exact steps.
 
 | Secret or variable | Default | What |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` | none | The key. Without one, everything works without AI |
-| `AI_PROVIDER` | `auto` | `anthropic`, `openrouter` or `auto` |
-| `AI_MODEL` | `claude-opus-5-5` | Model for every task (translated to OpenRouter's names there) |
+| `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` | none | The keys (either or both). Without one, everything works without AI |
+| `AI_PROVIDER` | `auto` | Site default: `anthropic`, `openrouter` or `auto` (Claude's API when its key is set) |
+| `AI_MODEL` | `claude-haiku-5-5` | Site default model: `claude-haiku-5-5` or `claude-sonnet-5-5` (sent as `anthropic/claude-haiku-5.5` / `anthropic/claude-sonnet-5.5` on OpenRouter); anything else means Haiku |
 | `AI_DAILY_CAP` | `3000` | Most AI requests a day for the whole site; the radio task is held to 70% of it (`AI_TASK_CAPS` changes that) |
 | `AI_RATE_BURST`, `AI_RATE_PER_MIN` | `20`, `60` | Per-visitor rate limit |
 | `AI_KV` (KV binding) | none | Optional KV namespace that makes the caps one worldwide count; without it each Cloudflare data centre counts on its own |
@@ -152,7 +152,7 @@ Because every visitor spends the owner's key, `/api/ai` only answers this site's
 
 **Radio calls and AI.** A transcribed call is held back for the AI pass and published (transcript, caption, history, highlight, taxi route) with the cleaned words and the AI's speaker already in place. If no answer comes within about eight seconds the call is shown as recognised with a small "unprocessed" mark, and upgraded in place when the answer arrives. When AI is off, not set up or over its cap, nothing waits. The raw words stay searchable.
 
-`POST /api/summarize` (a flight's recent calls in a replay) is the older endpoint: built-in phrasebook by default, or a model when `AI_API_KEY` (with `AI_BASE_URL`, `AI_MODEL`) is set; it counts against the same daily cap.
+`POST /api/summarize` (a flight's recent calls in a replay) is the older endpoint: built-in phrasebook by default, or a model when `AI_API_KEY` (with `AI_BASE_URL`, `AI_MODEL`: Haiku by default, Sonnet allowed) is set; it counts against the same daily cap.
 
 For local development export the same names in the shell before `npm run dev`.
 

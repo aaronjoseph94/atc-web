@@ -26,7 +26,6 @@ import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
 import { PHASE_LABEL } from './describe'
 import { FlightHero, RouteCaveat } from './FlightHero'
-import { FollowButton } from './FollowButton'
 import { FlightSummary } from './FlightSummary'
 import { FlightTimeline } from './FlightTimeline'
 import { useFlight, useFlightInfo } from './useFlight'
@@ -185,7 +184,6 @@ export function FlightDetail({ docked = false, onBack, backLabel }: { docked?: b
               {flight.phase && <span className="hidden min-w-0 truncate text-caption font-medium text-white/60 @[24rem]:inline">{PHASE_LABEL[flight.phase]}</span>}
             </div>
             <div className="flex shrink-0 items-center gap-2" data-no-drag>
-              <FollowButton tone="dark" compact={!!onBack} />
               <button type="button" aria-label="Close flight" className="pressable grid size-8 place-items-center rounded-full bg-white/10 text-white/85 hover:bg-white/20 hover:text-white" onClick={() => select(null)}>
                 <X className="size-4" />
               </button>

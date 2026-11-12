@@ -23,7 +23,7 @@ export type Phase =
   | 'level'
   | 'unknown'
 
-type PhaseInput = Pick<Aircraft, 'onGround' | 'speedKt' | 'altitudeFt' | 'verticalRateFpm'>
+type PhaseInput = Pick<Aircraft, 'onGround' | 'speedKt' | 'altitudeFt' | 'verticalRateFpm'> & { category?: Aircraft['category'] }
 
 /** Classify what the aircraft is doing right now from its state vector. */
 export function flightPhase(a: PhaseInput): Phase {
@@ -40,6 +40,9 @@ export function flightPhase(a: PhaseInput): Phase {
   if (alt == null && vr == null) return 'unknown'
   if (vr != null && vr > 300) return alt != null && alt < 3000 ? 'takeoff' : 'climbing'
   if (vr != null && vr < -300) return alt != null && alt < 3000 ? 'final' : 'descending'
+  // Low over the field, an airliner holding height is flaring onto the runway (or has just lifted
+  // off), not cruising: in the flare the vertical rate falls to almost nothing. Helicopters hover.
+  if (alt != null && alt < 1000 && a.category !== 'A7' && (spd == null || spd < 250)) return vr != null && vr > 0 ? 'takeoff' : 'final'
   if (alt != null && alt >= 18000) return 'cruising'
   return 'level'
 }
@@ -68,7 +71,7 @@ export const PHASE_SENTENCE: Record<Phase, string> = {
   descending: 'Coming down toward the airport.',
   final: 'Lined up low and slow, about to touch down.',
   cruising: 'High up and flying level — passing through the area.',
-  level: 'Flying at a steady altitude.',
+  level: 'Holding its altitude.',
   unknown: 'Airborne; no altitude data from this aircraft yet.',
 }
 

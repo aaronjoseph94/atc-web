@@ -12,7 +12,7 @@ const now = Date.UTC(2026, 10, 12, 10)
 /** A request context with empty stores and a model that answers at once. */
 function ctx(over: Partial<AiRequestContext> = {}) {
   const store = memoryStorage(() => now)
-  const run = vi.fn(async (_ai: ResolvedAi, _args: RunAiArgs): Promise<RunAiResult> => ({ text: '{"ok":true}', json: { ok: true }, provider: 'anthropic', model: 'claude-opus-5-5' }))
+  const run = vi.fn(async (_ai: ResolvedAi, _args: RunAiArgs): Promise<RunAiResult> => ({ text: '{"ok":true}', json: { ok: true }, provider: 'anthropic', model: 'claude-haiku-5-5' }))
   const c: AiRequestContext = {
     self: SELF,
     from: { origin: SELF, referer: null, fetchSite: 'same-origin' },
@@ -39,7 +39,7 @@ describe('handleAiPost', () => {
     expect(out.status).toBe(200)
     expect(out.body).toMatchObject({ ok: true, task: 'ping', provider: 'anthropic' })
     expect(run).toHaveBeenCalledTimes(1)
-    expect(run.mock.calls[0][0]).toMatchObject({ provider: 'anthropic', key: 'sk-test', model: 'claude-opus-5-5' })
+    expect(run.mock.calls[0][0]).toMatchObject({ provider: 'anthropic', key: 'sk-test', model: 'claude-haiku-5-5' })
   })
 
   it('refuses requests that do not come from this site, before anything is spent', async () => {
@@ -78,7 +78,7 @@ describe('handleAiPost', () => {
     expect(out.headers['retry-after']).toBe(String(14 * 3600))
     expect(run).toHaveBeenCalledTimes(2)
     const st = await aiStatus(env, c.counters, now)
-    expect(st).toMatchObject({ configured: true, provider: 'anthropic', model: 'claude-opus-5-5', label: 'Claude Opus 5.5', usage: { today: 2, cap: 2, limited: true } })
+    expect(st).toMatchObject({ configured: true, provider: 'anthropic', model: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', usage: { today: 2, cap: 2, limited: true } })
   })
 
   it('answers from the cache are free: not counted, not rate limited, still served past the cap', async () => {
@@ -123,6 +123,54 @@ describe('handleAiPost', () => {
 
   it('reports "not set up" in the status without a key', async () => {
     const { c } = ctx()
-    expect(await aiStatus({}, c.counters, now)).toMatchObject({ configured: false, provider: null, model: null, label: null, usage: { today: 0, cap: 3000, limited: false } })
+    expect(await aiStatus({}, c.counters, now)).toMatchObject({ configured: false, provider: null, model: null, label: null, providers: { anthropic: false, openrouter: false }, usage: { today: 0, cap: 3000, limited: false } })
+  })
+
+  it('runs the device’s pick of model and provider, and never a model off the list', async () => {
+    const both = { ANTHROPIC_API_KEY: 'sk-ant', OPENROUTER_API_KEY: 'sk-or' }
+    const { c, run } = ctx()
+    await handleAiPost(ping, both, { ...c, choice: { model: 'claude-sonnet-5-5', provider: 'openrouter' } })
+    await handleAiPost(ping, both, { ...c, choice: { model: 'claude-opus-5-5' } })
+    await handleAiPost(ping, { ...both, AI_MODEL: 'claude-opus-5-5' }, c)
+    expect(run.mock.calls.map(([ai]) => [ai.provider, ai.model])).toEqual([
+      ['openrouter', 'anthropic/claude-sonnet-5.5'],
+      ['anthropic', 'claude-haiku-5-5'],
+      ['anthropic', 'claude-haiku-5-5'],
+    ])
+  })
+
+  it('keeps cached answers apart per model: a Sonnet answer is never served to a Haiku request', async () => {
+    const { c, run } = ctx()
+    run.mockImplementation(async (ai) => ({ text: ai.model, json: { by: ai.model }, provider: ai.provider, model: ai.model }))
+    const haiku = await handleAiPost(term('squawk'), KEY, c)
+    const sonnet = await handleAiPost(term('squawk'), KEY, { ...c, choice: { model: 'claude-sonnet-5-5' } })
+    expect(sonnet.headers['x-atc-ai-cache']).toBeUndefined()
+    expect(sonnet.body).toMatchObject({ model: 'claude-sonnet-5-5', result: { by: 'claude-sonnet-5-5' } })
+    const haikuAgain = await handleAiPost(term('squawk'), KEY, { ...c, choice: { model: 'claude-haiku-5-5' } })
+    expect(haikuAgain.headers['x-atc-ai-cache']).toBe('hit')
+    expect(haikuAgain.body).toEqual(haiku.body)
+    const sonnetAgain = await handleAiPost(term('squawk'), KEY, { ...c, choice: { model: 'claude-sonnet-5-5' } })
+    expect(sonnetAgain.body).toEqual(sonnet.body)
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('the status says which providers are set up and what answers this device, never a key', async () => {
+    const { c } = ctx()
+    const env = { ANTHROPIC_API_KEY: 'sk-ant-SECRET', OPENROUTER_API_KEY: 'sk-or-SECRET', AI_MODEL: 'claude-sonnet-5-5', AI_PROVIDER: 'openrouter' }
+    const st = await aiStatus(env, c.counters, now)
+    expect(st).toMatchObject({
+      configured: true,
+      provider: 'openrouter',
+      model: 'anthropic/claude-sonnet-5.5',
+      label: 'Claude Sonnet 5.5',
+      providers: { anthropic: true, openrouter: true },
+      models: [
+        { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
+        { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+      ],
+      defaults: { model: 'claude-sonnet-5-5', provider: 'openrouter' },
+    })
+    expect(JSON.stringify(st)).not.toContain('SECRET')
+    expect(await aiStatus(env, c.counters, now, { model: 'claude-haiku-5-5', provider: 'anthropic' })).toMatchObject({ provider: 'anthropic', model: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' })
   })
 })

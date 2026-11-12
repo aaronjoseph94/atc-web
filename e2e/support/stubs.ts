@@ -48,11 +48,33 @@ export const AI_NOT_SET_UP = {
   provider: null,
   model: null,
   label: null,
+  providers: { anthropic: false, openrouter: false },
+  models: [
+    { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
+    { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+  ],
+  defaults: { model: 'claude-haiku-5-5', provider: 'auto' },
   usage: { day: '2026-11-12', today: 0, cap: 3000, limited: false, resetsAt: '2026-11-13T00:00:00.000Z', tasks: { radioCleanup: { today: 0, cap: 2100 } }, storage: 'cache' },
 }
 
-/** `GET /api/ai` with a key set in Cloudflare and room under the cap. */
-export const AI_ON = { ...AI_NOT_SET_UP, configured: true, provider: 'anthropic', model: 'claude-opus-5-5', label: 'Claude Opus 5.5', usage: { ...AI_NOT_SET_UP.usage, today: 412, tasks: { radioCleanup: { today: 300, cap: 2100 } } } }
+/** `GET /api/ai` with the Claude key set in Cloudflare and room under the cap. */
+export const AI_ON = {
+  ...AI_NOT_SET_UP,
+  configured: true,
+  provider: 'anthropic',
+  model: 'claude-haiku-5-5',
+  label: 'Claude Haiku 5.5',
+  providers: { anthropic: true, openrouter: false },
+  usage: { ...AI_NOT_SET_UP.usage, today: 412, tasks: { radioCleanup: { today: 300, cap: 2100 } } },
+}
+
+/** `GET /api/ai` with both keys set; it answers for the model and provider the request's headers pick, as the server does. */
+export function aiOnBoth(headers: Record<string, string>) {
+  const model = headers['x-atc-ai-model'] === 'claude-sonnet-5-5' ? 'claude-sonnet-5-5' : 'claude-haiku-5-5'
+  const provider = headers['x-atc-ai-provider'] === 'openrouter' ? 'openrouter' : 'anthropic'
+  const label = model === 'claude-sonnet-5-5' ? 'Claude Sonnet 5.5' : 'Claude Haiku 5.5'
+  return { ...AI_ON, provider, model: provider === 'openrouter' ? `anthropic/${model.replace(/-5-5$/, '-5.5')}` : model, label, providers: { anthropic: true, openrouter: true } }
+}
 
 const AIRNAV_NOT_SET_UP = { configured: false, used: 0, today: 0, credits: 100, cap: 90, dailyCap: 3, storage: 'cache' }
 

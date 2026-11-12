@@ -5,7 +5,7 @@ a secret into Cloudflare:
 
 | Secret | What it switches on | Cost |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` (or `OPENROUTER_API_KEY`) | The AI features: radio calls cleaned up and explained before they are shown, airport briefings, flight stories, weather in plain words, feedback triage | You pay your AI provider per request. Capped per day (below). |
+| `ANTHROPIC_API_KEY` and/or `OPENROUTER_API_KEY` | The AI features: radio calls cleaned up and explained before they are shown, airport briefings, flight stories, weather in plain words, feedback triage. They run on Claude Haiku 5.5 unless you pick Sonnet (below) | You pay your AI provider per request. Capped per day (below). |
 | `AIRNAV_ODAPI_TOKEN` | A last-resort lookup of a flight's route and aircraft when the free sources know neither | AirNav credits. Capped at 3 a day and 90 in total by default (below). |
 
 Keys live **only** in Cloudflare. Nothing is typed into the app, and no browser
@@ -43,15 +43,47 @@ in the dashboard as in step 5 above.
 ### Check that it worked
 
 Open the site → menu → **Settings**. Under **AI** it should read
-`AI: on (Claude Opus 5.5, set in Cloudflare)`. If it reads `AI is not set up`,
-the deployment you are looking at was made before the secret was saved:
-redeploy. `https://<your-site>/api/ai` shows the same as JSON (never the key).
+`AI: on (Claude Haiku 5.5)`, and **Set up in Cloudflare** should show
+**Claude** lit. If it reads `AI is not set up`, the deployment you are looking
+at was made before the secret was saved: redeploy.
+`https://<your-site>/api/ai` shows the same as JSON: `configured`, which
+`providers` have a key (`true`/`false` only), the model that answers, and
+today's usage. It never shows a key.
 
-### Using OpenRouter instead
+### Adding OpenRouter (as well, or instead)
 
-Add the secret `OPENROUTER_API_KEY` (from <https://openrouter.ai> → Keys) the
-same way. With both keys set, Claude's own API is used unless `AI_PROVIDER`
-says otherwise.
+1. Get a key at <https://openrouter.ai> → **Keys** → **Create key** (it starts
+   with `sk-or-`). Give it a credit limit there if you like.
+2. Add it exactly as in steps 3–6 above, with the name `OPENROUTER_API_KEY`
+   (or `npx wrangler pages secret put OPENROUTER_API_KEY --project-name atc-web`),
+   and redeploy.
+3. **Settings → AI → Set up in Cloudflare** now shows **OpenRouter** lit.
+
+With only the OpenRouter key, everything runs through OpenRouter. With both
+keys, Claude's own API is used unless `AI_PROVIDER` or the provider picker
+(next section) says otherwise. OpenRouter is sent the same models under its
+own names: `anthropic/claude-haiku-5.5` and `anthropic/claude-sonnet-5.5`.
+
+### Choosing the model and provider in the app
+
+**Settings → AI** has:
+
+- **Model**: **Haiku** (Claude Haiku 5.5, the default: fast and cheap) or
+  **Sonnet** (Claude Sonnet 5.5: more careful, about 20 times the price per
+  request). Opus is not offered and cannot be requested.
+- **Provider** (only shown when both keys are set): **Claude** (Anthropic's
+  own API), **OpenRouter**, or **Auto** (Claude's API).
+
+Until you pick, the site defaults are used (`AI_MODEL`, `AI_PROVIDER`, below).
+The pick is remembered in that browser only, and sent with each AI request
+(headers `x-atc-ai-model` and `x-atc-ai-provider`; never a key). The server
+only accepts `claude-haiku-5-5` or `claude-sonnet-5-5` (or
+`anthropic/claude-haiku-5.5`, `anthropic/claude-sonnet-5.5`); anything else
+is ignored and the site default used, so no visitor can choose a more
+expensive model. Any visitor can pick Sonnet for their own device, though: if
+you want everyone on Haiku, keep an eye on the daily cap (section 3) and your
+provider's spending limit. Cached answers are kept per model, so switching
+never shows an answer from the other one.
 
 ## 2. Optional settings
 
@@ -64,8 +96,8 @@ works for these.)
 
 | Name | Default | Meaning |
 | --- | --- | --- |
-| `AI_PROVIDER` | `auto` | `anthropic`, `openrouter`, or `auto` (Claude's API when its key is set, else OpenRouter) |
-| `AI_MODEL` | `claude-opus-5-5` | The model for every AI feature. `claude-sonnet-5-5` and `claude-haiku-5-5` are faster and cheaper. On OpenRouter the same names are translated to OpenRouter's (`anthropic/claude-opus-5.5` …); any other OpenRouter id (with a `/`) is passed through |
+| `AI_PROVIDER` | `auto` | The site's default provider when both keys are set: `anthropic`, `openrouter`, or `auto` (Claude's API when its key is set, else OpenRouter). A device's pick in Settings overrides it |
+| `AI_MODEL` | `claude-haiku-5-5` | The site's default model: `claude-haiku-5-5` or `claude-sonnet-5-5` (the OpenRouter spellings `anthropic/claude-haiku-5.5` / `anthropic/claude-sonnet-5.5` work too). Anything else, Opus included, means Haiku. A device's pick in Settings overrides it |
 | `AI_DAILY_CAP` | `3000` | Most AI requests the whole site makes in one day (UTC). `0` switches AI off without removing the key |
 | `AI_TASK_CAPS` | `radioCleanup` gets 70% of the daily cap | Per-feature daily caps, e.g. `radioCleanup=1500,flightStory=300` |
 | `AI_RATE_BURST` | `20` | Requests one visitor may make in any ten seconds |
@@ -221,7 +253,7 @@ Without the key the app goes back to working without AI at once.
 repository:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-… npm run dev
+ANTHROPIC_API_KEY=sk-ant-… OPENROUTER_API_KEY=sk-or-… npm run dev
 ```
 
 Counters are kept in memory and start again when the dev server restarts. The

@@ -28,7 +28,6 @@ import { Ticker } from '../ui/Ticker'
 import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
 import { aircraftTypeName, PHASE_LABEL } from './describe'
-import { FollowButton } from './FollowButton'
 import { Terms } from '../learn/Terms'
 import { formatDistance, routeProgress } from './route'
 import { Sparkline } from './Sparkline'
@@ -116,7 +115,6 @@ export function FlightCard() {
       <div className="flex items-center justify-between gap-3 px-4 pt-2">
         <Identity flight={flight} info={info} />
         <div className="flex shrink-0 items-center gap-2">
-          <FollowButton tone="card" />
           <button type="button" data-no-drag aria-label="Close flight" className="grid size-8 place-items-center rounded-full bg-white/15 transition hover:bg-white/25 active:scale-90" onClick={() => select(null)}>
             <X className="size-4" />
           </button>

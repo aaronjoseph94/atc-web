@@ -29,8 +29,16 @@ describe('summarize', () => {
   })
 
   it('reports a configured provider without exposing the key', () => {
-    const s = aiStatus({ AI_API_KEY: 'sk-test', AI_BASE_URL: 'https://api.anthropic.com', AI_MODEL: 'claude-test' })
-    expect(s).toEqual({ configured: true, provider: 'anthropic', model: 'claude-test' })
+    const s = aiStatus({ AI_API_KEY: 'sk-test', AI_BASE_URL: 'https://api.anthropic.com', AI_MODEL: 'claude-sonnet-5-5' })
+    expect(s).toEqual({ configured: true, provider: 'anthropic', model: 'claude-sonnet-5-5' })
     expect(JSON.stringify(s)).not.toContain('sk-test')
+  })
+
+  it('only runs Haiku or Sonnet, in the form the provider expects', () => {
+    expect(aiStatus({ AI_API_KEY: 'k', AI_BASE_URL: 'https://api.anthropic.com' }).model).toBe('claude-haiku-5-5')
+    expect(aiStatus({ AI_API_KEY: 'k', AI_BASE_URL: 'https://api.anthropic.com', AI_MODEL: 'claude-opus-5-5' }).model).toBe('claude-haiku-5-5')
+    expect(aiStatus({ AI_API_KEY: 'k' }).model).toBe('anthropic/claude-haiku-5.5')
+    expect(aiStatus({ AI_API_KEY: 'k', AI_MODEL: 'claude-sonnet-5-5' }).model).toBe('anthropic/claude-sonnet-5.5')
+    expect(aiStatus({ AI_API_KEY: 'k', AI_MODEL: 'anthropic/claude-opus-5.5' }).model).toBe('anthropic/claude-haiku-5.5')
   })
 })
