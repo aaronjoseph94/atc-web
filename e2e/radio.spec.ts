@@ -196,7 +196,8 @@ test.describe('last call in the station bar', () => {
     await expect(last).toContainText('turn left heading', { ignoreCase: true })
 
     // An aircraft nobody has talked to yet says so.
-    await app.tapAircraft(JFK.arrival.icao24)
+    // (Picked directly: with the first flight open the camera follows it, and the second may be off screen.)
+    await page.evaluate((id) => window.__atc.playhead.getState().select(id), JFK.arrival.icao24)
     await expect(page.getByLabel(`Latest radio call for ${JFK.arrival.callsign}`)).toContainText('No radio calls heard')
   })
 })
