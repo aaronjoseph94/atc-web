@@ -5,12 +5,14 @@
  * pilot blue) says who spoke. Nothing heard yet says so quietly.
  */
 import { Radio, Sparkles } from 'lucide-react'
+import { useState } from 'react'
 import { useFlight } from '../flight/useFlight'
 import { useNow } from '../hooks/useNow'
 import { callsFor, useRadio, type Transmission } from '../live/radio/radioStore'
 import { useUnderstood } from '../live/radio/understand/store'
 import { usePlayhead } from '../playback/playheadStore'
 import { speakerColors } from '../ui/speaker'
+import { StreamText } from '../ui/textMotion'
 
 function ago(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
@@ -38,6 +40,10 @@ export function LastCall({ callsign }: { callsign: string }) {
   const ai = !!understood?.plain?.trim()
   const colors = speakerColors(call?.speaker)
   const who = call?.speaker === 'controller' ? 'Tower' : call?.speaker === 'pilot' ? callsign : null
+  // Only a call (or its summary) that arrives while this flight is selected streams in; the one already there just shows.
+  const line = call ? `${call.id}:${ai ? 'ai' : 'heard'}` : ''
+  const [opened, setOpened] = useState({ icao24, line })
+  if (opened.icao24 !== icao24) setOpened({ icao24, line })
 
   return (
     <div className="mx-3 mb-2 rounded-2xl bg-black/10 px-3 py-2" aria-live="polite" aria-label={`Latest radio call for ${callsign}`}>
@@ -51,7 +57,7 @@ export function LastCall({ callsign }: { callsign: string }) {
           <span className="mt-[0.45em] size-2 shrink-0 rounded-full ring-1 ring-black/20" style={{ background: colors.base }} aria-hidden />
           <span className="line-clamp-2 min-w-0">
             {who && <span className="text-black/60">{who}: </span>}
-            {summary}
+            <StreamText key={line} id={`last-call:${line}`} text={summary} play={opened.icao24 === icao24 && line !== opened.line} />
           </span>
         </p>
       ) : (

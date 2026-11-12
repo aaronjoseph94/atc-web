@@ -15,14 +15,20 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { CountDot, Lamp } from '../../ui/kit'
 import { DOCK_TABS, type DockTab } from '../../ui/layout'
+import { Ticker } from '../../ui/Ticker'
 import { TAB_KEY, TAB_LABEL, tabBadge, tabId, tabPanelId, useTabSignals, type TabBadge } from './tabs'
 
-/** A tab's badge, drawn: a dot, a count of what is new, or a plain count. */
+/**
+ * A tab's badge, drawn: a dot, a count of what is new, or a plain count.
+ * The dot and the count of what's new pop in when there is news; counts
+ * change only the digits that moved.
+ */
 export function TabBadgeMark({ badge }: { badge: TabBadge | null }) {
   if (!badge) return null
-  if (badge.kind === 'dot') return <CountDot attention />
-  if (badge.kind === 'unread') return <CountDot attention>{badge.text}</CountDot>
-  return <span aria-hidden className="text-caption2 font-medium tabular-nums text-white/45">{badge.text}</span>
+  if (badge.kind === 'dot') return <CountDot attention className="badge-pop" />
+  const count = <Ticker variant="digits" value={Number.parseInt(badge.text, 10) || 0} format={() => badge.text} />
+  if (badge.kind === 'unread') return <CountDot attention className="badge-pop">{count}</CountDot>
+  return <span aria-hidden className="text-caption2 font-medium tabular-nums text-white/45">{count}</span>
 }
 
 export function PanelTabs({ tab, flightShown = false, onPick }: { tab: DockTab; flightShown?: boolean; onPick: (t: DockTab) => void }) {

@@ -122,6 +122,8 @@
   --duration-sheet: 460ms;
   --duration-exit: 220ms;
   --duration-exit-fast: 160ms;
+  /* Text and numbers settling into place: a word resolving, a digit changing, content replacing a skeleton. */
+  --duration-reveal: 400ms;
 
   --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
   --animate-rise: rise var(--duration-base) var(--ease-out) both;
@@ -435,13 +437,14 @@ body,
  * Hover hints for controls (pointer devices only): appear after a short
  * pause so they don't flicker as the pointer passes, vanish at once.
  */
+/* Adapted from Transitions.dev — Tooltip open/close */
 .tooltip {
   pointer-events: none;
   opacity: 0;
-  scale: 0.96;
+  scale: 0.98;
   transition:
-    opacity var(--duration-exit-fast) var(--ease-out),
-    scale var(--duration-exit-fast) var(--ease-out);
+    opacity var(--duration-press) var(--ease-out),
+    scale var(--duration-press) var(--ease-out);
 }
 @media (hover: hover) {
   .has-tooltip:hover > .tooltip,
@@ -463,6 +466,203 @@ body,
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.07) 25%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.07) 75%);
   background-size: 200% 100%;
   animation: var(--animate-shimmer);
+}
+
+/*
+ * Text that settles rather than jumps. Small, quick and cheap: opacity,
+ * transform and a hair of blur, only on the few words or digits that
+ * changed, never on a whole list. Reduced motion (the OS or the in-app
+ * setting) shows everything at once; see the end of this file.
+ */
+
+/*
+ * Adapted from Transitions.dev — Streaming text
+ * A newly heard call's words resolve one after another through a soft blur
+ * (`StreamText`, src/ui/textMotion.tsx). `--i` is the word's place, `--stream-gap`
+ * the stagger. Plain CSS animation: no timers, and nothing replays on a re-render.
+ */
+.stream-word {
+  animation: stream-in var(--duration-reveal) var(--ease-out-quint) both;
+  animation-delay: calc(var(--i, 0) * var(--stream-gap, 45ms));
+}
+@keyframes stream-in {
+  from {
+    opacity: 0;
+    filter: blur(1px);
+  }
+}
+/* The live caption's words are lit as a sweep passes; still unlit, they wait a little out of focus. */
+.caption-word {
+  transition:
+    color 200ms var(--ease-out),
+    filter var(--duration-reveal) var(--ease-out-quint);
+}
+.caption-word[data-unlit] {
+  filter: blur(1px);
+}
+
+/*
+ * Adapted from Transitions.dev — Number subtle change
+ * Only the digits that changed move: the old one drifts out as the new one
+ * drifts in, up when the number rose and down when it fell (`--dir`).
+ */
+.digit-slot {
+  position: relative;
+  display: inline-block;
+}
+.digit-new {
+  display: inline-block;
+  animation: digit-in var(--duration-reveal) var(--ease-out-quint) both;
+}
+.digit-old {
+  position: absolute;
+  inset: 0;
+  text-align: center;
+  pointer-events: none;
+  animation: digit-out var(--duration-reveal) var(--ease-out-quint) both;
+}
+@keyframes digit-in {
+  from {
+    transform: translateY(calc(0.14em * var(--dir, 1)));
+    opacity: 0;
+    filter: blur(0.04em);
+  }
+}
+@keyframes digit-out {
+  to {
+    transform: translateY(calc(-0.14em * var(--dir, 1)));
+    opacity: 0;
+    filter: blur(0.04em);
+  }
+}
+
+/* Adapted from Transitions.dev — Notification badge: a tab's badge pops in when there is news. */
+.badge-pop {
+  transition:
+    scale var(--duration-base) var(--ease-spring),
+    opacity var(--duration-fast) var(--ease-out),
+    filter var(--duration-base) var(--ease-out);
+}
+@starting-style {
+  .badge-pop {
+    scale: 0.4;
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
+/*
+ * Adapted from Transitions.dev — Menu dropdown
+ * Grows a touch from the corner it hangs from (set `origin-*` alongside),
+ * and leaves faster than it came, barely shrinking.
+ */
+.motion-menu {
+  transition-property: opacity, scale;
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-out-quint);
+}
+.motion-menu[data-closing] {
+  opacity: 0;
+  scale: 0.99;
+  transition-duration: var(--duration-exit-fast);
+  pointer-events: none;
+}
+@starting-style {
+  .motion-menu {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
+/*
+ * Adapted from Transitions.dev — Toast open / close
+ * Drops in from the top bar coming into focus; leaves the same way, quicker.
+ * On `transform`, so it composes with the `translate` that centres it.
+ */
+.motion-toast {
+  transition-property: opacity, transform, filter;
+  transition-duration: var(--duration-reveal);
+  transition-timing-function: var(--ease-out-quint);
+}
+.motion-toast[data-closing] {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.97);
+  filter: blur(2px);
+  transition-duration: var(--duration-exit);
+  pointer-events: none;
+}
+@starting-style {
+  .motion-toast {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+    filter: blur(2px);
+  }
+}
+
+/*
+ * Adapted from Transitions.dev — Thinking states
+ * A quiet highlight sweeps the words while a call waits for its AI pass
+ * (`ShimmerText`). The copy on ::before must match the text (`data-text`).
+ */
+.shimmer-text {
+  position: relative;
+  display: inline-block;
+}
+.shimmer-text::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  background-image: linear-gradient(90deg, transparent 0%, transparent 40%, rgb(255 255 255 / 0.95) 50%, transparent 60%, transparent 100%);
+  background-size: 400% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: think-shimmer 2s linear infinite;
+}
+@keyframes think-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+/*
+ * Adapted from Transitions.dev — Skeleton loader and reveal
+ * For a moment the placeholder lies over what replaces it: the bones fade
+ * out of focus as the content comes into it (`Reveal`). The content sets the
+ * height at once, so nothing below jumps when the bones go.
+ */
+.reveal-stack {
+  position: relative;
+  display: block;
+}
+.reveal-in {
+  transition:
+    opacity var(--duration-reveal) var(--ease-in-out),
+    filter var(--duration-reveal) var(--ease-in-out);
+}
+@starting-style {
+  .reveal-in {
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+.reveal-out {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  filter: blur(2px);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-reveal) var(--ease-in-out),
+    filter var(--duration-reveal) var(--ease-in-out);
 }
 
 /* Thin, unobtrusive scrollbars inside panels. */
@@ -932,4 +1132,27 @@ body,
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   transition-delay: 0ms !important;
+}
+/* Settling text shows at once: no staggered words waiting their turn, no outgoing digit, no sweep. */
+@media (prefers-reduced-motion: reduce) {
+  .stream-word {
+    animation: none;
+  }
+  .digit-old,
+  .shimmer-text::before {
+    display: none;
+  }
+  .caption-word[data-unlit] {
+    filter: none;
+  }
+}
+.reduce-motion .stream-word {
+  animation: none;
+}
+.reduce-motion .digit-old,
+.reduce-motion .shimmer-text::before {
+  display: none;
+}
+.reduce-motion .caption-word[data-unlit] {
+  filter: none;
 }

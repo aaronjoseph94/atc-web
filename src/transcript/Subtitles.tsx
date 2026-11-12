@@ -13,6 +13,7 @@ import { FadeSwap, UnprocessedMark } from '../live/radio/understand/CallExtras'
 import { cueProgress, getActiveCue } from '../playback/interpolate'
 import { usePlayhead } from '../playback/playheadStore'
 import { useReducedMotion } from '../ui/motion'
+import { ShimmerText, SwapText } from '../ui/textMotion'
 import { Terms } from '../learn/Terms'
 
 /**
@@ -73,14 +74,26 @@ function useSweep(call: Transmission | null): number {
   return sweep.id === id ? sweep.p : 0
 }
 
-/** Three dots that breathe while somebody is transmitting and the words are on their way. */
-function Receiving({ label }: { label: string }) {
+/**
+ * Where the next call will appear: three dots that breathe while somebody is
+ * transmitting, then a quiet sweep over "Processing call…" while the words
+ * are on their way.
+ */
+function Receiving({ speaking }: { speaking: boolean }) {
   return (
-    <span className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-white/55" role="status">
-      <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70" />
-      <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.2s]" />
-      <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.4s]" />
-      <span className="ml-1">{label}</span>
+    <span className="mt-1 block text-[13px] font-semibold text-white/55" role="status">
+      <SwapText swapKey={speaking ? 'air' : 'processing'}>
+        {speaking ? (
+          <span className="flex items-center gap-1.5">
+            <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70" />
+            <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.2s]" />
+            <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.4s]" />
+            <span className="ml-1">On the air</span>
+          </span>
+        ) : (
+          <ShimmerText>Processing call…</ShimmerText>
+        )}
+      </SwapText>
     </span>
   )
 }
@@ -119,8 +132,9 @@ function RadioCaption() {
                 <Terms text={words.join(' ')} />
               </span>
             ) : (
+              // Adapted from Transitions.dev — Streaming text: each word comes into focus as the sweep lights it.
               words.map((w, i) => (
-                <span key={i} className={`transition-colors duration-200 ${i < spoken ? 'text-white' : 'text-white/40'}`}>
+                <span key={i} data-unlit={i < spoken ? undefined : ''} className={`caption-word ${i < spoken ? 'text-white' : 'text-white/40'}`}>
                   {w}{' '}
                 </span>
               ))
@@ -129,7 +143,7 @@ function RadioCaption() {
           {call.unprocessed && <UnprocessedMark className="text-white" />}
         </p>
       )}
-      {busy && <Receiving label={speaking ? 'On the air' : 'Transcribing'} />}
+      {busy && <Receiving speaking={speaking} />}
     </button>
   )
 }

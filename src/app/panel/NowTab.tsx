@@ -43,6 +43,7 @@ import type { DockTab } from '../../ui/layout'
 import { PanelFrame, SectionLabel } from '../../ui/Panel'
 import { speakerColors, type RadioSpeaker } from '../../ui/speaker'
 import { EmptyState, OfflineArt } from '../../ui/States'
+import { ShimmerText, SwapText } from '../../ui/textMotion'
 import { Ticker } from '../../ui/Ticker'
 import { runwayWinds, type RunwayWind } from '../../weather/atis'
 import { speedUnitLabel, speedValue } from '../../weather/decode'
@@ -130,7 +131,10 @@ function OnAirCard({ go }: { go: Go }) {
   const head = (
     <div className="flex items-center gap-2">
       <Lamp state={lamp.state} color={lamp.color} />
-      <span className="text-footnote font-semibold text-white/85">{lamp.label}</span>
+      {/* A new state swaps its words; a countdown within one ("Retrying in 5s") just ticks. */}
+      <SwapText swapKey={lamp.label.replace(/\d+/g, '#')} className="text-footnote font-semibold text-white/85">
+        {lamp.label}
+      </SwapText>
       {playback && clip && <span className="ml-auto min-w-0 truncate text-caption text-white/50">{clip.title}</span>}
     </div>
   )
@@ -187,11 +191,19 @@ function OnAirCard({ go }: { go: Go }) {
           )}
         </div>
         {waiting && (
-          <p className="mt-2 flex items-center gap-1.5 pl-[13px] text-caption font-semibold text-white/55" role="status">
-            <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70" />
-            <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.2s]" />
-            <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.4s]" />
-            <span className="ml-1">{air.speaking ? 'Someone is talking' : 'Writing it out'}</span>
+          <p className="mt-2 pl-[13px] text-caption font-semibold text-white/55" role="status">
+            <SwapText swapKey={air.speaking ? 'air' : 'processing'}>
+              {air.speaking ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70" />
+                  <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.2s]" />
+                  <span className="size-1.5 animate-pulse-dot rounded-full bg-white/70 [animation-delay:0.4s]" />
+                  <span className="ml-1">Someone is talking</span>
+                </span>
+              ) : (
+                <ShimmerText>Processing call…</ShimmerText>
+              )}
+            </SwapText>
           </p>
         )}
       </button>
@@ -291,7 +303,7 @@ function TrafficTiles({ go }: { go: Go }) {
         {cells.map(([label, n, icon]) => (
           <span key={label} className="min-w-0 px-3" aria-hidden>
             <span className="flex items-center justify-between gap-1">
-              <span className="font-display text-[1.6rem] leading-none tracking-normal text-white">{status === 'ok' ? <Ticker value={n} format={whole} /> : <span className="text-white/30">–</span>}</span>
+              <span className="font-display text-[1.6rem] leading-none tracking-normal text-white">{status === 'ok' ? <Ticker variant="digits" value={n} format={whole} /> : <span className="text-white/30">–</span>}</span>
               <span className="shrink-0 text-white/40">{icon}</span>
             </span>
             <span className="mt-1.5 block truncate text-caption2 font-medium text-white/55">{label}</span>
