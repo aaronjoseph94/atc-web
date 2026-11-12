@@ -1,7 +1,9 @@
 /**
  * `POST /api/ai` body `{ task, input }` → `{ ok, task, provider, model, result }`.
- * `GET /api/ai` → whether AI is set up, which model answers, and today's
- * usage against the daily cap (never the keys).
+ * `GET /api/ai` → whether AI is set up, which providers have a key, which
+ * model answers, and today's usage against the daily cap (never the keys).
+ * Both read the device's model / provider pick from the `AI_HEADERS`
+ * headers; see ./run.ts for what is accepted.
  *
  * Shared by the Pages Function and the dev server. Every request is paid for
  * with the site's own key, so each one passes the checks in ./limits.ts
@@ -10,7 +12,24 @@
 import type { JsonCache } from '../sourceHealth'
 import type { Counters, JsonStore } from '../storage'
 import { aiUsage, checkRate, isSameOrigin, reserveAi, type AiUsage, type LimitEnv, type OriginHeaders, type RateDoc } from './limits'
-import { AiError, modelLabel, resolveAi, runAi, type AiEnv, type RunAiArgs, type RunAiResult, type ResolvedAi } from './run'
+import {
+  AiError,
+  CLAUDE_MODELS,
+  configuredProviders,
+  defaultModel,
+  defaultProvider,
+  modelLabel,
+  resolveAi,
+  runAi,
+  type AiChoice,
+  type AiEnv,
+  type AiProvider,
+  type AiProviderChoice,
+  type ClaudeModelId,
+  type RunAiArgs,
+  type RunAiResult,
+  type ResolvedAi,
+} from './run'
 import { TASKS } from './tasks'
 
 export type AiHandlerEnv = AiEnv & LimitEnv
@@ -18,16 +37,31 @@ export type AiHandlerEnv = AiEnv & LimitEnv
 export type AiStatusResponse = {
   /** A key is set on the server. */
   configured: boolean
-  provider: 'anthropic' | 'openrouter' | null
+  /** The provider and model that answer this device (its choice in Settings, else the site's default). */
+  provider: AiProvider | null
   model: string | null
-  /** The model as people say it ("Claude Opus 5.5"). */
+  /** The model as people say it ("Claude Haiku 5.5"). */
   label: string | null
+  /** Which providers have a key in Cloudflare (yes/no only; never the keys). */
+  providers: Record<AiProvider, boolean>
+  /** The models a device may choose from, and the site's defaults (`AI_MODEL`, `AI_PROVIDER`). */
+  models: { id: ClaudeModelId; label: string }[]
+  defaults: { model: ClaudeModelId; provider: AiProviderChoice }
   usage: AiUsage
 }
 
-export async function aiStatus(env: AiHandlerEnv, counters: Counters, now = Date.now()): Promise<AiStatusResponse> {
-  const r = resolveAi(env)
-  return { configured: !!r, provider: r?.provider ?? null, model: r?.model ?? null, label: r ? modelLabel(r.model) : null, usage: await aiUsage(counters, env, now) }
+export async function aiStatus(env: AiHandlerEnv, counters: Counters, now = Date.now(), choice: AiChoice = {}): Promise<AiStatusResponse> {
+  const r = resolveAi(env, choice)
+  return {
+    configured: !!r,
+    provider: r?.provider ?? null,
+    model: r?.model ?? null,
+    label: r ? modelLabel(r.model) : null,
+    providers: configuredProviders(env),
+    models: CLAUDE_MODELS.map(({ id, label }) => ({ id, label })),
+    defaults: { model: defaultModel(env), provider: defaultProvider(env) },
+    usage: await aiUsage(counters, env, now),
+  }
 }
 
 /** Why a request was turned away, for the browser to act on (see src/ai/client.ts). */
@@ -51,6 +85,8 @@ export type AiRequestContext = {
   rateMemory?: Map<string, RateDoc>
   /** Answers to identical requests, kept for each task's `cacheS`. */
   answers: JsonCache
+  /** The visitor's model / provider pick (from `optionsFromHeaders`); the server's defaults fill the rest. */
+  choice?: AiChoice
   now?: number
   /** The model call; swapped out in tests. */
   run?: (ai: ResolvedAi, args: RunAiArgs) => Promise<RunAiResult>
@@ -80,7 +116,7 @@ export async function handleAiPost(body: unknown, env: AiHandlerEnv, ctx: AiRequ
   if (!task) return refuse(label, 404, 'Unknown task')
   const size = JSON.stringify(input ?? null).length
   if (size > (task.maxInputChars ?? 20_000)) return refuse(task.name, 413, 'Input too large')
-  const ai = resolveAi(env)
+  const ai = resolveAi(env, ctx.choice)
   if (!ai) return refuse(task.name, 401, 'AI is not set up on this site.', 'not_configured')
   let prompt: string
   try {
@@ -90,8 +126,9 @@ export async function handleAiPost(body: unknown, env: AiHandlerEnv, ctx: AiRequ
   }
 
   // An answer already paid for: free, so it is neither rate limited nor counted.
+  // Kept per provider and model, so a Sonnet answer is never served to a Haiku request or the other way round.
   const ttl = task.cacheS ?? 0
-  const key = ttl > 0 ? await answerKey(task.name, input, ai.model) : null
+  const key = ttl > 0 ? await answerKey(task.name, input, `${ai.provider}:${ai.model}`) : null
   if (key) {
     const hit = await ctx.answers.get<AiRunResponse>(key)
     if (hit?.ok) return { status: 200, body: hit, headers: { 'cache-control': `public, max-age=${ttl}`, 'x-atc-ai-cache': 'hit' } }

@@ -17,6 +17,7 @@ import { memoryCache } from '../src/api/sourceHealth'
 import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
 import { aiStatus as aiRunStatus, handleAiPost } from '../src/api/ai/handler'
 import { originHeaders } from '../src/api/ai/limits'
+import { optionsFromHeaders } from '../src/api/ai/run'
 import { airnavUsage } from '../src/api/airnav'
 import { memoryStorage, storeCounters } from '../src/api/storage'
 import { NOT_AVAILABLE } from '../src/api/transcribeHandler'
@@ -130,14 +131,15 @@ export function apiDevPlugin(): Plugin {
 
           if (url.pathname === '/api/ai') {
             const env = aiRunEnv()
-            if (req.method === 'GET') return await send(res, jsonResponse(await aiRunStatus(env, devCounters), 200, 'no-store'))
+            const header = (n: string) => (req.headers[n] as string | undefined) ?? null
+            const choice = optionsFromHeaders(header)
+            if (req.method === 'GET') return await send(res, jsonResponse(await aiRunStatus(env, devCounters, Date.now(), choice), 200, 'no-store'))
             let body: unknown
             try {
               body = JSON.parse(await readBody(req))
             } catch {
               return await send(res, jsonResponse({ ok: false, error: 'bad request', status: 400 }, 400, 'no-store'))
             }
-            const header = (n: string) => (req.headers[n] as string | undefined) ?? null
             const from = originHeaders(header)
             const out = await handleAiPost(body, env, {
               self: devOrigin(req.headers.host, from.origin ?? from.referer),
@@ -146,6 +148,7 @@ export function apiDevPlugin(): Plugin {
               counters: devCounters,
               rates: devStore,
               answers: devCache,
+              choice,
             })
             return await send(res, new Response(JSON.stringify(out.body), { status: out.status, headers: { 'content-type': 'application/json', ...out.headers } }))
           }

@@ -8,7 +8,7 @@ const STATUS = { configured: true, provider: 'anthropic', model: 'm', label: 'M'
 
 beforeEach(() => {
   resetAiLimits()
-  useAiSettings.setState({ enabled: true })
+  useAiSettings.setState({ enabled: true, model: null, provider: null })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -33,13 +33,28 @@ describe('askAi sharing', () => {
 })
 
 describe('askAi and the server’s limits', () => {
-  it('sends the task and nothing else: no key, provider or model headers', async () => {
+  it('sends the task and nothing else: no key, and no model or provider while the site decides', async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => json({ ok: true, result: 'pong' }))
     vi.stubGlobal('fetch', fetchMock)
     await askAi('t-plain', { q: 1 })
     const init = fetchMock.mock.calls[0][1]!
     expect(init.headers).toEqual({ 'content-type': 'application/json' })
     expect(JSON.parse(String(init.body))).toEqual({ task: 't-plain', input: { q: 1 } })
+  })
+
+  it('sends this device’s model and provider pick as headers, and keeps each model’s answers apart', async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => json({ ok: true, result: ((init?.headers ?? {}) as Record<string, string>)['x-atc-ai-model'] ?? 'default' }))
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await askAi('t-pick', { q: 1 })).toBe('default')
+    useAiSettings.setState({ model: 'claude-sonnet-5-5', provider: 'openrouter' })
+    expect(await askAi('t-pick', { q: 1 })).toBe('claude-sonnet-5-5')
+    expect(fetchMock.mock.calls[1][1]!.headers).toEqual({ 'content-type': 'application/json', 'x-atc-ai-model': 'claude-sonnet-5-5', 'x-atc-ai-provider': 'openrouter' })
+    // Asking the same again is answered from memory, per model.
+    expect(await askAi('t-pick', { q: 1 })).toBe('claude-sonnet-5-5')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // The status is asked with the same pick, so it names the model that answers.
+    await getAiRunStatus()
+    expect(fetchMock.mock.calls[2]).toEqual(['/api/ai', { headers: { 'x-atc-ai-model': 'claude-sonnet-5-5', 'x-atc-ai-provider': 'openrouter' } }])
   })
 
   it('after "AI daily limit reached", fails fast without asking again, for every task', async () => {
