@@ -618,8 +618,8 @@ export class Track {
       want = clamp(want, 0, CATCH_UP[cls][0] * ref.v + CATCH_UP[cls][1])
       // Never faster than it can shed by the next fix: it arrives at a stop already slowed, and does not run past it.
       want = Math.min(want, this.timing.brakingLimit(T, this.s + this.v * h, 0.85 * lim.decel))
-      if (this.pivot != null) {
-        // Swinging round on the spot before rolling off.
+      if (this.pivot != null && (ref.v > 0.05 || err > 0.5)) {
+        // Time to go: swing round on the spot first, then roll off.
         const d = angleDelta(this.heading, this.pivot)
         const rate = 2.5 * LIMITS[cls].turn
         this.heading = (this.heading + clamp(d, -rate * h, rate * h) + 360) % 360

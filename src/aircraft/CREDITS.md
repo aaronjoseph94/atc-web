@@ -28,7 +28,20 @@ width, engine and tail positions) and are released with the rest of the app:
 - `ac-bizjet`: rear-engined business jet with a T-tail and winglets (Global 6000 proportions)
 - `ac-twin-piston`: light twin (Baron 58 proportions)
 - `ac-heli`: light twin helicopter airframe (H135 class), with the rotor drawn by the renderer
-- `ac-vehicle`, `ac-dot`: plain markers
+- `ac-vehicle`, `ac-dot`: plain markers (`ac-vehicle` is now only the shadow and tap shape of a ground vehicle)
+
+### Ground vehicles
+
+The four airside vehicles on the map (`vehicles.ts`: a yellow follow-me /
+operations car, a pushback tug, a fuel or service truck and an airport fire
+engine) are drawn at runtime as a handful of rounded boxes in canvas, from
+typical published sizes (car 4.9 x 2.0 m, conventional pushback tug about
+7.2 x 3.0 m, refueller about 10.4 x 2.6 m, 6x6 airport fire engine about
+11.6 x 3.0 m). They were drawn for this project; no outside artwork was
+traced or copied, and they are released with the rest of the app. Which one an
+ADS-B ground vehicle gets comes from its emitter category (`C1` emergency
+vehicle: the fire engine) and its callsign (`TUG…`, `FUEL…`); the rest get the
+car.
 
 ## Side views (flight view)
 
