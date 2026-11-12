@@ -28,7 +28,6 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 - **Radio explanations.** A built-in phrasebook translates calls ("hold short 27C" → "stop before runway 27C"). With AI set up by the site owner (see below), live calls are cleaned up and explained by a model before they are shown.
 
 **Everywhere**
-- **Send feedback** (menu or Settings): a few words, optionally a picture of the map, and the app's context (airport, channel, selected flight, version, screen size, recent errors) go to `/api/feedback`, which triages them and can open a GitHub issue (see below).
 - Keyboard shortcuts (`?` lists them), sheets you can drag or pull down to close, tap a runway for its details, press and hold (or right-click) to centre the map, deep links per airport (`/#/JFK`), pinned and recent airports, "near me", units, reduced motion.
 
 ## Stack
@@ -55,7 +54,6 @@ scripts/clips/        Clip generator: scenarios, flight kinematics, speech synth
 src/api/              Types, airport catalog, providers + normalizers, browser client
 src/app/              Shell, top bar, side panel, menu and panels
 src/discovery/        Spotting: rarity scoring of live traffic, the Spotted list, map-tag stars
-src/feedback/         The Send feedback sheet, its context and error ring
 src/flight/           Flight card and full view, plain-language phrasebook
 src/live/             Tower-log event detection, session recorder
 src/map/              Map style, airport diagram generator, aircraft layer, camera, position smoothing
@@ -155,19 +153,6 @@ Because every visitor spends the owner's key, `/api/ai` only answers this site's
 `POST /api/summarize` (a flight's recent calls in a replay) is the older endpoint: built-in phrasebook by default, or a model when `AI_API_KEY` (with `AI_BASE_URL`, `AI_MODEL`: Haiku by default, Sonnet allowed) is set; it counts against the same daily cap.
 
 For local development export the same names in the shell before `npm run dev`.
-
-## Feedback (optional set-up)
-
-`POST /api/feedback` always answers: it sorts the report into bug / idea / data / question with a severity, a one-line summary and the likely part of the code, using the `triageFeedback` AI task when the server has a key and keyword rules otherwise, and shows that back to the sender. It keeps a few reports per person per ten minutes. To have reports filed as GitHub issues (labelled `feedback`, the category, `severity: …` and `area: …`), set these Pages environment variables (or export them before `npm run dev`):
-
-| Variable | What |
-| --- | --- |
-| `GITHUB_FEEDBACK_TOKEN` | Fine-grained token for the repo with *Issues: read and write* (and *Contents: read and write* for screenshots) |
-| `GITHUB_FEEDBACK_REPO` | `owner/repo` that receives the issues |
-| `GITHUB_FEEDBACK_SCREENSHOT_BRANCH` | Optional: an existing branch where map screenshots are stored and linked from the issue; without it screenshots are dropped |
-| `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` | Optional: the site's AI key (see above), also used for AI triage; counted against the daily AI cap |
-
-Without the GitHub variables the triage goes back to the sender and into the Functions log.
 
 ## AI data cleanup (offline)
 

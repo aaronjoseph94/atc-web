@@ -4,12 +4,11 @@
  * at the bottom for when something seems wrong.
  */
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, MessageSquareText } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 import { AIRPORTS } from '../api/airports'
 import { getHealth } from '../api/client'
 import { SpottingSettingsGroup, UnrecognisedDataGroup } from '../discovery/SpottingSettingsGroup'
-import { openFeedback } from '../feedback/store'
 import { usePlayhead } from '../playback/playheadStore'
 import { supportsHaptics } from '../ui/haptics'
 import { Group, Row, SectionLabel, Segmented, Sheet, Toggle } from '../ui/Panel'
@@ -145,12 +144,6 @@ export function SettingsView() {
 
       <AiSettingsGroup />
 
-      <Group className="mt-6">
-        <button type="button" className="pressable-soft -mx-3.5 flex min-h-12 w-[calc(100%+1.75rem)] items-center justify-between rounded-2xl px-3.5 text-left text-subhead font-medium hover:bg-white/[0.04]" onClick={openFeedback}>
-          Send feedback
-          <MessageSquareText className="size-4 text-white/40" />
-        </button>
-      </Group>
 
       <button
         type="button"

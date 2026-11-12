@@ -13,7 +13,6 @@
  */
 import { memo, useEffect, useRef, useState } from 'react'
 import { useSpotter } from '../discovery/useSpotter'
-import { FeedbackSheet } from '../feedback/FeedbackSheet'
 import { FlightCard, FlightDetail } from '../flight/FlightSheet'
 import { useLiveCaptions } from '../hooks/useLiveCaptions'
 import { useShortcuts } from '../hooks/useShortcuts'
@@ -179,7 +178,6 @@ const Modals = memo(function Modals() {
       <WeatherPanel />
       <SettingsView />
       <HelpPanel />
-      <FeedbackSheet />
       <InsightsModals />
     </>
   )

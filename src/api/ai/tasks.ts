@@ -17,7 +17,6 @@ import { flightFacts } from './tasks/flightFacts'
 import { flightStory } from './tasks/flightStory'
 import { ping } from './tasks/ping'
 import { radioCleanup } from './tasks/radioCleanup'
-import { triageFeedback } from './tasks/triageFeedback'
 import { weatherBrief } from './tasks/weatherBrief'
 
 export type AiTask<In = unknown> = {
@@ -47,6 +46,5 @@ export const TASKS: Record<string, AiTask<never>> = {
   [flightStory.name]: flightStory as AiTask<never>,
   [ping.name]: ping as AiTask<never>,
   [radioCleanup.name]: radioCleanup as AiTask<never>,
-  [triageFeedback.name]: triageFeedback as AiTask<never>,
   [weatherBrief.name]: weatherBrief as AiTask<never>,
 }
