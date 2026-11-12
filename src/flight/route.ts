@@ -80,3 +80,45 @@ export function formatDistance(nm: number, unit: SpeedUnit): string {
   const text = v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US')
   return `${text} ${u}`
 }
+
+// ---------------------------------------------------------------------------
+// A route that contradicts what the aircraft is doing
+// ---------------------------------------------------------------------------
+
+/** How the aircraft relates to the airport being watched, for checking its route. */
+export type RouteCheck = {
+  /** The watched airport's code (as the app names it, e.g. `ATL`) and its ICAO code (`KATL`). */
+  here: string
+  hereIcao?: string | null
+  /** Arriving (descending, on final), departing (taking off, climbing) or can't tell (on the ground, level). */
+  heading: 'arriving' | 'departing' | 'unclear'
+  /** Close enough to the field (and low enough) for its route to have to start or end here. */
+  near: boolean
+}
+
+type Ends = { origin: { iata?: string | null; icao?: string | null } | null; destination: { iata?: string | null; icao?: string | null } | null }
+
+/**
+ * Routes come from the flight number, and a number is often flown in both
+ * directions in a day (or re-used), so the free sources can return the other
+ * leg: a flight on final here shown as leaving from here, "2.8 nm flown, 660
+ * to go". Near the field the route must start or end here:
+ *  - arriving, it must end here: if it starts here instead, it is the return
+ *    leg reversed, so flip it;
+ *  - departing, it must start here: if it ends here instead, flip it;
+ *  - if neither end is here (or the direction can't be told and neither end
+ *    matches), the route is wrong and is dropped rather than shown.
+ * Away from the field nothing is checked.
+ */
+export function reconcileRoute<T extends Ends>(info: T, check: RouteCheck): T {
+  if (!check.near || (!info.origin && !info.destination)) return info
+  const codes = new Set([check.here, check.hereIcao, `K${check.here}`].filter(Boolean).map((c) => String(c).toUpperCase()))
+  const isHere = (a: Ends['origin']) => !!a && [a.iata, a.icao].some((c) => !!c && codes.has(c.toUpperCase()))
+  const fromHere = isHere(info.origin)
+  const toHere = isHere(info.destination)
+  const flipped = { ...info, origin: info.destination, destination: info.origin }
+  const dropped = { ...info, origin: null, destination: null }
+  if (check.heading === 'arriving') return toHere ? info : fromHere ? flipped : dropped
+  if (check.heading === 'departing') return fromHere ? info : toHere ? flipped : dropped
+  return fromHere || toHere ? info : dropped
+}
