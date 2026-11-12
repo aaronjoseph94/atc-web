@@ -20,7 +20,8 @@ describe('scrubStoredAiKeys', () => {
     const after = s.data.get(AI_STORAGE_KEY)!
     expect(after).not.toContain('sk-ant-secret')
     expect(after).not.toContain('sk-or-secret')
-    expect(JSON.parse(after)).toEqual({ state: { enabled: false }, version: 2 })
+    // The old provider / model (Opus) went with the keys and are not carried over either.
+    expect(JSON.parse(after)).toEqual({ state: { enabled: false }, version: 3 })
     // Nothing else in the browser's storage is touched.
     expect(s.data.get('atc-web.settings')).toBe('{"keep":"me"}')
   })
@@ -31,11 +32,12 @@ describe('scrubStoredAiKeys', () => {
     expect(JSON.parse(s.data.get(AI_STORAGE_KEY)!).state).toEqual({ enabled: true })
   })
 
-  it('leaves clean storage alone', () => {
-    const clean = JSON.stringify({ state: { enabled: true }, version: 2 })
-    const s = fakeStorage({ [AI_STORAGE_KEY]: clean })
-    expect(scrubStoredAiKeys(s)).toBe(false)
-    expect(s.data.get(AI_STORAGE_KEY)).toBe(clean)
+  it('leaves clean storage alone, including this version’s model and provider pick', () => {
+    for (const clean of [JSON.stringify({ state: { enabled: true }, version: 2 }), JSON.stringify({ state: { enabled: true, model: 'claude-sonnet-5-5', provider: 'openrouter' }, version: 3 })]) {
+      const s = fakeStorage({ [AI_STORAGE_KEY]: clean })
+      expect(scrubStoredAiKeys(s)).toBe(false)
+      expect(s.data.get(AI_STORAGE_KEY)).toBe(clean)
+    }
     expect(scrubStoredAiKeys(fakeStorage())).toBe(false)
     expect(scrubStoredAiKeys(null)).toBe(false)
   })

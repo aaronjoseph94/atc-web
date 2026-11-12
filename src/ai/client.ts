@@ -12,7 +12,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import type { AiRefusal, AiStatusResponse } from '../api/ai/handler'
-import { useAiSettings } from './aiSettings'
+import { choiceHeaders } from '../api/ai/models'
+import { useAiSettings, type AiSettings } from './aiSettings'
+
+/** The headers for this device's model / provider pick (none when both are left to the site). */
+function pickHeaders(s: Pick<AiSettings, 'model' | 'provider'> = useAiSettings.getState()): Record<string, string> {
+  return choiceHeaders({ model: s.model, provider: s.provider })
+}
 
 export class AiUnavailableError extends Error {
   readonly status: number
@@ -86,7 +92,9 @@ export function resetAiLimits() {
 export async function askAi<T = unknown>(task: string, input: unknown, opts: { signal?: AbortSignal; fresh?: boolean } = {}): Promise<T> {
   const s = useAiSettings.getState()
   if (!s.enabled) throw new AiUnavailableError('AI features are switched off in Settings.', 0)
-  const key = JSON.stringify([task, input])
+  const pick = pickHeaders(s)
+  // Each model keeps its own answers: after switching, nothing the other one said is reused.
+  const key = JSON.stringify([task, input, pick])
   if (!opts.fresh) {
     const hit = memo.get(key)
     if (hit) return hit.result as T
@@ -98,7 +106,7 @@ export async function askAi<T = unknown>(task: string, input: unknown, opts: { s
   const p = (async () => {
     const res = await fetch('/api/ai', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...pick },
       body: JSON.stringify({ task, input }),
     })
     const body = (await res.json().catch(() => null)) as { ok?: boolean; result?: unknown; error?: string; provider?: string; model?: string; code?: AiRefusal; retryAfterS?: number } | null
@@ -142,21 +150,23 @@ export type AiStatus = AiStatusResponse
 
 /** Several parts of the app ask at once when it starts; they share one request. */
 const STATUS_SHARE_MS = 20_000
-let statusMemo: { at: number; p: Promise<AiStatus> } | null = null
+let statusMemo: { at: number; pick: string; p: Promise<AiStatus> } | null = null
 
-/** Whether AI is set up on the server, which model answers, and today's usage against the cap. */
+/** Whether AI is set up on the server, which providers have a key, which model answers this device, and today's usage against the cap. */
 export function getAiRunStatus(): Promise<AiStatus> {
   const now = Date.now()
-  if (statusMemo && now - statusMemo.at < STATUS_SHARE_MS) return statusMemo.p
+  const headers = pickHeaders()
+  const pick = JSON.stringify(headers)
+  if (statusMemo && statusMemo.pick === pick && now - statusMemo.at < STATUS_SHARE_MS) return statusMemo.p
   const p = (async () => {
-    const res = await fetch('/api/ai')
+    const res = await fetch('/api/ai', Object.keys(headers).length ? { headers } : undefined)
     if (!res.ok) throw new Error(`AI status ${res.status}`)
     const status = (await res.json()) as AiStatus
     // Already at the cap: treat it as if a request had just been refused, so nothing is sent to find that out.
     if (status.configured && status.usage?.limited) noteRefusal(ALL, 429, 'daily_cap', Math.max(1, Math.ceil((Date.parse(status.usage.resetsAt) - Date.now()) / 1000)), 'AI daily limit reached')
     return status
   })()
-  statusMemo = { at: now, p }
+  statusMemo = { at: now, pick, p }
   p.catch(() => {
     if (statusMemo?.p === p) statusMemo = null
   })
@@ -173,8 +183,11 @@ export function statusAllows(status: Pick<AiStatus, 'configured' | 'usage'> | un
 
 /** The status, shared by Settings and every feature that asks whether AI is ready. */
 export function useAiStatus(enabled = true) {
+  const model = useAiSettings((s) => s.model)
+  const provider = useAiSettings((s) => s.provider)
   // Asked rarely: every visitor's status check is a read of the site's shared counters.
-  return useQuery({ queryKey: ['ai-run-status'], queryFn: getAiRunStatus, staleTime: 5 * 60_000, retry: 0, enabled, refetchOnWindowFocus: false })
+  // Asked again when this device picks another model or provider, so the status names the one that answers.
+  return useQuery({ queryKey: ['ai-run-status', model, provider], queryFn: getAiRunStatus, staleTime: 5 * 60_000, retry: 0, enabled, refetchOnWindowFocus: false, placeholderData: (prev) => prev })
 }
 
 /** True when an AI feature should try: switched on here, set up on the server, and under the daily cap. */

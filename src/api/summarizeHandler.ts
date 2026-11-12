@@ -11,10 +11,13 @@
  *   AI_API_KEY   – provider key. Absent → rules mode.
  *   AI_BASE_URL  – default https://openrouter.ai/api/v1 (OpenAI-compatible).
  *                  Use https://api.anthropic.com for the native Anthropic API.
- *   AI_MODEL     – default anthropic/claude-haiku-5.5 (OpenRouter id) or
- *                  claude-haiku-5-5 for native Anthropic.
+ *   AI_MODEL     – Haiku (the default) or Sonnet, named either way
+ *                  (claude-sonnet-5-5 / anthropic/claude-sonnet-5.5); it is
+ *                  sent in the form the provider expects. Anything else means
+ *                  Haiku, as on /api/ai.
  */
 import { summarizeExchange, type Transmission } from '../flight/describe'
+import { defaultModel, OPENROUTER_MODEL_FOR } from './ai/run'
 
 export type AiEnv = {
   AI_API_KEY?: string
@@ -50,8 +53,9 @@ const MAX_CHARS = 1800
 const AI_TIMEOUT_MS = 9000
 
 const DEFAULT_OPENAI_BASE = 'https://openrouter.ai/api/v1'
-const DEFAULT_OPENAI_MODEL = 'anthropic/claude-haiku-5.5'
-const DEFAULT_ANTHROPIC_MODEL = 'claude-haiku-5-5'
+/** The model for this provider: only Haiku or Sonnet, whatever `AI_MODEL` says. */
+const anthropicModel = (env: AiEnv) => defaultModel(env)
+const openAiModel = (env: AiEnv) => OPENROUTER_MODEL_FOR[defaultModel(env)]
 /**
  * Current models think before answering and that counts toward the cap, so it
  * is sized for thinking plus a two-sentence reply rather than the reply alone.
@@ -75,7 +79,7 @@ export function aiStatus(env: AiEnv): AiStatus {
   return {
     configured: true,
     provider: anthropic ? 'anthropic' : 'openai-compatible',
-    model: env.AI_MODEL || (anthropic ? DEFAULT_ANTHROPIC_MODEL : DEFAULT_OPENAI_MODEL),
+    model: anthropic ? anthropicModel(env) : openAiModel(env),
   }
 }
 
@@ -129,7 +133,7 @@ function userPrompt(req: SummarizeRequest): string {
 
 async function callOpenAiCompatible(env: AiEnv, req: SummarizeRequest, signal: AbortSignal): Promise<string> {
   const base = (env.AI_BASE_URL || DEFAULT_OPENAI_BASE).replace(/\/$/, '')
-  const model = env.AI_MODEL || DEFAULT_OPENAI_MODEL
+  const model = openAiModel(env)
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     signal,
@@ -158,7 +162,7 @@ async function callOpenAiCompatible(env: AiEnv, req: SummarizeRequest, signal: A
 
 async function callAnthropic(env: AiEnv, req: SummarizeRequest, signal: AbortSignal): Promise<string> {
   const base = (env.AI_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '')
-  const model = env.AI_MODEL || DEFAULT_ANTHROPIC_MODEL
+  const model = anthropicModel(env)
   const res = await fetch(`${base}/v1/messages`, {
     method: 'POST',
     signal,
