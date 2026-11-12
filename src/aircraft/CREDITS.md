@@ -46,16 +46,23 @@ car.
 ## Side views (flight view)
 
 The side profiles in the flight view's aircraft card are generated at runtime
-by `sideProfiles.ts` from per-class parameters (fuselage length and height,
-nose and tail-cone lengths, fin size and sweep, wing position, engine size and
-placement, window rows, gear), using each type's published length where we
-have it. They were drawn for this project from published dimensions and
-general arrangement; no outside artwork was traced or copied, and they are
+by `sideProfiles.ts`. Airliners, regional and business jets and turboprops
+come from one parametric drawing, set per family (737, A320, A220, 757, 767,
+777, 787, 747 with its upper deck, A380 with its full double deck, A330,
+A340 with four engines, A350, A300, E-jets, CRJ, ERJ, MD-80/717, ATR, Dash 8,
+King Air class, business jets) from published general-arrangement
+dimensions: fuselage length and height, wingspan, wing position, sweep and
+dihedral, fin height and sweep, winglet style, engine count, nacelle size and
+position, and gear bogies. Each type's own length and span are used where we
+have them. Light aircraft and helicopters have their own drawings. All are
+painted in one neutral finish (no airline livery) by `SideView.tsx`. They were
+drawn for this project; no outside artwork was traced or copied, and they are
 released with the rest of the app.
 
 Candidates looked at and not used: Plane Watch's silhouette set (CC BY-NC-SA,
 non-commercial), tar1090/dump1090 markers (GPL), and Wikimedia Commons
-silhouettes, which are mostly CC BY-SA or military types.
+silhouettes and profiles, which are mostly CC BY-SA (share-alike), military
+types, or carry airline liveries.
 
 ## Type facts
 

@@ -208,6 +208,6 @@ export function aircraftProfile(a: { type?: string | null; category?: string | n
   const facts = typeFacts(a.type)
   // A rotorcraft category wins, as on the map; then the type, then the category.
   const shape: ShapeId = (a.category ?? '').toUpperCase() === 'A7' ? 'ac-heli' : (shapeForType(a.type) ?? shapeForCategory(a.category) ?? 'ac-jet')
-  const title = facts ? `${facts.manufacturer} ${facts.name}` : a.dbName ? `${a.dbManufacturer && !a.dbName.startsWith(a.dbManufacturer) ? `${a.dbManufacturer} ` : ''}${a.dbName}` : a.type ? a.type.toUpperCase() : null
+  const title = facts ? (facts.name.startsWith(facts.manufacturer) ? facts.name : `${facts.manufacturer} ${facts.name}`) : a.dbName ? `${a.dbManufacturer && !a.dbName.startsWith(a.dbManufacturer) ? `${a.dbManufacturer} ` : ''}${a.dbName}` : a.type ? a.type.toUpperCase() : null
   return { shape, facts, title }
 }

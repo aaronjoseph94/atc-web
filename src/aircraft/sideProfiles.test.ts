@@ -126,6 +126,22 @@ describe('sideProfile', () => {
     expect(b744.parts.filter((x) => x.role === 'windows').length).toBeGreaterThan(plain.parts.filter((x) => x.role === 'windows').length)
   })
 
+  it('picks the family from the type: engine count, decks, tail engines', () => {
+    const of = (t: string) => sideProfile({ shape: aircraftProfile({ type: t }).shape, type: t, lengthM: TYPES[t]?.lengthM, spanM: TYPES[t]?.spanM })
+    const nacelles = (t: string) => of(t).parts.filter((x) => x.role === 'nacelle').length
+    // The A340 is drawn with four engines (two near-side), the A330 with two.
+    expect(nacelles('A343')).toBe(2)
+    expect(nacelles('A333')).toBe(1)
+    expect(nacelles('A388')).toBe(2)
+    // The A380's double deck is the tallest fuselage; the 747's hump rises above its main deck.
+    expect(of('A388').height).toBeGreaterThan(of('B744').height)
+    expect(of('B744').body[0]).toBeLessThan(-of('B744').height / 2)
+    expect(of('B77W').body[0]).toBeCloseTo(-of('B77W').height / 2)
+    // Turboprops carry propellers; the CRJ none.
+    expect(of('AT76').parts.some((x) => x.role === 'prop')).toBe(true)
+    expect(of('CRJ9').parts.some((x) => x.role === 'prop')).toBe(false)
+  })
+
   it('draws every type in the facts table', () => {
     for (const [code, f] of Object.entries(TYPES)) {
       const { shape } = aircraftProfile({ type: code })
