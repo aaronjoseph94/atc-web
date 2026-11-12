@@ -5,35 +5,10 @@
  * poll. Anything that fails just leaves the built-in text in place.
  */
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { askAi, getAiRunStatus } from '../ai/client'
-import { useAiSettings } from '../ai/aiSettings'
+import { aiReadyNow, askAi, useAiReady } from '../ai/client'
 
-/** True when an AI feature should try: switched on, and a key on this device or the server. */
-export function useAiReady(): boolean {
-  const s = useAiSettings()
-  const local = !!s.anthropicKey.trim() || !!s.openrouterKey.trim()
-  // Same key as Settings > AI, so the two share one status request.
-  const status = useQuery({
-    queryKey: ['ai-run-status', s.provider, s.model, !!s.anthropicKey, !!s.openrouterKey],
-    queryFn: getAiRunStatus,
-    staleTime: 5 * 60_000,
-    retry: 0,
-    enabled: s.enabled && !local,
-  })
-  return s.enabled && (local || !!status.data?.configured)
-}
-
-/** The same check outside React (alerts run from store subscriptions). */
-export async function aiReadyNow(): Promise<boolean> {
-  const s = useAiSettings.getState()
-  if (!s.enabled) return false
-  if (s.anthropicKey.trim() || s.openrouterKey.trim()) return true
-  try {
-    return (await getAiRunStatus()).configured
-  } catch {
-    return false
-  }
-}
+// Ready means: switched on here, set up on the server, and under the site's daily cap.
+export { aiReadyNow, useAiReady }
 
 /**
  * Run `task` on `input` when AI is ready and `input` is not null; returns the

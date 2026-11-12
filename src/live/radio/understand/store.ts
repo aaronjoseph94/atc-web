@@ -3,15 +3,20 @@
  * instructions), by transmission id, plus whether AI is available at all and
  * the "Explain calls" switch.
  *
- * Results are kept in this browser for a day (like the transcript history),
- * so a reload still shows the cleaned calls; the raw text stays in the
- * history for searching.
+ * A call is published with its cleaned words already in place (see ../gate.ts
+ * and ../transcriber.ts); what is kept here is the rest of the answer, by
+ * call, for a day (like the transcript history), so a reload still has the
+ * explanations, instructions and badges.
  */
 import { create } from 'zustand'
 import type { Understanding } from './result'
 
-/** `unknown`: not checked yet. `on`: a key is set (here or on the server). `off`: no key or switched off. */
-export type AiState = 'unknown' | 'on' | 'off'
+/**
+ * `unknown`: not checked yet. `on`: the server has a key and room under its
+ * daily cap. `off`: not set up, or switched off on this device. `limited`:
+ * set up, but the daily cap is reached (calls are shown unprocessed until it resets).
+ */
+export type AiState = 'unknown' | 'on' | 'off' | 'limited'
 
 export type StoredUnderstanding = Understanding & {
   /** When the call was heard (epoch ms), for expiry and the badge clock. */
@@ -108,9 +113,3 @@ export function setExplain(explain: boolean) {
 
 /** The understanding of one call, if any. */
 export const useUnderstood = (id: string | null | undefined) => useUnderstanding((s) => (id ? s.results[id] : undefined))
-
-/** The words to show for a call: cleaned when there is a cleaned version, else as heard. */
-export function useCallText(id: string, raw: string): { text: string; cleaned: boolean } {
-  const cleaned = useUnderstanding((s) => s.results[id]?.cleaned ?? null)
-  return cleaned ? { text: cleaned, cleaned: true } : { text: raw, cleaned: false }
-}

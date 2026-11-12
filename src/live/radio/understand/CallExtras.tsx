@@ -1,11 +1,11 @@
 /**
- * The AI's additions to a heard call, wherever calls are listed: the cleaned
- * words (faded in over the raw ones when they arrive), a plain-English line
- * under the call, a "Switch to Departure 124.75" chip for a handoff, the
- * "Explain calls" switch, and a flight's story so far.
+ * The AI's part of a heard call, wherever calls are listed: a plain-English
+ * line under the call, a "Switch to Departure 124.75" chip for a handoff,
+ * the "Explain calls" switch, a flight's story so far, and the small
+ * "unprocessed" mark on a call shown without the AI pass.
  *
- * Everything here quietly shows nothing when there is no AI answer: the raw
- * transcript is always there underneath.
+ * A call normally arrives already processed (cleaned words, speaker); see
+ * ../gate.ts. Everything here quietly shows nothing when there is no answer.
  */
 import { ArrowRightLeft, Sparkles } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -16,15 +16,15 @@ import type { Transmission } from '../radioStore'
 import { tuneRadio } from '../useLiveRadio'
 import { handoffLabel, resolveHandoff } from './handoff'
 import type { Instruction } from './instructions'
-import { setExplain, useCallText, useUnderstanding, useUnderstood } from './store'
+import { setExplain, useUnderstanding, useUnderstood } from './store'
 import { threadStory } from './threads'
 import { checkAi } from './understand'
 
 /**
- * Its children, faded in when `swapKey` changes after first render (raw
- * words replaced by cleaned ones), so the change reads as a gentle settle
- * rather than a jump. Nothing animates for a call that was already cleaned
- * when it came into view.
+ * Its children, faded in when `swapKey` changes after first render: a call
+ * shown unprocessed whose answer then arrives settles into its processed
+ * words rather than jumping. Nothing animates for a call that was already
+ * processed when it came into view.
  */
 export function FadeSwap({ swapKey, children, className }: { swapKey: string; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null)
@@ -41,10 +41,27 @@ export function FadeSwap({ swapKey, children, className }: { swapKey: string; ch
   )
 }
 
-/** A call's text, cleaned when available. */
-export function CallText({ call }: { call: Pick<Transmission, 'id' | 'text'> }) {
-  const { text, cleaned } = useCallText(call.id, call.text)
-  return <FadeSwap swapKey={cleaned ? 'cleaned' : 'raw'}>{text}</FadeSwap>
+/**
+ * The quiet mark on a call shown as recognised, without the AI pass (AI off
+ * or over its limit, or the answer was too slow). One component, used by the
+ * caption, the transcript and the flight conversation.
+ */
+export function UnprocessedMark({ className = '' }: { className?: string }) {
+  return (
+    <span data-unprocessed title="Shown as heard; the AI clean-up was not available" className={`ml-1.5 inline-block select-none whitespace-nowrap align-middle text-[10px] font-semibold uppercase leading-none tracking-[0.06em] opacity-45 ${className}`}>
+      unprocessed
+    </span>
+  )
+}
+
+/** A call's words, with the mark when they have not been through the AI pass. */
+export function CallText({ call }: { call: Pick<Transmission, 'id' | 'text' | 'unprocessed'> }) {
+  return (
+    <>
+      <FadeSwap swapKey={call.unprocessed ? 'raw' : 'ready'}>{call.text}</FadeSwap>
+      {call.unprocessed && <UnprocessedMark />}
+    </>
+  )
 }
 
 /** The small sparkle that marks AI-written text. */
@@ -131,11 +148,15 @@ export function CallExtras({ id, tone = 'dark', align = 'start' }: { id: string;
   )
 }
 
-/** One quiet line for the transcript header when there is no AI to clean up calls (no nagging beyond that). */
+/** One quiet line for the transcript header when calls are shown without the AI pass (no nagging beyond that). */
 export function AiHint() {
   const ai = useUnderstanding((s) => s.ai)
-  if (ai !== 'off') return null
-  return <p className="-mt-1.5 mb-2.5 truncate text-caption text-white/40">Add an AI key in Settings to clean up and explain calls</p>
+  if (ai !== 'off' && ai !== 'limited') return null
+  return (
+    <p className="-mt-1.5 mb-2.5 truncate text-caption text-white/40">
+      {ai === 'limited' ? 'AI daily limit reached: calls are shown as heard until tomorrow' : 'AI clean-up is off: calls are shown as heard'}
+    </p>
+  )
 }
 
 /** The transcript header's switch for plain-English lines under every call (shown once AI is known to be available). */

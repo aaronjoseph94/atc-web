@@ -47,6 +47,11 @@ const CREDITS: [string, Credit[]][] = [
     ],
   ],
   ['Radar', [{ name: 'NOAA NEXRAD via Iowa Environmental Mesonet', href: 'https://mesonet.agron.iastate.edu/' }]],
+  ['Routes, airframes', [
+      { name: 'adsbdb.com', href: 'https://www.adsbdb.com' },
+      { name: 'AirNav Radar (for flights nobody else knows)', href: 'https://www.airnavradar.com' },
+    ],
+  ],
   ['Aircraft drawings', [{ name: 'Openclipart (public domain), drawn from published dimensions', href: 'https://openclipart.org' }]],
 ]
 

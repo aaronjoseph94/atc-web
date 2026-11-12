@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import './index.css'
+import { startAiLimitNotice } from './ai/limitNotice'
 // Already part of the app bundle; imported here only for the debug handles below.
 import * as liveSession from './live/session'
 import { useRadio } from './live/radio/radioStore'
@@ -14,6 +15,9 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Says so, once, when the site's AI allowance for the day runs out.
+startAiLimitNotice()
 
 // The end-to-end tests (e2e/) set this flag before the app loads, so the
 // production build they run against exposes the same debug handles as dev.

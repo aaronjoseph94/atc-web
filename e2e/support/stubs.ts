@@ -38,7 +38,23 @@ export type StubOptions = {
   feedsDown?: boolean
   /** LiveATC answers this status instead of a stream. */
   streamStatus?: number
+  /** The AirNav credit count `/api/health` reports (default: not set up). */
+  airnav?: Record<string, unknown>
 }
+
+/** `GET /api/ai` on a site whose owner has not set a key. */
+export const AI_NOT_SET_UP = {
+  configured: false,
+  provider: null,
+  model: null,
+  label: null,
+  usage: { day: '2026-11-12', today: 0, cap: 3000, limited: false, resetsAt: '2026-11-13T00:00:00.000Z', tasks: { radioCleanup: { today: 0, cap: 2100 } }, storage: 'cache' },
+}
+
+/** `GET /api/ai` with a key set in Cloudflare and room under the cap. */
+export const AI_ON = { ...AI_NOT_SET_UP, configured: true, provider: 'anthropic', model: 'claude-opus-5-5', label: 'Claude Opus 5.5', usage: { ...AI_NOT_SET_UP.usage, today: 412, tasks: { radioCleanup: { today: 300, cap: 2100 } } } }
+
+const AIRNAV_NOT_SET_UP = { configured: false, used: 0, today: 0, credits: 100, cap: 90, dailyCap: 3, storage: 'cache' }
 
 /**
  * Runs in the page. A stubbed response arrives all at once and then ends,
@@ -189,7 +205,7 @@ export class Stubs {
     }
     if (p === '/api/health') {
       if (down) return send({ ok: false, provider: null, aircraft: 0, latencyMs: 0, runtime: 'e2e', error: 'all feeds failed', checkedAt: new Date().toISOString() }, 503)
-      return send(json('api/health-JFK.json'))
+      return send({ ...json<Record<string, unknown>>('api/health-JFK.json'), airnav: this.options.airnav ?? AIRNAV_NOT_SET_UP })
     }
     if (p === '/api/summarize') {
       if (req.method() === 'GET') return send(json('api/summarize-status.json'))
@@ -198,10 +214,10 @@ export class Stubs {
       const last = body.transmissions?.at(-1)?.text ?? ''
       return send({ summary: last ? `Last call: ${last}` : 'No calls yet.', source: 'rules' })
     }
-    // No AI key in the tests: the status says so and every task answers as the server would without one.
+    // AI is not set up in the tests: the status says so and every task answers as the server would without a key.
     if (p === '/api/ai') {
-      if (req.method() === 'GET') return send({ configured: false, provider: null, model: null, keySource: null, server: { anthropic: false, openrouter: false } })
-      return send({ ok: false, task: '', error: 'No AI key set. Add a Claude or OpenRouter key in Settings > AI.', status: 401 }, 401)
+      if (req.method() === 'GET') return send(AI_NOT_SET_UP)
+      return send({ ok: false, task: '', error: 'AI is not set up on this site.', status: 401, code: 'not_configured' }, 401)
     }
     if (p === '/api/transcribe') {
       const next = this.transcribeQueue.shift()

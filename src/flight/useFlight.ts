@@ -142,7 +142,8 @@ export function useFlightInfo(flight: FlightView | null) {
   const callsign = flight?.real ? flight.callsign : null
   return useQuery({
     queryKey: ['flight', hex, callsign],
-    queryFn: () => getFlightInfo(hex, callsign),
+    // Only an opened flight reaches this hook, so the server may use its paid last resort for it.
+    queryFn: () => getFlightInfo(hex, callsign, { deep: true }),
     enabled: !!hex,
     staleTime: 30 * 60_000,
     retry: 0,

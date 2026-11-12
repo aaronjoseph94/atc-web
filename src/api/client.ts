@@ -3,8 +3,9 @@
  * served by Cloudflare Pages Functions in production and by the Vite
  * middleware in development.
  */
+import type { AirnavUsage } from './airnav'
 import type { SourceStatus } from './sourceHealth'
-import type { AiStatus, SummarizeRequest, SummarizeResponse } from './summarizeHandler'
+import type { SummarizeRequest, SummarizeResponse } from './summarizeHandler'
 import type { Aircraft, AircraftSnapshot, ClipPack, ClipSummary, FlightInfo, Station, Weather } from './types'
 
 /** Diagnostics payload returned by `/api/health`. */
@@ -19,6 +20,8 @@ export type Health = {
   checkedAt: string
   /** Every upstream source (ADS-B, metadata, weather) with its own status. */
   sources?: SourceStatus[]
+  /** AirNav credits used so far (our own count; the health check never calls AirNav). */
+  airnav?: AirnavUsage
 }
 
 async function getJson<T>(url: string, what: string): Promise<T> {
@@ -46,11 +49,16 @@ export function getWeather(airport = 'ORD'): Promise<Weather> {
   return getJson(`/api/weather?airport=${encodeURIComponent(airport)}`, 'weather')
 }
 
-/** Scheduled route and airframe details for one flight. */
-export function getFlightInfo(hex: string | null, callsign: string | null): Promise<FlightInfo> {
+/**
+ * Scheduled route and airframe details for one flight. `deep` says a person
+ * opened this flight: only then may the server spend one of its few paid
+ * lookups when the free sources know nothing. Never set it from polling or prefetching.
+ */
+export function getFlightInfo(hex: string | null, callsign: string | null, opts: { deep?: boolean } = {}): Promise<FlightInfo & { sources?: string[] }> {
   const q = new URLSearchParams()
   if (hex) q.set('hex', hex)
   if (callsign) q.set('callsign', callsign)
+  if (opts.deep) q.set('deep', '1')
   return getJson(`/api/flight?${q.toString()}`, 'flight info')
 }
 
@@ -66,11 +74,6 @@ export function getStations(): Promise<Station[]> {
 
 export function getHealth(airport = 'ORD'): Promise<Health> {
   return getJson(`/api/health?airport=${encodeURIComponent(airport)}`, 'health')
-}
-
-/** Whether the server has an AI provider configured (never exposes the key). */
-export function getAiStatus(): Promise<AiStatus> {
-  return getJson('/api/summarize', 'AI status')
 }
 
 /** Plain-English summary of a flight's recent radio calls (AI or rules). */
