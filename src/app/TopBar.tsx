@@ -16,6 +16,10 @@ import { agoLabel } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
 import { useDock, useDockActive, useIsWide } from '../ui/layout'
 import { GlassButton } from '../ui/Panel'
+import { SwapText } from '../ui/textMotion'
+import { Ticker } from '../ui/Ticker'
+
+const whole = (v: number | null | undefined) => String(Math.round(v ?? 0))
 
 function StatusPill() {
   const mode = usePlayhead((s) => s.mode)
@@ -74,7 +78,15 @@ function StatusPill() {
         <span className="size-1.5 animate-pulse-dot rounded-full bg-white" />
         LIVE
       </span>
-      <span className="tabular-nums text-white/80">{status === 'ok' ? `${count} aircraft` : 'Connecting…'}</span>
+      <SwapText swapKey={status === 'ok' ? 'ok' : 'waiting'} className="tabular-nums text-white/80">
+        {status === 'ok' ? (
+          <>
+            <Ticker variant="digits" value={count} format={whole} /> aircraft
+          </>
+        ) : (
+          'Connecting…'
+        )}
+      </SwapText>
     </button>
   )
 }

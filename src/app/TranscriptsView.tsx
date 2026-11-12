@@ -42,6 +42,7 @@ import { formatClock } from '../playback/Timeline'
 import { usePlayhead } from '../playback/playheadStore'
 import { Equalizer, SearchField } from '../ui/kit'
 import { PanelFrame } from '../ui/Panel'
+import { ShimmerText, StreamText } from '../ui/textMotion'
 import { speakerColors, type RadioSpeaker } from '../ui/speaker'
 
 /** How rewind clips label their tower-log lines (src/live/recorder.ts); not radio, so not shown here. */
@@ -229,6 +230,7 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   const playingId = useClips((s) => s.playing)
   const transcripts = useRadio((s) => s.transcripts)
   const radioOn = useRadio((s) => s.on && s.status !== 'off' && s.status !== 'nofeed')
+  const pending = useRadio((s) => s.pending)
   const understood = useUnderstanding((s) => s.results)
   const now = useNow(20_000)
 
@@ -331,6 +333,7 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
   const stationLabel = (id: string) => resolveStation(airport, id)?.label ?? ''
   const radioCount = items.length
   const empty = !filtering && hits.length === 0
+  const processing = !playback && !filtering && !empty && radioOn && pending > 0 && transcripts !== 'unavailable'
 
   // The search box and filters. On a phone they stick to the top of the scrolling sheet; in the
   // side panel they sit above the list and never scroll (the panel's header already names the channel).
@@ -493,7 +496,8 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
                           </span>
                           <span className={`mt-0.5 block font-semibold leading-snug text-white/90 ${docked ? 'text-body' : 'text-[21px]'}`}>
                             <FadeSwap swapKey={it.unprocessed ? 'raw' : 'ready'}>
-                              <Marked text={it.text} ranges={h.ranges} />
+                              {/* A call that arrives while the list is open resolves word by word; history and search results just show. */}
+                              {fresh && h.ranges.length === 0 ? <StreamText key={it.id} id={`transcript:${it.id}`} text={it.text} /> : <Marked text={it.text} ranges={h.ranges} />}
                             </FadeSwap>
                             {it.unprocessed && <UnprocessedMark />}
                           </span>
@@ -520,6 +524,12 @@ function TranscriptBody({ docked, onClose, subtitle }: { docked: boolean; onClos
             </section>
           ))}
         </>
+      )}
+      {/* Where the next call will appear, while one waits for its AI pass. */}
+      {processing && (
+        <p className={`motion-fade text-caption font-semibold text-white/55 ${docked ? 'pl-[1.5625rem] pt-1.5' : 'px-3 pt-2'}`} role="status">
+          <ShimmerText>Processing call…</ShimmerText>
+        </p>
       )}
       {playback && hits.length > 0 && <p className="py-6 text-center text-caption text-white/35">Tap a line to jump there.</p>}
       {!playback && radioCount > 0 && hits.length > 0 && (

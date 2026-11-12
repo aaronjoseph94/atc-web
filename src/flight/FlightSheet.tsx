@@ -23,6 +23,7 @@ import { usePlayhead } from '../playback/playheadStore'
 import { formatAltitude, formatSpeed, useSettings } from '../settings/settingsStore'
 import { CARD_BOTTOM, CARD_TOP, registerCardColors, useAirlineTint } from '../ui/airlineTint'
 import { Grabber } from '../ui/Panel'
+import { Reveal } from '../ui/textMotion'
 import { Ticker } from '../ui/Ticker'
 import { usePresence } from '../ui/usePresence'
 import { useSheetDrag } from '../ui/useSheetDrag'
@@ -166,16 +167,19 @@ export function FlightCard() {
             {flight.nowSource === 'radio-ai' ? <Sparkles className="size-3" /> : flight.nowSource === 'radio' ? <Radio className="size-3" /> : null}
             Now
           </span>
-          {flight.now ? (
+          <Reveal
+            ready={!!flight.now}
+            skeleton={
+              <span className="mt-1.5 block space-y-1.5" aria-label="Loading">
+                <span className="skeleton block h-3.5 w-11/12" />
+                <span className="skeleton block h-3.5 w-7/12" />
+              </span>
+            }
+          >
             <span className="mt-0.5 line-clamp-2 block text-[15px] font-medium leading-snug">
-              <Terms text={flight.now} />
+              <Terms text={flight.now ?? ''} />
             </span>
-          ) : (
-            <span className="mt-1.5 block space-y-1.5" aria-label="Loading">
-              <span className="skeleton block h-3.5 w-11/12" />
-              <span className="skeleton block h-3.5 w-7/12" />
-            </span>
-          )}
+          </Reveal>
         </span>
         <ChevronRight className="size-5 shrink-0 text-white/50" />
       </button>
