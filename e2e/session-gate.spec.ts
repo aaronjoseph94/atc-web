@@ -12,6 +12,7 @@ import { expect, test } from './support/test'
 
 const AAL = JFK.departure
 const ATC = 'american one hundred turn left heading two two zero climb and maintain five thousand contact new york departure one three five point niner'
+const CLEANED = 'American 100, turn left heading 220, climb and maintain 5,000, contact New York Departure 135.9.'
 const GATE = { required: true, siteKey: 'e2e-site-key' }
 
 /** Stands in for https://challenges.cloudflare.com/turnstile/v0/api.js: renders nothing, passes at once. */
@@ -30,6 +31,7 @@ async function gateOn(page: Page) {
   const scripts: string[] = []
   const sessions: unknown[] = []
   const aiHeaders: (string | undefined)[] = []
+  const cleanup: { token: string | undefined }[] = []
   let issued = 0
   // Registered after the shared stubs, so these win for the routes they match.
   await page.route(/^https:\/\/challenges\.cloudflare\.com\/turnstile\//, (route: Route) => {
@@ -48,12 +50,13 @@ async function gateOn(page: Page) {
     const token = req.headers()['x-atc-session']
     aiHeaders.push(token)
     const body = req.postDataJSON() as { task: string; input: { text: string } }
+    if (body.task === 'radioCleanup') cleanup.push({ token })
     // The first session is "from another network": refused, so the page must fetch a new one and try again.
     if (token !== 'v1.e2e-2') return send({ ok: false, task: body.task, error: 'check needed', status: 401, code: 'session', siteKey: GATE.siteKey }, 401)
     if (body.task !== 'radioCleanup') return send({ ok: false, task: body.task, error: 'not in this test', status: 503 })
-    return send({ ok: true, task: 'radioCleanup', provider: 'anthropic', model: 'test', result: { cleaned: 'American 100, turn left heading 220.', plain: '', speaker: 'atc', speakerConfidence: 0.9, callsigns: [AAL.callsign], instructions: [] } })
+    return send({ ok: true, task: 'radioCleanup', provider: 'anthropic', model: 'test', result: { cleaned: CLEANED, plain: 'American 100 should turn left to 220°, climb to 5,000 feet and switch to departure on 135.9.', speaker: 'atc', speakerConfidence: 0.9, callsigns: [AAL.callsign], instructions: [] } })
   })
-  return { scripts, sessions, aiHeaders }
+  return { scripts, sessions, aiHeaders, cleanup }
 }
 
 // The refused first session (on purpose, below) is a 401 the browser reports as a failed resource.
@@ -77,8 +80,11 @@ test('with the browser check on, the page gets a session from Turnstile and send
     const s = window.__atc.playhead.getState()
     window.__atc.ingest(t, { stationId: s.stationId, airport: s.airportIcao, kind: 'TWR', endedAt: Date.now(), durationMs: 3000 })
   }, ATC)
-  const transcript = app.view('transcripts', 'Transcripts')
-  await expect(transcript.getByRole('listitem').filter({ hasText: 'American 100, turn left heading 220.' })).toBeVisible()
+  await expect.poll(() => gate.cleanup, { timeout: 20_000 }).toContainEqual(expect.objectContaining({ token: 'v1.e2e-2' }))
+  // The call is published as processed (the AI's words, not marked unprocessed).
+  await expect
+    .poll(() => page.evaluate(() => Object.values(window.__atc.radio.getState().log).flat().map((t) => ({ text: t.text, unprocessed: !!t.unprocessed }))), { timeout: 20_000 })
+    .toContainEqual({ text: CLEANED, unprocessed: false })
   expect(gate.aiHeaders.filter((h) => h === 'v1.e2e-1').length).toBeGreaterThanOrEqual(1)
   expect(gate.aiHeaders).toContain('v1.e2e-2')
   expect(gate.aiHeaders).not.toContain(undefined)
