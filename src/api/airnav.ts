@@ -8,9 +8,10 @@
  *  - only when someone opens a flight (the request says so), never from
  *    polling, health checks or tests;
  *  - one request per flight, never retried;
- *  - a daily cap and a lifetime cap on credits, counted in shared storage
- *    (KV when bound, else this data centre's cache) and in this isolate's
- *    memory, checked before the request is made;
+ *  - a daily cap and a lifetime cap on credits, counted in the AI_KV
+ *    namespace and in this isolate's memory, checked before the request is
+ *    made. Without KV nothing is spent at all: a count kept per data centre
+ *    would let each data centre spend its own daily cap;
  *  - answers, and "nothing known", are remembered (route 6 h, airframe
  *    7 days, nothing known 1 day) so the same flight is not paid for twice;
  *  - a rejected token, an empty account or a rate limit stops all requests
@@ -197,7 +198,7 @@ export type AirnavDeps = {
 }
 
 /** Why AirNav was or was not asked (returned for tests and logs; nothing here is shown to visitors). */
-export type AirnavReason = 'asked' | 'remembered' | 'no-token' | 'no-gap' | 'no-id' | 'daily-cap' | 'total-cap' | 'blocked' | 'busy' | 'failed'
+export type AirnavReason = 'asked' | 'remembered' | 'no-token' | 'no-kv' | 'no-gap' | 'no-id' | 'daily-cap' | 'total-cap' | 'blocked' | 'busy' | 'failed'
 
 type CachedPart<T> = { v: T | null }
 
@@ -211,6 +212,8 @@ const frameKey = (hex: string) => `airnav:ac:${hex}`
 export async function airnavFill<T extends FlightInfo & { sources?: string[] }>(info: T, hex: string | null, callsign: string | null, env: AirnavEnv, deps: AirnavDeps): Promise<{ info: T; reason: AirnavReason }> {
   const token = env.AIRNAV_ODAPI_TOKEN?.trim()
   if (!token) return { info, reason: 'no-token' }
+  // The caps only hold when every data centre shares one count.
+  if (deps.counters.kind !== 'kv') return { info, reason: 'no-kv' }
   // An airframe can only be remembered by its transponder address, so without one only the route is looked for.
   const gaps = { route: flightGaps(info).route, airframe: flightGaps(info).airframe && !!hex }
   if (!gaps.route && !gaps.airframe) return { info, reason: 'no-gap' }
@@ -312,6 +315,8 @@ export async function airnavFill<T extends FlightInfo & { sources?: string[] }>(
 /** Credits used so far, for Settings and `/api/health`. Reads our own tally; never asks AirNav. */
 export type AirnavUsage = {
   configured: boolean
+  /** Credits may be spent: a token is set and the count is kept in KV (`storage: 'kv'`). Without KV lookups stay off. */
+  active: boolean
   /** Credits spent, ever and today: what each answer said it cost, plus one for any request that got no answer. */
   used: number
   today: number
@@ -325,5 +330,6 @@ export type AirnavUsage = {
 export async function airnavUsage(env: AirnavEnv, counters: Counters, now = Date.now()): Promise<AirnavUsage> {
   const caps = airnavCaps(env)
   const [used, today] = await Promise.all([counters.get(KEY.total), counters.get(KEY.day(dayKey(now)))])
-  return { configured: !!env.AIRNAV_ODAPI_TOKEN?.trim(), used, today, credits: caps.credits, cap: caps.total, dailyCap: caps.daily, storage: counters.kind }
+  const configured = !!env.AIRNAV_ODAPI_TOKEN?.trim()
+  return { configured, active: configured && counters.kind === 'kv', used, today, credits: caps.credits, cap: caps.total, dailyCap: caps.daily, storage: counters.kind }
 }

@@ -9,6 +9,7 @@
  * with the site's own key, so each one passes the checks in ./limits.ts
  * first; answers served from the cache cost nothing and are not counted.
  */
+import { gateInfo, sessionAllows, sessionRefusal, type GateInfo, type SessionEnv } from '../session'
 import type { JsonCache } from '../sourceHealth'
 import type { Counters, JsonStore } from '../storage'
 import { aiUsage, checkRate, isSameOrigin, reserveAi, type AiUsage, type LimitEnv, type OriginHeaders, type RateDoc } from './limits'
@@ -32,7 +33,7 @@ import {
 } from './run'
 import { TASKS } from './tasks'
 
-export type AiHandlerEnv = AiEnv & LimitEnv
+export type AiHandlerEnv = AiEnv & LimitEnv & SessionEnv
 
 export type AiStatusResponse = {
   /** A key is set on the server. */
@@ -48,6 +49,8 @@ export type AiStatusResponse = {
   models: { id: ClaudeModelId; label: string }[]
   defaults: { model: ClaudeModelId; provider: AiProviderChoice }
   usage: AiUsage
+  /** Whether paid requests need a session token first (the optional Turnstile gate), and the widget's public key. */
+  session: GateInfo
 }
 
 export async function aiStatus(env: AiHandlerEnv, counters: Counters, now = Date.now(), choice: AiChoice = {}): Promise<AiStatusResponse> {
@@ -61,22 +64,25 @@ export async function aiStatus(env: AiHandlerEnv, counters: Counters, now = Date
     models: CLAUDE_MODELS.map(({ id, label }) => ({ id, label })),
     defaults: { model: defaultModel(env), provider: defaultProvider(env) },
     usage: await aiUsage(counters, env, now),
+    session: gateInfo(env),
   }
 }
 
 /** Why a request was turned away, for the browser to act on (see src/ai/client.ts). */
-export type AiRefusal = 'origin' | 'not_configured' | 'rate_limited' | 'daily_cap' | 'task_cap'
+export type AiRefusal = 'origin' | 'session' | 'not_configured' | 'rate_limited' | 'daily_cap' | 'task_cap'
 
 export type AiRunResponse =
   | { ok: true; task: string; provider: string; model: string; result: unknown }
-  | { ok: false; task: string; error: string; status: number; code?: AiRefusal; retryAfterS?: number }
+  | { ok: false; task: string; error: string; status: number; code?: AiRefusal; retryAfterS?: number; siteKey?: string | null }
 
 export type AiRequestContext = {
   /** This site's origin, and what the request says about where it came from. */
   self: string
   from: OriginHeaders
-  /** Who is asking (IP address), for the rate limit. */
+  /** Who is asking (IP address), for the rate limit and the session check. */
   client: string
+  /** The `x-atc-session` header, needed when the Turnstile gate is on (see ../session.ts). */
+  session?: string | null
   /** Daily request counts. */
   counters: Counters
   /** Per-visitor rate documents (short-lived). */
@@ -112,7 +118,11 @@ export async function handleAiPost(body: unknown, env: AiHandlerEnv, ctx: AiRequ
   const { task: name, input } = (body ?? {}) as { task?: unknown; input?: unknown }
   const label = typeof name === 'string' ? name : ''
   if (!isSameOrigin(ctx.self, ctx.from)) return refuse(label, 403, 'AI requests are only accepted from this site.', 'origin')
-  const task = typeof name === 'string' ? TASKS[name] : undefined
+  if (!(await sessionAllows(env, ctx.session, ctx.client, now))) {
+    const r = refuse(label, 401, '', 'session')
+    return { ...r, body: { ...sessionRefusal(env), task: label } }
+  }
+  const task = typeof name === 'string' && Object.hasOwn(TASKS, name) ? TASKS[name] : undefined
   if (!task) return refuse(label, 404, 'Unknown task')
   const size = JSON.stringify(input ?? null).length
   if (size > (task.maxInputChars ?? 20_000)) return refuse(task.name, 413, 'Input too large')

@@ -261,6 +261,16 @@ export const DEFAULT_AIRPORT = 'ORD'
 
 const byIcao = new Map(AIRPORTS.map((a) => [a.icao, a]))
 
+/**
+ * The airport for a code this site serves (any case), or null. Unlike
+ * `getAirport` there is no fallback: the API answers 404 for anything else
+ * and keys its caches by the canonical code, so a made-up code can neither
+ * miss the cache on purpose nor pass for ORD.
+ */
+export function knownAirport(code: string | null | undefined): AirportConfig | null {
+  return (code && byIcao.get(code.trim().toUpperCase())) || null
+}
+
 /** Case-insensitive lookup; unknown codes resolve to the default airport. */
 export function getAirport(icao: string): AirportConfig {
   return byIcao.get(icao.toUpperCase()) ?? byIcao.get(DEFAULT_AIRPORT)!

@@ -7,13 +7,14 @@ import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import type { Plugin } from 'vite'
-import { handleAircraftRequest, jsonResponse } from '../src/api/aircraftHandler'
-import { allStations } from '../src/api/airports'
+import { handleAircraftRequest, jsonResponse, unknownAirport } from '../src/api/aircraftHandler'
+import { allStations, knownAirport } from '../src/api/airports'
 import { parseFlightQuery } from '../src/api/flightInfoHandler'
 import { fetchFlightDetails } from '../src/api/flightSources'
 import { buildHealth } from '../src/api/healthHandler'
 import { memoryCache } from '../src/api/sourceHealth'
-import { aiStatus, parseSummarizeRequest, summarize } from '../src/api/summarizeHandler'
+import { gateInfo, handleSessionPost, SESSION_HEADER } from '../src/api/session'
+import { aiStatus, parseSummarizeRequest, summarize, summarizeGate } from '../src/api/summarizeHandler'
 import { aiStatus as aiRunStatus, handleAiPost } from '../src/api/ai/handler'
 import { originHeaders } from '../src/api/ai/limits'
 import { optionsFromHeaders } from '../src/api/ai/run'
@@ -40,9 +41,20 @@ const aiEnv = () => ({
   AI_MODEL: process.env.AI_MODEL,
 })
 
+/**
+ * The optional Turnstile gate (off unless both keys are set in the shell; Cloudflare's
+ * documented test keys work here, see docs/ai-setup.md).
+ */
+const sessionEnv = () => ({
+  TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY,
+  TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY,
+  SESSION_SECRET: process.env.SESSION_SECRET,
+})
+
 /** The same keys and caps the deployed `/api/ai` reads from Cloudflare. */
 const aiRunEnv = () => ({
   ...aiEnv(),
+  ...sessionEnv(),
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   AI_PROVIDER: process.env.AI_PROVIDER,
@@ -104,21 +116,40 @@ export function apiDevPlugin(): Plugin {
         if (!url.pathname.startsWith('/api/')) return next()
 
         try {
-          const airport = (url.searchParams.get('airport') ?? 'ORD').toUpperCase()
+          const airport = url.searchParams.get('airport') ?? 'ORD'
+          const header = (n: string) => (req.headers[n] as string | undefined) ?? null
+          const client = req.socket.remoteAddress ?? 'local'
 
           if (url.pathname === '/api/aircraft') {
             return await send(res, await handleAircraftRequest(airport, devCache, sourceEnv()))
           }
 
           if (url.pathname === '/api/health') {
-            const opts = { env: sourceEnv(), cache: devCache, probeAll: url.searchParams.get('probe') === 'all' }
+            const health = await buildHealth(airport, 'vite-dev', undefined, { env: sourceEnv(), cache: devCache })
+            if (!health) return await send(res, unknownAirport())
             // The AirNav fallback is never called from the dev server (its credit count would not survive a restart); this only reports that.
             const airnav = await airnavUsage({}, devCounters)
-            return await send(res, jsonResponse({ ...(await buildHealth(airport, 'vite-dev', undefined, opts)), airnav }, 200, 'no-store'))
+            return await send(res, jsonResponse({ ...health, airnav }, 200, 'no-store'))
           }
 
           if (url.pathname === '/api/weather') {
-            return await send(res, jsonResponse(await fetchWeather(airport, sourceEnv()), 200, 'public, max-age=60'))
+            const known = knownAirport(airport)
+            if (!known) return await send(res, unknownAirport())
+            return await send(res, jsonResponse(await fetchWeather(known.icao, sourceEnv()), 200, 'public, max-age=60'))
+          }
+
+          if (url.pathname === '/api/session') {
+            const env = sessionEnv()
+            if (req.method === 'GET') return await send(res, jsonResponse(gateInfo(env), 200, 'no-store'))
+            let body: unknown
+            try {
+              body = JSON.parse(await readBody(req))
+            } catch {
+              return await send(res, jsonResponse({ ok: false, code: 'bad_request', error: 'bad request' }, 400, 'no-store'))
+            }
+            const from = originHeaders(header)
+            const out = await handleSessionPost(body, env, { self: devOrigin(req.headers.host, from.origin ?? from.referer), from, client })
+            return await send(res, new Response(JSON.stringify(out.body), { status: out.status, headers: { 'content-type': 'application/json', ...out.headers } }))
           }
 
           if (url.pathname === '/api/flight') {
@@ -130,7 +161,6 @@ export function apiDevPlugin(): Plugin {
 
           if (url.pathname === '/api/ai') {
             const env = aiRunEnv()
-            const header = (n: string) => (req.headers[n] as string | undefined) ?? null
             const choice = optionsFromHeaders(header)
             if (req.method === 'GET') return await send(res, jsonResponse(await aiRunStatus(env, devCounters, Date.now(), choice), 200, 'no-store'))
             let body: unknown
@@ -143,7 +173,8 @@ export function apiDevPlugin(): Plugin {
             const out = await handleAiPost(body, env, {
               self: devOrigin(req.headers.host, from.origin ?? from.referer),
               from,
-              client: req.socket.remoteAddress ?? 'local',
+              client,
+              session: header(SESSION_HEADER),
               counters: devCounters,
               rates: devStore,
               answers: devCache,
@@ -156,7 +187,11 @@ export function apiDevPlugin(): Plugin {
             if (req.method === 'GET') return await send(res, jsonResponse(aiStatus(aiEnv()), 200, 'no-store'))
             try {
               const parsed = parseSummarizeRequest(JSON.parse(await readBody(req)))
-              return await send(res, jsonResponse(await summarize(parsed, aiEnv()), 200, 'no-store'))
+              const env = aiRunEnv()
+              const from = originHeaders(header)
+              const gate = await summarizeGate(env, { self: devOrigin(req.headers.host, from.origin ?? from.referer), from, client, session: header(SESSION_HEADER), counters: devCounters, rates: devStore })
+              if ('refuse' in gate) return await send(res, jsonResponse(gate.refuse, 401, 'no-store'))
+              return await send(res, jsonResponse(await summarize(parsed, gate.useAi ? aiEnv() : {}), 200, 'no-store'))
             } catch (err) {
               return await send(res, jsonResponse({ error: err instanceof Error ? err.message : 'bad request' }, 400, 'no-store'))
             }

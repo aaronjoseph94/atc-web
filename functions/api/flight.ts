@@ -9,19 +9,23 @@
  * know neither the route nor the airframe, and the owner has set an AirNav
  * token (AIRNAV_ODAPI_TOKEN), that one request may spend an AirNav credit to
  * fill the gap, within the daily and lifetime caps (see src/api/airnav.ts).
+ * Credits are only spent when the counts are kept in KV (AI_KV bound), the
+ * request comes from this site and, with the Turnstile gate on, carries a
+ * valid session token (x-atc-session).
  */
 import { jsonResponse } from '../../src/api/aircraftHandler'
 import { isSameOrigin, originHeaders } from '../../src/api/ai/limits'
 import { airnavFill, flightGaps, type AirnavEnv } from '../../src/api/airnav'
 import { cacheApiJson } from '../../src/api/edgeCache'
 import { parseFlightQuery } from '../../src/api/flightInfoHandler'
+import { SESSION_HEADER, sessionAllows, type SessionEnv } from '../../src/api/session'
 import { fetchFlightDetails, FLIGHT_TTL_S } from '../../src/api/flightSources'
 import { durableStore, edgeStores, exactCounters } from '../../src/api/storage'
 import type { FlightInfo } from '../../src/api/types'
 
 const EDGE_TTL_S = 6 * 3600
 
-type Env = AirnavEnv & { AI_KV?: KVNamespace }
+type Env = AirnavEnv & SessionEnv & { AI_KV?: KVNamespace }
 type Details = FlightInfo & { sources: string[] }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env, waitUntil }) => {
@@ -29,7 +33,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, waitUntil
   const q = parseFlightQuery(url.searchParams.get('hex'), url.searchParams.get('callsign'))
   if (!q.hex && !q.callsign) return jsonResponse({ error: 'hex or callsign required' }, 400, 'no-store')
   // Credits are only ever spent for a flight opened on this site's own pages.
-  const deep = url.searchParams.get('deep') === '1' && !!env.AIRNAV_ODAPI_TOKEN?.trim() && isSameOrigin(url.origin, originHeaders((n) => request.headers.get(n)))
+  const deep =
+    url.searchParams.get('deep') === '1' &&
+    !!env.AIRNAV_ODAPI_TOKEN?.trim() &&
+    isSameOrigin(url.origin, originHeaders((n) => request.headers.get(n))) &&
+    (await sessionAllows(env, request.headers.get(SESSION_HEADER), request.headers.get('cf-connecting-ip') ?? 'anonymous'))
 
   const cacheKey = new Request(`${url.origin}/api/flight?hex=${q.hex ?? ''}&callsign=${q.callsign ?? ''}`, { method: 'GET' })
   const cache = caches.default

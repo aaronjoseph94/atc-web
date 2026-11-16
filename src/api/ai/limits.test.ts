@@ -1,7 +1,7 @@
 /* oxlint-disable no-await-in-loop -- the steps in these tests happen one after another on purpose */
 import { describe, expect, it } from 'vitest'
 import { memoryStorage, storeCounters } from '../storage'
-import { aiCaps, aiUsage, checkRate, isSameOrigin, reserveAi, stepRate, type RateDoc } from './limits'
+import { aiCaps, aiUsage, checkRate, ipPrefix, isSameOrigin, reserveAi, stepRate, type RateDoc } from './limits'
 
 const SELF = 'https://atc-web-62t.pages.dev'
 const from = (h: Partial<{ origin: string; referer: string; fetchSite: string }>) => ({ origin: h.origin ?? null, referer: h.referer ?? null, fetchSite: h.fetchSite ?? null })
@@ -82,6 +82,40 @@ describe('checkRate', () => {
     const env = { AI_RATE_BURST: '1', AI_RATE_PER_MIN: '10' }
     expect((await checkRate(store, 'a', env, 5000, new Map())).ok).toBe(true)
     expect((await checkRate(store, 'a', env, 5001, new Map())).ok).toBe(false)
+  })
+  it('counts an IPv6 visitor by its /64, so rotating addresses inside it does not reset the limit', async () => {
+    const store = memoryStorage()
+    const env = { AI_RATE_BURST: '3', AI_RATE_PER_MIN: '10' }
+    const mem = new Map<string, RateDoc>()
+    const out: boolean[] = []
+    for (let i = 1; i <= 5; i++) out.push((await checkRate(store, `2001:db8:abcd:12::${i.toString(16)}:${(i * 7919).toString(16)}`, env, 1_000_000 + i, mem)).ok)
+    expect(out).toEqual([true, true, true, false, false])
+    // The next /64 over is someone else.
+    expect((await checkRate(store, '2001:db8:abcd:13::1', env, 1_000_010, mem)).ok).toBe(true)
+    // IPv4 is still counted per address.
+    expect((await checkRate(store, '192.0.2.1', env, 1_000_011, mem)).ok).toBe(true)
+    expect((await checkRate(store, '192.0.2.2', env, 1_000_012, mem)).ok).toBe(true)
+  })
+})
+
+describe('ipPrefix', () => {
+  it('keeps IPv4 as it is and reduces IPv6 to its /64', () => {
+    expect(ipPrefix('203.0.113.7')).toBe('203.0.113.7')
+    expect(ipPrefix('2001:db8:abcd:0012:1:2:3:4')).toBe('2001:db8:abcd:12::/64')
+    expect(ipPrefix('2001:DB8:ABCD:12::9')).toBe('2001:db8:abcd:12::/64')
+    expect(ipPrefix('2001:db8::1')).toBe('2001:db8:0:0::/64')
+    expect(ipPrefix('::1')).toBe('0:0:0:0::/64')
+    expect(ipPrefix('fe80::1%eth0')).toBe('fe80:0:0:0::/64')
+    expect(ipPrefix('[2001:db8:1:2::3]')).toBe('2001:db8:1:2::/64')
+  })
+  it('treats IPv4 written as IPv6 as IPv4, and leaves anything else alone', () => {
+    expect(ipPrefix('::ffff:198.51.100.4')).toBe('198.51.100.4')
+    expect(ipPrefix('::ffff:c633:6404')).toBe('198.51.100.4')
+    expect(ipPrefix('anonymous')).toBe('anonymous')
+    expect(ipPrefix('1:2:3')).toBe('1:2:3')
+    expect(ipPrefix('1::2::3')).toBe('1::2::3')
+    expect(ipPrefix('1:2:3:4:5:6:7:8:9')).toBe('1:2:3:4:5:6:7:8:9')
+    expect(ipPrefix('2001:db8::zz')).toBe('2001:db8::zz')
   })
 })
 

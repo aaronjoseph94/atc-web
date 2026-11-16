@@ -9,7 +9,7 @@
  */
 import { ALL_PROVIDERS, getJson, getText, handleAircraftRequest, providersFor, type SourceEnv } from './aircraftHandler'
 import { icaoCode } from './airportData'
-import { getAirport } from './airports'
+import { getAirport, knownAirport } from './airports'
 import type { Health } from './client'
 import { errorText, noCache, sourceHealth, type JsonCache, type SourceHealth, type SourceKind, type SourceStatus } from './sourceHealth'
 
@@ -21,8 +21,6 @@ const PROBE_HEX = 'a0b169'
 export type HealthOptions = {
   env?: SourceEnv
   cache?: JsonCache
-  /** Also probe last-resort feeds (OpenSky's anonymous allowance is small, so off by default). */
-  probeAll?: boolean
   health?: SourceHealth
 }
 
@@ -55,7 +53,7 @@ export async function probeSources(airport: string, opts: HealthOptions = {}): P
     const live = active.find((a) => a.name === p.name)
     if (!live) {
       passive.push({ ...health.status(p.name, 'adsb'), enabled: false, note: 'Needs the provider’s permission first (see docs/data-sources.md)' })
-    } else if (live.lastResort && !opts.probeAll) {
+    } else if (live.lastResort) {
       // Report what real traffic requests last saw instead of spending the allowance.
       passive.push({ ...health.status(p.name, 'adsb'), note: 'Last resort; not probed (small anonymous allowance)' })
     } else if (live.minIntervalMs != null && health.sinceLastAttempt(p.name) < live.minIntervalMs + 1000) {
@@ -91,9 +89,13 @@ export async function probeSources(airport: string, opts: HealthOptions = {}): P
   return [...results, ...passive].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
 }
 
-export async function buildHealth(airport: string, runtime: string, region?: string, opts: HealthOptions = {}): Promise<Health> {
+/** Diagnostics for one airport; null when the code is not one this site serves (callers answer 404). */
+export async function buildHealth(airport: string, runtime: string, region?: string, opts: HealthOptions = {}): Promise<Health | null> {
+  const known = knownAirport(airport)
+  if (!known) return null
+  airport = known.icao
   const cache = opts.cache ?? noCache
-  const key = `health:${airport}:${opts.probeAll ? 'all' : 'std'}`
+  const key = `health:${airport}:std`
   const hit = await cache.get<Health>(key)
   if (hit) return hit
 

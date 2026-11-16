@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { memoryCache } from '../sourceHealth'
 import { memoryStorage, storeCounters } from '../storage'
 import { aiStatus, handleAiPost, type AiRequestContext } from './handler'
+import { signSession } from '../session'
 import type { ResolvedAi, RunAiArgs, RunAiResult } from './run'
 
 const SELF = 'https://atc.test'
@@ -64,6 +65,12 @@ describe('handleAiPost', () => {
   it('rejects unknown tasks and oversized input', async () => {
     const { c } = ctx()
     expect((await handleAiPost({ task: 'nope', input: {} }, KEY, c)).status).toBe(404)
+    // Names inherited from Object.prototype are not tasks.
+    for (const task of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+      const out = await handleAiPost({ task, input: {} }, KEY, c)
+      expect(out.status).toBe(404)
+      expect(out.body).toMatchObject({ ok: false, error: 'Unknown task' })
+    }
     expect((await handleAiPost({ task: 'ping', input: { junk: 'x'.repeat(30_000) } }, KEY, c)).status).toBe(413)
   })
 
@@ -172,5 +179,41 @@ describe('handleAiPost', () => {
     })
     expect(JSON.stringify(st)).not.toContain('SECRET')
     expect(await aiStatus(env, c.counters, now, { model: 'claude-haiku-5-5', provider: 'anthropic' })).toMatchObject({ provider: 'anthropic', model: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' })
+  })
+})
+
+describe('handleAiPost with the Turnstile gate on', () => {
+  const GATE = { ...KEY, TURNSTILE_SITE_KEY: 'site-key', TURNSTILE_SECRET_KEY: 'secret-key' }
+
+  it('wants a session token first, and says which widget to run', async () => {
+    const { c, run } = ctx()
+    const out = await handleAiPost(ping, GATE, c)
+    expect(out.status).toBe(401)
+    expect(out.body).toMatchObject({ ok: false, code: 'session', siteKey: 'site-key', task: 'ping' })
+    expect(JSON.stringify(out.body)).not.toContain('secret-key')
+    expect(run).not.toHaveBeenCalled()
+    expect((await aiStatus(GATE, c.counters, now)).usage.today).toBe(0)
+  })
+
+  it('runs with a token issued to this visitor, and not with one issued to another network or expired', async () => {
+    const mine = (await signSession(GATE, '203.0.113.7', now)).token
+    const theirs = (await signSession(GATE, '198.51.100.1', now)).token
+    const { c, run } = ctx({ session: mine })
+    expect((await handleAiPost(ping, GATE, c)).status).toBe(200)
+    expect((await handleAiPost(ping, GATE, ctx({ session: theirs }).c)).status).toBe(401)
+    expect((await handleAiPost(ping, GATE, ctx({ session: mine, now: now + 31 * 60_000 }).c)).status).toBe(401)
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('still checks the origin first, and the status tells the page the gate is on (public key only)', async () => {
+    const { c } = ctx({ from: { origin: 'https://evil.example', referer: null, fetchSite: 'cross-site' } })
+    expect((await handleAiPost(ping, GATE, c)).body).toMatchObject({ code: 'origin' })
+    expect((await aiStatus(GATE, c.counters, now)).session).toEqual({ required: true, siteKey: 'site-key' })
+    expect((await aiStatus(KEY, c.counters, now)).session).toEqual({ required: false, siteKey: null })
+  })
+
+  it('changes nothing while the gate is off', async () => {
+    const { c } = ctx()
+    expect((await handleAiPost(ping, { ...KEY, TURNSTILE_SITE_KEY: 'site-key' }, c)).status).toBe(200)
   })
 })

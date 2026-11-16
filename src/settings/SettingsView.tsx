@@ -237,7 +237,7 @@ function BackendStatus() {
               <span className="font-medium tabular-nums">
                 AirNav credits used: {h.airnav.used} of {h.airnav.credits} (today {h.airnav.today} of {h.airnav.dailyCap})
               </span>
-              <span className="text-atc-muted"> · stops at {h.airnav.cap}{h.airnav.storage === 'cache' ? ' · counted per region (approximate)' : ''}</span>
+              <span className="text-atc-muted"> · stops at {h.airnav.cap}{h.airnav.storage !== 'kv' ? ' · paused until a KV namespace is bound' : ''}</span>
             </>
           ) : (
             <span className="text-atc-muted">AirNav last-resort lookups: not set up</span>

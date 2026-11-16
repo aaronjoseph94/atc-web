@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import type { AiRefusal, AiStatusResponse } from '../api/ai/handler'
 import { choiceHeaders } from '../api/ai/models'
+import { fetchWithSession, noteGate } from '../api/sessionClient'
 import { useAiSettings, type AiSettings } from './aiSettings'
 
 /** The headers for this device's model / provider pick (none when both are left to the site). */
@@ -74,6 +75,8 @@ function noteRefusal(task: string, status: number, code: AiRefusal | null, retry
     blocks.set(key, { until, code, message })
     useAiLimit.setState({ limited: { code, task: code === 'task_cap' ? task : null, until } })
   } else if (code === 'rate_limited') blocks.set(ALL, { until: now + Math.min(wait, 60_000), code, message })
+  // The browser check (Turnstile) did not pass even after a fresh try: wait a minute before the next attempt.
+  else if (code === 'session') blocks.set(ALL, { until: now + 60_000, code, message })
   else if (code === 'not_configured' || code === 'origin' || status === 401) blocks.set(ALL, { until: now + 5 * 60_000, code: code ?? 'not_configured', message })
 }
 
@@ -104,7 +107,7 @@ export async function askAi<T = unknown>(task: string, input: unknown, opts: { s
   const blocked = aiBlocked(task)
   if (blocked) throw new AiUnavailableError(blocked.message, blocked.code === 'not_configured' ? 401 : 429, blocked.code)
   const p = (async () => {
-    const res = await fetch('/api/ai', {
+    const res = await fetchWithSession('/api/ai', {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...pick },
       body: JSON.stringify({ task, input }),
@@ -162,6 +165,8 @@ export function getAiRunStatus(): Promise<AiStatus> {
     const res = await fetch('/api/ai', Object.keys(headers).length ? { headers } : undefined)
     if (!res.ok) throw new Error(`AI status ${res.status}`)
     const status = (await res.json()) as AiStatus
+    // The owner's optional bot check: when it is on, get a session before the first paid request.
+    noteGate(status.session)
     // Already at the cap: treat it as if a request had just been refused, so nothing is sent to find that out.
     if (status.configured && status.usage?.limited) noteRefusal(ALL, 429, 'daily_cap', Math.max(1, Math.ceil((Date.parse(status.usage.resetsAt) - Date.now()) / 1000)), 'AI daily limit reached')
     return status

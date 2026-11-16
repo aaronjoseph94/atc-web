@@ -20,7 +20,7 @@
  * next one, and a per-source circuit breaker skips a feed that keeps failing.
  * Which feeds answered travels with the response so the UI can credit them.
  */
-import { getAirport, type AirportConfig } from './airports'
+import { getAirport, knownAirport, type AirportConfig } from './airports'
 import {
   mergeAircraft,
   normalizeOpenSkyStates,
@@ -413,7 +413,10 @@ export async function handleAircraftRequest(
   cache: JsonCache,
   env: SourceEnv = {},
 ): Promise<Response> {
-  const code = airport.toUpperCase().slice(0, 4)
+  const known = knownAirport(airport)
+  if (!known) return unknownAirport()
+  // The canonical code, so every spelling of one airport shares one cache entry and one upstream round.
+  const code = known.icao
   const freshKey = `aircraft:${code}`
   const staleKey = `aircraft-stale:${code}`
 
@@ -461,6 +464,11 @@ function aircraftResponse(snap: CachedSnapshot, maxAge: number): Response {
 /** Header values must be Latin-1 and short; upstream error text is neither guaranteed. */
 function headerSafe(s: string): string {
   return s.replace(/[^\x20-\x7e]/g, '?').slice(0, 300)
+}
+
+/** The answer for an airport code this site does not serve (cached briefly: the list only changes with a deploy). */
+export function unknownAirport(): Response {
+  return jsonResponse({ error: 'unknown airport', code: 'unknown_airport' }, 404, 'public, max-age=300')
 }
 
 /** JSON `Response` helper with permissive CORS (the API is public, read-only). */

@@ -5,8 +5,17 @@
  *
  * Shared by the Pages Function (`functions/api/transcribe.ts`) and the dev
  * server, which has no Workers AI binding and answers 501 instead.
+ *
+ * Every call runs on the owner's Cloudflare account, so, as for `/api/ai`:
+ * only this site's pages may ask (a request naming no origin at all is
+ * refused), a session token is needed when the Turnstile gate is on
+ * (./session.ts), each visitor (IPv4 address or IPv6 /64) is rate limited,
+ * and the whole site stops at `TRANSCRIBE_DAILY_CAP` calls a day.
  */
 import { jsonResponse } from './aircraftHandler'
+import { ipPrefix, isSameOrigin, originHeaders } from './ai/limits'
+import { SESSION_HEADER, sessionAllows, sessionRefusal, type SessionEnv } from './session'
+import { DAY_TTL_S, dayKey, memoryStorage, secondsToNextDay, storeCounters, type Counters } from './storage'
 
 export const WHISPER_MODEL = '@cf/openai/whisper-large-v3-turbo'
 
@@ -21,7 +30,29 @@ export const NOT_AVAILABLE = 'Live transcripts need the deployed site'
 
 /** The slice of the Workers AI binding this endpoint uses. */
 export type AiBinding = { run: (model: string, input: Record<string, unknown>) => Promise<unknown> }
-export type TranscribeEnv = { AI?: AiBinding }
+export type TranscribeEnv = SessionEnv & {
+  AI?: AiBinding
+  /** Most transcriptions a day, site-wide (default 2000; 0 switches transcripts off). */
+  TRANSCRIBE_DAILY_CAP?: string
+}
+
+export const DEFAULT_TRANSCRIBE_DAILY_CAP = 2000
+
+export function transcribeDailyCap(env: Pick<TranscribeEnv, 'TRANSCRIBE_DAILY_CAP'>): number {
+  const raw = (env.TRANSCRIBE_DAILY_CAP ?? '').trim()
+  const n = Number(raw)
+  return raw !== '' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULT_TRANSCRIBE_DAILY_CAP
+}
+
+const transcribeKey = (day: string) => `stt:${day}:total`
+
+/** Count one transcription about to run, unless the site-wide daily cap says no. */
+export async function reserveTranscribe(counters: Counters, env: Pick<TranscribeEnv, 'TRANSCRIBE_DAILY_CAP'>, now: number): Promise<{ ok: true } | { ok: false; retryAfterS: number }> {
+  const key = transcribeKey(dayKey(now))
+  if ((await counters.get(key)) >= transcribeDailyCap(env)) return { ok: false, retryAfterS: secondsToNextDay(now) }
+  await counters.add(key, 1, DAY_TTL_S)
+  return { ok: true }
+}
 
 export type TranscriptWord = { word: string; start: number; end: number }
 export type TranscriptSegment = { start: number; end: number; text: string; words?: TranscriptWord[] }
@@ -133,30 +164,31 @@ function base64(bytes: Uint8Array): string {
   return btoa(s)
 }
 
-/** True when the request comes from a page on this same site (or has no Origin, like curl). */
-export function sameSite(request: Request): boolean {
-  const origin = request.headers.get('Origin')
-  if (!origin) return true
-  try {
-    const o = new URL(origin)
-    const u = new URL(request.url)
-    return o.host === u.host || o.hostname === 'localhost' || o.hostname === '127.0.0.1'
-  } catch {
-    return false
-  }
+/** Where the daily count is kept when the caller passes no counters (tests, a bare call): this isolate's memory. */
+const fallbackCounters = storeCounters(memoryStorage())
+
+export type TranscribeDeps = {
+  limiter?: RateLimiter
+  /** The site-wide daily count (KV when bound, else the data centre's cache; see ./storage.ts). */
+  counters?: Counters
+  now?: number
 }
 
 /**
  * POST /api/transcribe?facility=JFK%20Tower&callsigns=Delta%20288,...
  * Body: a 16-bit PCM WAV of one transmission.
  */
-export async function handleTranscribe(request: Request, env: TranscribeEnv, limiter = transcribeLimiter): Promise<Response> {
+export async function handleTranscribe(request: Request, env: TranscribeEnv, deps: TranscribeDeps = {}): Promise<Response> {
+  const limiter = deps.limiter ?? transcribeLimiter
+  const now = deps.now ?? Date.now()
   if (!env.AI) return jsonResponse({ error: NOT_AVAILABLE, code: 'no-ai' }, 501, 'no-store')
-  if (!sameSite(request)) return jsonResponse({ error: 'forbidden' }, 403, 'no-store')
+  // The same strict check as /api/ai: a request that names no origin at all (a script) is refused too.
+  if (!isSameOrigin(new URL(request.url).origin, originHeaders((n) => request.headers.get(n)))) return jsonResponse({ error: 'forbidden', code: 'origin' }, 403, 'no-store')
+  const client = request.headers.get('CF-Connecting-IP') ?? 'local'
+  if (!(await sessionAllows(env, request.headers.get(SESSION_HEADER), client, now))) return jsonResponse(sessionRefusal(env), 401, 'no-store')
   const declared = Number(request.headers.get('Content-Length') ?? 0)
   if (declared > MAX_WAV_BYTES) return jsonResponse({ error: 'audio too large' }, 413, 'no-store')
-  const client = request.headers.get('CF-Connecting-IP') ?? 'local'
-  if (!limiter.take(client)) return jsonResponse({ error: 'slow down' }, 429, 'no-store')
+  if (!limiter.take(ipPrefix(client), now)) return jsonResponse({ error: 'slow down', code: 'rate_limited' }, 429, 'no-store')
 
   const bytes = new Uint8Array(await request.arrayBuffer())
   if (bytes.length > MAX_WAV_BYTES) return jsonResponse({ error: 'audio too large' }, 413, 'no-store')
@@ -165,6 +197,13 @@ export async function handleTranscribe(request: Request, env: TranscribeEnv, lim
     return jsonResponse({ error: 'expected 16-bit mono PCM WAV' }, 415, 'no-store')
   }
   if (wav.durationS > MAX_SECONDS || wav.durationS < MIN_SECONDS) return jsonResponse({ error: 'transmission length out of range' }, 422, 'no-store')
+
+  const slot = await reserveTranscribe(deps.counters ?? fallbackCounters, env, now)
+  if (!slot.ok) {
+    const res = jsonResponse({ error: 'Live transcripts daily limit reached', code: 'daily_cap', retryAfterS: slot.retryAfterS }, 429, 'no-store')
+    res.headers.set('Retry-After', String(slot.retryAfterS))
+    return res
+  }
 
   const url = new URL(request.url)
   const prompt = buildPrompt(url.searchParams.get('facility'), url.searchParams.get('callsigns'))
