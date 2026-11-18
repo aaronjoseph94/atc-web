@@ -425,7 +425,7 @@ export const AIRCRAFT_TTL_S = 4
  * that; a key spends its own quota and can be asked more often.
  */
 const LOL_GAP_NO_KEY_S = 170
-const LOL_GAP_KEY_S = 12
+const LOL_GAP_KEY_S = 15
 /** adsb.fi allows 1 request/s per IP. Two seconds leaves room for a second airport. */
 const FI_GAP_S = 2
 /** A 403 is usually a ban; hammering it extends the ban. Stay away for half an hour. */

@@ -23,7 +23,7 @@ Two things need the owner's action now:
   doubling while it keeps failing (up to 5 min); a `429` pauses it for a minute, a `403` for 5 minutes.
   Feeds with a per-second limit are not called again inside that interval. A second, colo-wide pause
   (`withFeedGuards` in `aircraftHandler.ts`) is what actually protects the shared egress IP: adsb.fi at most
-  once every 2 s, adsb.lol once every 12 s with a key or once every 170 s without one, and a 403 keeps that
+  once every 2 s, adsb.lol once every 15 s with a key or once every 170 s without one, and a 403 keeps that
   feed quiet for 30 minutes so a ban is not refreshed on every poll. Health checks honour the same pause.
 - `GET /api/health?airport=JFK` reports every source's status, latency and breaker state (also shown in
   Settings, "Data feed"). OpenSky, the last resort, is not probed there (its anonymous allowance is small); its status is what real traffic requests last saw. An airport code the site does not serve answers `404` (`code: "unknown_airport"`), on `/api/aircraft` and `/api/weather` too.
