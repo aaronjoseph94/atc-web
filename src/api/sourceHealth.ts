@@ -67,6 +67,17 @@ export class UpstreamError extends Error {
 }
 
 /**
+ * The feed was not asked: a shared pause or gap is already in effect.
+ * Not a failure — recording it would open the breaker and hide a healthy feed.
+ */
+export class PacedSkip extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PacedSkip'
+  }
+}
+
+/**
  * Circuit breaker + health bookkeeping for a set of named sources.
  *
  * After `failureThreshold` failures in a row a source is skipped for a
@@ -125,6 +136,7 @@ export class SourceHealth {
   }
 
   recordFailure(name: string, err: unknown) {
+    if (err instanceof PacedSkip) return
     const e = this.get(name)
     const now = this.now()
     const wasTrial = e.openUntil !== 0 && now >= e.openUntil

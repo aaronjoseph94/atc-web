@@ -7,11 +7,11 @@
  * latency and circuit-breaker state. Probe results are cached for a few
  * seconds so an open Settings page doesn't multiply upstream traffic.
  */
-import { ALL_PROVIDERS, getJson, getText, handleAircraftRequest, providersFor, type SourceEnv } from './aircraftHandler'
+import { ALL_PROVIDERS, feedBlock, getJson, getText, handleAircraftRequest, providersFor, withFeedGuards, type SourceEnv } from './aircraftHandler'
 import { icaoCode } from './airportData'
 import { getAirport, knownAirport } from './airports'
 import type { Health } from './client'
-import { errorText, noCache, sourceHealth, type JsonCache, type SourceHealth, type SourceKind, type SourceStatus } from './sourceHealth'
+import { errorText, noCache, PacedSkip, sourceHealth, type JsonCache, type SourceHealth, type SourceKind, type SourceStatus } from './sourceHealth'
 
 const PROBE_TIMEOUT_MS = 5000
 const PROBE_TTL_S = 20
@@ -35,6 +35,7 @@ async function runProbe(p: Probe, health: SourceHealth): Promise<SourceStatus> {
     health.recordSuccess(p.name, latencyMs, count ?? undefined)
     return { ...health.status(p.name, p.kind), ok: true, latencyMs, count, error: null }
   } catch (err) {
+    if (err instanceof PacedSkip) return { ...health.status(p.name, p.kind), note: 'Within the shared limit; not asked again yet' }
     health.recordFailure(p.name, err)
     return { ...health.status(p.name, p.kind), ok: false, latencyMs: Date.now() - t0, error: errorText(err) }
   }
@@ -45,9 +46,12 @@ export async function probeSources(airport: string, opts: HealthOptions = {}): P
   const health = opts.health ?? sourceHealth
   const apt = getAirport(airport)
   const icao = icaoCode(apt.icao) ?? `K${apt.icao}`
-  const active = providersFor(opts.env)
+  const cache = opts.cache ?? noCache
+  // Same pause and gap as the map, so a health check can't spend a feed the map is saving.
+  const active = withFeedGuards(providersFor(opts.env), cache, opts.env)
   const probes: Probe[] = []
   const passive: SourceStatus[] = []
+  const blocks = new Map(await Promise.all(ALL_PROVIDERS.map(async (p) => [p.name, await feedBlock(cache, p.name)] as const)))
 
   for (const p of ALL_PROVIDERS) {
     const live = active.find((a) => a.name === p.name)
@@ -60,6 +64,13 @@ export async function probeSources(airport: string, opts: HealthOptions = {}): P
       // Just called for the map: its result is fresh, and a probe now would trip the rate limit.
       passive.push(health.status(p.name, 'adsb'))
     } else {
+      const block = blocks.get(p.name) ?? null
+      if (block != null) {
+        const status = health.status(p.name, 'adsb')
+        // A pause carries the refusal; a gap just means the map already asked.
+        passive.push(block ? { ...status, ok: false, error: block, note: 'Paused so the feed is not asked again until the block lifts' } : status)
+        continue
+      }
       probes.push({
         name: p.name,
         kind: 'adsb',
@@ -100,9 +111,10 @@ export async function buildHealth(airport: string, runtime: string, region?: str
   if (hit) return hit
 
   const t0 = Date.now()
-  // The round-trip goes through the same cache as the map, so it costs no
-  // extra upstream call while someone is watching this airport.
-  const [res, sources] = await Promise.all([handleAircraftRequest(airport, cache, opts.env), probeSources(airport, opts)])
+  // The map round-trip first, so the probes see its pause and gap and don't
+  // spend a second request on a feed the map just used.
+  const res = await handleAircraftRequest(airport, cache, opts.env)
+  const sources = await probeSources(airport, { ...opts, cache })
   const latencyMs = Date.now() - t0
   const list = (await res.json()) as unknown[]
   const error = res.headers.get('X-Upstream-Error')

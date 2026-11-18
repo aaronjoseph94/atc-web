@@ -7,8 +7,10 @@ pages_build_output_dir = "dist"
 binding = "AI"
 
 # Secrets (set in the Cloudflare dashboard or with `wrangler pages secret put`,
-# never in this file): ANTHROPIC_API_KEY or OPENROUTER_API_KEY for the AI
-# features, AIRNAV_ODAPI_TOKEN for the last-resort flight lookup,
+# never in this file): ADSBLOL_API_KEY for live traffic (without it the map
+# shares adsb.lol's 500 requests/day and goes quiet), ANTHROPIC_API_KEY or
+# OPENROUTER_API_KEY for the AI features, AIRNAV_ODAPI_TOKEN for the last-resort
+# flight lookup,
 # TURNSTILE_SECRET_KEY (+ optional SESSION_SECRET) for the optional browser
 # check, whose public TURNSTILE_SITE_KEY may go in a [vars] section here.
 # See docs/ai-setup.md.

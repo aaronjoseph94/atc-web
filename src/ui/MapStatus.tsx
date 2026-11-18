@@ -95,7 +95,7 @@ function Offline() {
         </>
       }
     >
-      The tracking feeds aren’t answering. The app keeps retrying by itself, and replays still work.
+      The tracking feeds are limiting or blocking the server. The app backs off and tries again on its own, and replays still work.
     </EmptyState>
   )
 }

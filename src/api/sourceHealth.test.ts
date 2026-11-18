@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { hedgedFirst, memoryCache, SourceHealth, UpstreamError } from './sourceHealth'
+import { hedgedFirst, memoryCache, PacedSkip, SourceHealth, UpstreamError } from './sourceHealth'
 
 describe('SourceHealth', () => {
   it('opens after repeated failures, half-opens after the cool-down, closes on success', () => {
@@ -27,6 +27,13 @@ describe('SourceHealth', () => {
     now = 3000
     h.recordFailure('a', new Error('x')) // capped at 3000
     expect(h.status('a', 'adsb').retryAt).toBe(new Date(6000).toISOString())
+  })
+
+  it('does not open the breaker when a feed is only paced', () => {
+    const h = new SourceHealth({ failureThreshold: 1, now: () => 0 })
+    h.recordFailure('a', new PacedSkip('within its request gap'))
+    expect(h.state('a')).toBe('closed')
+    expect(h.status('a', 'adsb').ok).toBeNull()
   })
 
   it('opens at once, for the maximum, on 429 or 403', () => {

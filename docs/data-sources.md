@@ -3,23 +3,28 @@
 Every outside service the app uses, what it costs, what its terms ask of us, and how the app stays inside them.
 Checked November 2026. Terms change; re-check before a public launch, and treat this as engineering notes, not legal advice.
 
-**Short version:** everything below is free and needs no API key, with two optional exceptions the owner can
-switch on with a Cloudflare secret (the AI features, and AirNav Radar as a last resort for flight details; set-up
-in [ai-setup.md](ai-setup.md)). Most community sources are free for
-**non-commercial** use only, so if the app ever makes money (ads, subscriptions, paid app), the rows marked
-"non-commercial" need a written OK or a paid plan first. Two things need the owner's action now:
+**Short version:** most of this is free and needs no API key. Live traffic on the public site does: Cloudflare's
+address is shared by every visitor, adsb.fi answers that address with 403, and adsb.lol allows 500 requests a day
+per address with no key. Set the Cloudflare secret `ADSBLOL_API_KEY` (a feeder key from [adsb.lol/mmb](https://www.adsb.lol/mmb))
+or the map goes quiet after a few minutes. The AI features and AirNav Radar are the other optional secrets
+([ai-setup.md](ai-setup.md)). Most community sources are free for **non-commercial** use only, so if the app ever
+makes money (ads, subscriptions, paid app), the rows marked "non-commercial" need a written OK or a paid plan first.
+Two things need the owner's action now:
 
 1. **LiveATC (radio):** get written permission before the app plays LiveATC streams for anyone other than you (see [Radio](#atc-radio)).
-2. **airplanes.live (traffic):** the owner has airplanes.live's approval, so it is on by default; set `ATC_ENABLE_AIRPLANES_LIVE=0` to switch it off (see [ADS-B](#ads-b-positions)).
+2. **adsb.lol (traffic):** put a key in `ADSBLOL_API_KEY`. Without one the server asks adsb.lol at most once every few minutes and keeps the last picture for 15 minutes (see [ADS-B](#ads-b-positions)).
 
 ## How the app uses them
 
 - All upstream calls run on the server (Cloudflare Pages Functions, `functions/api/*`), never from the browser,
   with an identifying `User-Agent`. Answers are cached at the Cloudflare edge so every viewer of an airport shares
-  one upstream request: traffic 4 s, weather 3 min, airframes 7 days, routes 1 h, unknown lookups 15 min.
+  one upstream request: traffic 4 s when adsb.fi answered, otherwise the adsb.lol gap below; weather 3 min, airframes 7 days, routes 1 h, unknown lookups 15 min.
 - Each source has a circuit breaker (`src/api/sourceHealth.ts`): after two failures in a row it is skipped for 20 s,
   doubling while it keeps failing (up to 5 min); a `429` pauses it for a minute, a `403` for 5 minutes.
-  Feeds with a per-second limit are not called again inside that interval.
+  Feeds with a per-second limit are not called again inside that interval. A second, colo-wide pause
+  (`withFeedGuards` in `aircraftHandler.ts`) is what actually protects the shared egress IP: adsb.fi at most
+  once every 2 s, adsb.lol once every 12 s with a key or once every 170 s without one, and a 403 keeps that
+  feed quiet for 30 minutes so a ban is not refreshed on every poll. Health checks honour the same pause.
 - `GET /api/health?airport=JFK` reports every source's status, latency and breaker state (also shown in
   Settings, "Data feed"). OpenSky, the last resort, is not probed there (its anonymous allowance is small); its status is what real traffic requests last saw. An airport code the site does not serve answers `404` (`code: "unknown_airport"`), on `/api/aircraft` and `/api/weather` too.
   It also reports the AirNav credits used so far, from the app's own count: the health check never calls AirNav.
@@ -37,9 +42,9 @@ credits", also reachable from the menu) name them. The map itself shows no attri
 | Source | Endpoint used | Terms / licence | Limits | Attribution / permission |
 | --- | --- | --- | --- | --- |
 | [adsb.fi](https://adsb.fi) open data | `opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{nm}` | Personal, **non-commercial** use; no reselling; as-is ([terms](https://github.com/adsbfi/opendata)) | 1 request/s per IP; 4xx answers count towards a temporary ban | Must cite adsb.fi with a link (map attribution + Help). Contact them for commercial use or higher rates. |
-| [adsb.lol](https://adsb.lol) | `api.adsb.lol/v2/point/{lat}/{lon}/{nm}` | Open data under **ODbL 1.0** | "Dynamic", load-based; no key today. They say a key (free, for feeders) will be required in future. | ODbL attribution (map attribution + Help say "adsb.lol (ODbL)"). If a key becomes mandatory: feed data to adsb.lol or request a key at adsb.lol, then add it as a Pages secret. |
-| [adsb.one](https://adsb.one) | `api.adsb.one/v2/point/{lat}/{lon}/{nm}` | Free, no key, no written terms | 1 request/s | Credited (map attribution + Help). |
-| [airplanes.live](https://airplanes.live) | `api.airplanes.live/v2/point/{lat}/{lon}/{nm}` | **Non-commercial**, no SLA | 1 request/s | **On** (the owner has their approval). Unapproved callers get 403 "Please contact us…"; if that appears, the failover skips it. `ATC_ENABLE_AIRPLANES_LIVE=0` switches it off. |
+| [adsb.lol](https://adsb.lol) | `api.adsb.lol/v2/point/{lat}/{lon}/{nm}` with optional `x-api-key` | Open data under **ODbL 1.0** | No key: **500 requests/day per IP**. Anonymous key: 500/day. Adhoc key: 1,000/day. Feeder key: 7,200/day. Over quota is HTTP 429. | ODbL attribution (map attribution + Help say "adsb.lol (ODbL)"). The Pages secret `ADSBLOL_API_KEY` is the key from [adsb.lol/mmb](https://www.adsb.lol/mmb). A feeder key is the one that covers a public site; 500/day does not. |
+| [adsb.one](https://adsb.one) | `api.adsb.one/v2/point/{lat}/{lon}/{nm}` | Free, no key, no written terms | 1 request/s | Credited (map attribution + Help). As of November 2026 the host answers 403 (Cloudflare challenge) to server-side calls; the app backs off for 30 minutes after that. |
+| [airplanes.live](https://airplanes.live) | `api.airplanes.live/v2/point/{lat}/{lon}/{nm}` | **Non-commercial**, no SLA | 1 request/s | **On** unless `ATC_ENABLE_AIRPLANES_LIVE=0`. The public API currently answers 403 "Please contact us…" even for callers who used to be approved; that 403 pauses the feed for 30 minutes. |
 | [OpenSky Network](https://opensky-network.org) | `opensky-network.org/api/states/all?lamin…` | Free for research and **non-commercial** use; commercial use needs a licence from OpenSky | Anonymous: 400 credits/day per IP (an airport-sized box costs 1), 10 s resolution. With an API client: 4,000 credits/day, 5 s | Credit "The OpenSky Network" (map attribution + Help). Used only when every other feed has errored. Set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET` (a free account's API client, OAuth2 client credentials) in Pages settings for the bigger allowance. It has refused requests from Cloudflare's network before (HTTP 522), so don't count on it in production. |
 
 **MLAT and the rest.** The readsb aggregators above carry more than ADS-B: multilaterated positions (MLAT, for

@@ -32,6 +32,7 @@ const sourceEnv = () => ({
   ATC_FAIL_SOURCES: process.env.ATC_FAIL_SOURCES,
   OPENSKY_CLIENT_ID: process.env.OPENSKY_CLIENT_ID,
   OPENSKY_CLIENT_SECRET: process.env.OPENSKY_CLIENT_SECRET,
+  ADSBLOL_API_KEY: process.env.ADSBLOL_API_KEY,
 })
 
 /** AI config comes from the shell environment in dev (never from files in the repo). */
