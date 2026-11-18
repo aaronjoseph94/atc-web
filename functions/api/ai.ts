@@ -13,12 +13,15 @@
  * visitor and stop at a daily cap (AI_DAILY_CAP). Answers to identical
  * requests are cached at the edge for the task's `cacheS` seconds and are not
  * counted. Counts live in the AI_KV namespace when it is bound, else in this
- * data centre's cache (approximate).
+ * data centre's cache (approximate). When the owner has turned on the
+ * Turnstile gate (TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY), each request
+ * also needs a session token from /api/session (header x-atc-session).
  */
 import { jsonResponse } from '../../src/api/aircraftHandler'
 import { aiStatus, handleAiPost, type AiHandlerEnv } from '../../src/api/ai/handler'
 import { originHeaders } from '../../src/api/ai/limits'
 import { optionsFromHeaders } from '../../src/api/ai/run'
+import { SESSION_HEADER } from '../../src/api/session'
 import { busyCounters, edgeStores } from '../../src/api/storage'
 
 type Env = AiHandlerEnv & { AI_KV?: KVNamespace }
@@ -44,6 +47,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, waitUnti
     self,
     from: originHeaders((n) => request.headers.get(n)),
     client: request.headers.get('cf-connecting-ip') ?? 'anonymous',
+    session: request.headers.get(SESSION_HEADER),
     counters: busyCounters(stores),
     rates: stores.near,
     // Cached answers are keyed by task, input, provider and model (see answerKey), so each model keeps its own.

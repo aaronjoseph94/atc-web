@@ -1,0 +1,11 @@
+# Cloudflare Pages response headers for the static site (Functions under
+# /api/* set their own). Kept deliberately small: only frame-ancestors from
+# CSP, so MapLibre workers, map tiles, fonts, LiveATC audio and Turnstile are
+# never blocked. Geolocation stays allowed for this site's own pages, for the
+# airport picker's "nearest airport".
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(self)
+  X-Content-Type-Options: nosniff

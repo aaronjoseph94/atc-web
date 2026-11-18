@@ -13,6 +13,7 @@
  */
 import { getAirport, resolveStation } from '../../api/airports'
 import type { RadioFeed } from '../../api/radioFeeds'
+import { fetchWithSession } from '../../api/sessionClient'
 import type { StationKind } from '../../api/types'
 import { usePlayhead } from '../../playback/playheadStore'
 import { liveBuffer } from '../session'
@@ -32,6 +33,8 @@ const CONCURRENCY = 2
 const MAX_WAITING = 3
 /** After a 429, wait this long before sending more. */
 const BACKOFF_MS = 20_000
+/** After the site's daily cap (or a failed browser check), wait at most this long before trying again. */
+const LONG_BACKOFF_MS = 10 * 60_000
 /** How long the camera and highlight stay on an aircraft after its call is captioned. */
 export const HOLD_MS = 5_000
 /** Longest a transcribed call waits for the AI pass before it is shown as recognised. */
@@ -68,7 +71,7 @@ async function send(job: Job) {
   let res: Response
   try {
     const wav = transmissionWav(job.seg.samples, job.seg.sampleRate)
-    res = await fetch(`/api/transcribe?${params.toString()}`, { method: 'POST', body: new Blob([wav as BlobPart], { type: 'audio/wav' }) })
+    res = await fetchWithSession(`/api/transcribe?${params.toString()}`, { method: 'POST', body: new Blob([wav as BlobPart], { type: 'audio/wav' }) })
   } catch {
     useRadio.getState().patch({ transcripts: 'error' })
     return
@@ -78,10 +81,14 @@ async function send(job: Job) {
     queue = []
     return
   }
-  if (res.status === 429) {
-    pausedUntil = Date.now() + BACKOFF_MS
+  if (res.status === 429 || res.status === 401) {
+    // Too fast (wait a little), the site's daily cap (wait until it is likely to have room), or a browser check that did not pass.
+    const refusal = (await res.json().catch(() => null)) as { code?: string; retryAfterS?: number } | null
+    const long = res.status === 401 || refusal?.code === 'daily_cap'
+    const wait = long ? Math.min(LONG_BACKOFF_MS, Math.max(BACKOFF_MS, (refusal?.retryAfterS ?? 0) * 1000)) : BACKOFF_MS
+    pausedUntil = Date.now() + wait
     useRadio.getState().patch({ transcripts: 'limited' })
-    window.setTimeout(pump, BACKOFF_MS + 50)
+    window.setTimeout(pump, wait + 50)
     return
   }
   if (!res.ok) {

@@ -17,7 +17,10 @@
  *                  Haiku, as on /api/ai.
  */
 import { summarizeExchange, type Transmission } from '../flight/describe'
+import { checkRate, isSameOrigin, reserveAi, type LimitEnv, type OriginHeaders, type RateDoc } from './ai/limits'
 import { defaultModel, OPENROUTER_MODEL_FOR } from './ai/run'
+import { sessionAllows, sessionRefusal, type SessionEnv } from './session'
+import type { Counters, JsonStore } from './storage'
 
 export type AiEnv = {
   AI_API_KEY?: string
@@ -210,9 +213,44 @@ export async function summarize(req: SummarizeRequest, env: AiEnv): Promise<Summ
   }
 }
 
-/** Stable cache key for identical requests (saves tokens on repeat taps). */
+/**
+ * Stable cache key for identical requests (saves tokens on repeat taps).
+ * Everything that goes into the prompt is in it, the context included, so
+ * one request can never be answered with what was written for another.
+ */
 export async function summarizeCacheKey(req: SummarizeRequest): Promise<string> {
-  const data = new TextEncoder().encode(JSON.stringify([req.callsign, req.transmissions]))
+  const data = new TextEncoder().encode(JSON.stringify([req.callsign, req.transmissions, req.context ?? null]))
   const hash = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(hash).slice(0, 16), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+export type SummarizeGateContext = {
+  /** This site's origin, and what the request says about where it came from. */
+  self: string
+  from: OriginHeaders
+  /** The visitor's IP address (rate limit, session binding). */
+  client: string
+  /** The `x-atc-session` header. */
+  session: string | null
+  counters: Counters
+  rates: JsonStore
+  rateMemory?: Map<string, RateDoc>
+  now?: number
+}
+
+export type SummarizeGate = { refuse: ReturnType<typeof sessionRefusal> } | { useAi: boolean }
+
+/**
+ * Whether a summary request may go to the model. Refused outright (401) only
+ * when the Turnstile gate is on and there is no valid session; otherwise the
+ * model is asked when a key is set, the request comes from this site, the
+ * visitor is under the per-visitor rate limit shared with `/api/ai`, and the
+ * daily cap has room. Any "no" there means the free rule-based summary.
+ */
+export async function summarizeGate(env: AiEnv & LimitEnv & SessionEnv, ctx: SummarizeGateContext): Promise<SummarizeGate> {
+  const now = ctx.now ?? Date.now()
+  if (!(await sessionAllows(env, ctx.session, ctx.client, now))) return { refuse: sessionRefusal(env) }
+  if (!env.AI_API_KEY || !isSameOrigin(ctx.self, ctx.from)) return { useAi: false }
+  if (!(await checkRate(ctx.rates, ctx.client, env, now, ctx.rateMemory)).ok) return { useAi: false }
+  return { useAi: (await reserveAi(ctx.counters, 'summarize', env, now)).ok }
 }

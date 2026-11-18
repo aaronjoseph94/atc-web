@@ -22,7 +22,7 @@ jobs:
   check:
     name: Lint, typecheck, unit tests, build, end-to-end
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: true
       # The Vite config uses features its native loader warns about on every start.

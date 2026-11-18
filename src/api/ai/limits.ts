@@ -4,8 +4,8 @@
  *
  *  1. Same-origin: only this site's pages may ask (stops other sites and
  *     casual scripts using the endpoint as a free model).
- *  2. A per-visitor rate limit (by IP address): a short burst and a
- *     per-minute ceiling.
+ *  2. A per-visitor rate limit (by IP address, an IPv6 address by its /64):
+ *     a short burst and a per-minute ceiling.
  *  3. A daily cap on requests for the whole site, with a smaller cap for the
  *     per-transmission radio task so it cannot use up everyone else's share.
  *
@@ -97,9 +97,47 @@ export function stepRate(prev: RateDoc | undefined, now: number, limits = DEFAUL
 /** This isolate's view of each visitor, so a burst is caught before the shared store has caught up. */
 const isolateRates = new Map<string, RateDoc>()
 
-/** Addresses are not kept as they are: the key is a short hash. */
+/**
+ * The part of an address that names one visitor. An IPv6 address is counted
+ * by its /64 network: one home or phone gets a whole /64 and can pick any
+ * address in it, so keying on the full address would let a script rotate
+ * past every limit. IPv4 addresses (and IPv4 written as IPv6, `::ffff:a.b.c.d`)
+ * stay as they are; anything that is not an address is returned unchanged.
+ */
+export function ipPrefix(ip: string): string {
+  const s = ip.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/%.*$/, '')
+  if (!s.includes(':')) return s
+  const halves = s.split('::')
+  if (halves.length > 2) return s
+  const groups = (part: string): number[] | null => {
+    if (!part) return []
+    const out: number[] = []
+    const items = part.split(':')
+    for (let i = 0; i < items.length; i++) {
+      const g = items[i]
+      if (i === items.length - 1 && /^\d{1,3}(\.\d{1,3}){3}$/.test(g)) {
+        const q = g.split('.').map(Number)
+        if (q.some((n) => n > 255)) return null
+        out.push((q[0] << 8) | q[1], (q[2] << 8) | q[3])
+      } else if (/^[0-9a-f]{1,4}$/.test(g)) out.push(parseInt(g, 16))
+      else return null
+    }
+    return out
+  }
+  const head = groups(halves[0])
+  const tail = halves.length === 2 ? groups(halves[1]) : []
+  if (!head || !tail) return s
+  const fill = 8 - head.length - tail.length
+  if (halves.length === 2 ? fill < 1 : fill !== 0) return s
+  const all = [...head, ...Array<number>(fill).fill(0), ...tail]
+  // IPv4-mapped: the visitor is really on IPv4.
+  if (all.slice(0, 5).every((g) => g === 0) && all[5] === 0xffff) return [all[6] >> 8, all[6] & 255, all[7] >> 8, all[7] & 255].join('.')
+  return `${all.slice(0, 4).map((g) => g.toString(16)).join(':')}::/64`
+}
+
+/** Addresses are not kept as they are: the key is a short hash of the visitor's address (its /64 for IPv6). */
 async function clientKey(client: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`atc-rate:${client}`))
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`atc-rate:${ipPrefix(client)}`))
   return [...new Uint8Array(digest).slice(0, 10)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 

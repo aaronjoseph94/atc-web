@@ -4,6 +4,7 @@
  * middleware in development.
  */
 import type { AirnavUsage } from './airnav'
+import { ensureSession, fetchWithSession, sessionHeaders, sessionRequired } from './sessionClient'
 import type { SourceStatus } from './sourceHealth'
 import type { SummarizeRequest, SummarizeResponse } from './summarizeHandler'
 import type { Aircraft, AircraftSnapshot, ClipPack, ClipSummary, FlightInfo, Station, Weather } from './types'
@@ -24,8 +25,8 @@ export type Health = {
   airnav?: AirnavUsage
 }
 
-async function getJson<T>(url: string, what: string): Promise<T> {
-  const res = await fetch(url)
+async function getJson<T>(url: string, what: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init)
   if (!res.ok) throw new Error(`${what} fetch failed (${res.status})`)
   return (await res.json()) as T
 }
@@ -54,12 +55,15 @@ export function getWeather(airport = 'ORD'): Promise<Weather> {
  * opened this flight: only then may the server spend one of its few paid
  * lookups when the free sources know nothing. Never set it from polling or prefetching.
  */
-export function getFlightInfo(hex: string | null, callsign: string | null, opts: { deep?: boolean } = {}): Promise<FlightInfo & { sources?: string[] }> {
+export async function getFlightInfo(hex: string | null, callsign: string | null, opts: { deep?: boolean } = {}): Promise<FlightInfo & { sources?: string[] }> {
   const q = new URLSearchParams()
   if (hex) q.set('hex', hex)
   if (callsign) q.set('callsign', callsign)
   if (opts.deep) q.set('deep', '1')
-  return getJson(`/api/flight?${q.toString()}`, 'flight info')
+  // With the owner's bot check on, a paid lookup needs a session (without one the server answers from free sources only).
+  if (opts.deep && sessionRequired()) await ensureSession()
+  const session = opts.deep ? sessionHeaders() : {}
+  return getJson(`/api/flight?${q.toString()}`, 'flight info', Object.keys(session).length ? { headers: session } : undefined)
 }
 
 /** Catalog of bundled playback clips (static JSON, cached by the service worker). */
@@ -78,7 +82,7 @@ export function getHealth(airport = 'ORD'): Promise<Health> {
 
 /** Plain-English summary of a flight's recent radio calls (AI or rules). */
 export async function summarizeTransmissions(req: SummarizeRequest): Promise<SummarizeResponse> {
-  const res = await fetch('/api/summarize', {
+  const res = await fetchWithSession('/api/summarize', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(req),

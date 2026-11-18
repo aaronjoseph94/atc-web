@@ -17,7 +17,9 @@ function world(answer: () => Response | Promise<Response> = () => new Response(J
   const clock = () => now
   const store = memoryStorage(clock)
   const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => answer())
-  const deps = (): AirnavDeps => ({ counters: storeCounters(store, { mirror: new Map(), now: clock }), store, fetch: fetchMock as unknown as typeof fetch, now, guard })
+  // Credits are only spent when the counts live in KV; a memory store stands in for it here.
+  const kv = { ...store, kind: 'kv' as const }
+  const deps = (): AirnavDeps => ({ counters: storeCounters(kv, { mirror: new Map(), now: clock }), store, fetch: fetchMock as unknown as typeof fetch, now, guard })
   const guard = createGuard()
   return { store, fetchMock, deps, guard, advance: (ms: number) => (now += ms) }
 }
@@ -87,7 +89,7 @@ describe('airnavFill', () => {
     expect(url).toBe(`${AIRNAV_BASE}/flights/live`)
     expect(init).toMatchObject({ method: 'POST', body: JSON.stringify({ modeSHexCodes: ['A09CAD'] }) })
     expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer tok')
-    expect(await airnavUsage(env, w.deps().counters, w.deps().now)).toMatchObject({ configured: true, used: 1, today: 1, credits: 100, cap: 90, dailyCap: 3 })
+    expect(await airnavUsage(env, w.deps().counters, w.deps().now)).toMatchObject({ configured: true, active: true, used: 1, today: 1, credits: 100, cap: 90, dailyCap: 3, storage: 'kv' })
   })
 
   it('never pays twice for the same flight: the answer is remembered', async () => {
@@ -195,5 +197,17 @@ describe('airnavFill', () => {
     expect((await airnavFill(unknown, HEX, CS, env, w.deps())).reason).toBe('remembered')
     expect(w.fetchMock).toHaveBeenCalledTimes(1)
     expect((await airnavUsage(env, w.deps().counters, w.deps().now)).used).toBe(1)
+  })
+
+  it('spends nothing unless the counts are kept in KV (one count for every data centre)', async () => {
+    const w = world()
+    for (const kind of ['cache', 'memory'] as const) {
+      const perColo = { ...memoryStorage(), kind }
+      const deps = { ...w.deps(), counters: storeCounters(perColo, { mirror: new Map() }) }
+      expect((await airnavFill(unknown, HEX, CS, env, deps)).reason).toBe('no-kv')
+      expect(await airnavUsage(env, deps.counters)).toMatchObject({ configured: true, active: false, storage: kind })
+    }
+    expect(w.fetchMock).not.toHaveBeenCalled()
+    expect((await airnavFill(unknown, HEX, CS, env, w.deps())).reason).toBe('asked')
   })
 })

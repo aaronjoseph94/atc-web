@@ -20,7 +20,7 @@ describe('buildHealth', () => {
       return new Response('[]')
     })
     vi.stubGlobal('fetch', fetchMock)
-    const h = await buildHealth('JFK', 'test', undefined, { cache: memoryCache() })
+    const h = (await buildHealth('JFK', 'test', undefined, { cache: memoryCache() }))!
     expect(h.ok).toBe(true)
     expect(h.provider).toBe('adsb.fi')
     expect(h.aircraft).toBe(4)
@@ -38,7 +38,15 @@ describe('buildHealth', () => {
       'fetch',
       vi.fn(async (url: string) => (url.includes('invalid.invalid') ? Promise.reject(new TypeError('fetch failed')) : new Response(JSON.stringify(url.includes('adsb') ? adsbFiFixture : [])))),
     )
-    const h = await buildHealth('ORD', 'test', undefined, { env: { ATC_FAIL_SOURCES: 'aviationweather.gov' } })
+    const h = (await buildHealth('ORD', 'test', undefined, { env: { ATC_FAIL_SOURCES: 'aviationweather.gov' } }))!
     expect(h.sources?.find((s) => s.name === 'aviationweather.gov')).toMatchObject({ ok: false, error: 'fetch failed' })
+  })
+
+  it('reports nothing (callers answer 404) for a code the site does not serve, without probing anything', async () => {
+    const fetchMock = vi.fn(async () => new Response('[]'))
+    vi.stubGlobal('fetch', fetchMock)
+    const cache = memoryCache()
+    expect(await buildHealth('ZZZ9', 'test', undefined, { cache })).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

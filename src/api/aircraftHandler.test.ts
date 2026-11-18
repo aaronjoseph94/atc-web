@@ -1,3 +1,4 @@
+/* oxlint-disable no-await-in-loop -- the steps in these tests happen one after another on purpose */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import adsbFiFixture from './__fixtures__/adsbfi-jfk.json'
 import adsbLolFixture from './__fixtures__/adsblol-jfk.json'
@@ -363,6 +364,37 @@ describe('handleAircraftRequest', () => {
     const cache = memoryCache()
     await Promise.all([handleAircraftRequest('EWR', cache), handleAircraftRequest('EWR', cache), handleAircraftRequest('EWR', cache)])
     expect(fetchMock.mock.calls.length).toBe(2) // adsb.fi + adsb.lol, once
+  })
+
+  it('answers 404 for codes it does not serve, without asking any feed or touching the cache', async () => {
+    const fetchMock = stubFeeds(
+      () => new Response(JSON.stringify(adsbFiFixture)),
+      () => new Response(JSON.stringify(adsbLolFixture)),
+    )
+    const cache = memoryCache()
+    const put = vi.spyOn(cache, 'put')
+    for (const code of ['ZZZ1', 'ZZZ2', 'KORD', '', '../x']) {
+      const res = await handleAircraftRequest(code, cache)
+      expect(res.status).toBe(404)
+      expect(await res.json()).toMatchObject({ code: 'unknown_airport' })
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  it('keys the cache by the canonical code, so every spelling of one airport shares one upstream round', async () => {
+    const fetchMock = stubFeeds(
+      () => new Response(JSON.stringify(adsbFiFixture)),
+      () => new Response(JSON.stringify(adsbLolFixture)),
+    )
+    const cache = memoryCache()
+    const put = vi.spyOn(cache, 'put')
+    await handleAircraftRequest('bos', cache)
+    const calls = fetchMock.mock.calls.length
+    await handleAircraftRequest('BOS', cache)
+    await handleAircraftRequest(' Bos ', cache)
+    expect(fetchMock.mock.calls.length).toBe(calls)
+    expect(put.mock.calls.map((c) => c[0])).toEqual(['aircraft:BOS', 'aircraft-stale:BOS'])
   })
 })
 
