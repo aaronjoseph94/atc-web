@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import adsbFiFixture from './__fixtures__/adsbfi-jfk.json'
 import adsbLolFixture from './__fixtures__/adsblol-jfk.json'
 import airplanesLive403 from './__fixtures__/airplaneslive-403.json'
+import { getAirport } from './airports'
 import {
   adsbFi,
   adsbLol,
@@ -331,7 +332,8 @@ describe('handleAircraftRequest', () => {
     )
     const cache = memoryCache()
     const res = await handleAircraftRequest('JFK', cache)
-    expect(res.headers.get('X-Provider')).toMatch(/adsb\.(fi|lol) \+ adsb\.(fi|lol)/)
+    // No adsb.lol key: the first feed that answers is enough. Merging would spend the shared daily quota.
+    expect(res.headers.get('X-Provider')).toBe('adsb.fi')
     expect(res.headers.get('X-Attribution')).toContain('<https://adsb.fi>')
     const body = (await res.json()) as unknown[]
     expect(body.length).toBeGreaterThan(3)
@@ -363,7 +365,41 @@ describe('handleAircraftRequest', () => {
     )
     const cache = memoryCache()
     await Promise.all([handleAircraftRequest('EWR', cache), handleAircraftRequest('EWR', cache), handleAircraftRequest('EWR', cache)])
-    expect(fetchMock.mock.calls.length).toBe(2) // adsb.fi + adsb.lol, once
+    expect(fetchMock.mock.calls.length).toBe(1)
+  })
+
+  it('sends an adsb.lol key and, with one, merges both feeds', async () => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => new Response(JSON.stringify(url.includes('adsb.fi') ? adsbFiFixture : adsbLolFixture)))
+    vi.stubGlobal('fetch', fetchMock)
+    const cache = memoryCache()
+    const res = await handleAircraftRequest('JFK', cache, { ADSBLOL_API_KEY: 'secret-key' })
+    expect(res.headers.get('X-Provider')).toMatch(/adsb\.fi \+ adsb\.lol|adsb\.lol \+ adsb\.fi/)
+    const keyed = providersFor({ ADSBLOL_API_KEY: 'secret-key' }).find((p) => p.name === 'adsb.lol')!
+    await keyed.fetch(getAirport('JFK'), AbortSignal.timeout(1000))
+    const init = fetchMock.mock.calls.at(-1)?.[1]
+    expect(init?.headers).toMatchObject({ 'x-api-key': 'secret-key' })
+  })
+
+  it('spends one adsb.lol call for the whole colo when adsb.fi is refusing', async () => {
+    let lolCalls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (String(url).includes('adsb.lol')) {
+          lolCalls += 1
+          return new Response(JSON.stringify(adsbLolFixture))
+        }
+        return new Response('{"error":"no"}', { status: 403 })
+      }),
+    )
+    const cache = memoryCache()
+    const first = await handleAircraftRequest('ORD', cache)
+    expect(first.headers.get('X-Provider')).toBe('adsb.lol')
+    expect(lolCalls).toBe(1)
+    const second = await handleAircraftRequest('JFK', cache)
+    expect(lolCalls).toBe(1)
+    expect(second.headers.get('X-Upstream-Error')).toMatch(/adsb\.fi/)
+    expect(((await second.json()) as unknown[]).length).toBe(0)
   })
 
   it('answers 404 for codes it does not serve, without asking any feed or touching the cache', async () => {
@@ -394,7 +430,7 @@ describe('handleAircraftRequest', () => {
     await handleAircraftRequest('BOS', cache)
     await handleAircraftRequest(' Bos ', cache)
     expect(fetchMock.mock.calls.length).toBe(calls)
-    expect(put.mock.calls.map((c) => c[0])).toEqual(['aircraft:BOS', 'aircraft-stale:BOS'])
+    expect(put.mock.calls.map((c) => c[0])).toEqual(['feed-slot:adsb.fi', 'aircraft:BOS', 'aircraft-stale:BOS'])
   })
 })
 

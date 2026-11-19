@@ -29,7 +29,7 @@ import {
   type ReadsbAircraft,
   type TimedAircraft,
 } from './normalizeAircraft'
-import { errorText, sourceHealth, UpstreamError, type JsonCache, type SourceHealth } from './sourceHealth'
+import { errorText, PacedSkip, sourceHealth, UpstreamError, type JsonCache, type SourceHealth } from './sourceHealth'
 import type { Aircraft } from './types'
 
 /** Per-provider timeout; keeps the whole request well under the client poll interval. */
@@ -67,13 +67,24 @@ export type AircraftResult = {
 }
 
 /** GET JSON from an upstream API with our identifying User-Agent. */
-export async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
+export async function getJson<T>(url: string, signal: AbortSignal, headers?: Record<string, string>): Promise<T> {
   const res = await fetch(url, {
     signal,
-    headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
+    headers: { Accept: 'application/json', 'User-Agent': USER_AGENT, ...headers },
   })
-  if (!res.ok) throw new UpstreamError(`HTTP ${res.status}`, res.status)
+  if (!res.ok) throw new UpstreamError(`HTTP ${res.status}${await refusalDetail(res)}`, res.status)
   return (await res.json()) as T
+}
+
+/** A short plain-text snippet of a refusal, so /api/health can show why. HTML challenges are dropped. */
+async function refusalDetail(res: Response): Promise<string> {
+  try {
+    const raw = (await res.text()).replace(/\s+/g, ' ').trim()
+    if (!raw || raw.startsWith('<')) return ''
+    return `: ${raw.slice(0, 100)}`
+  } catch {
+    return ''
+  }
 }
 
 /** GET plain text (NOAA's file server) with the same conventions as `getJson`. */
@@ -85,9 +96,9 @@ export async function getText(url: string, signal: AbortSignal): Promise<string>
 
 type ReadsbPayload = { ac?: ReadsbAircraft[]; now?: number; error?: string }
 
-/** Shared fetch for the three readsb-compatible feeds. */
-async function readsb(url: string, signal: AbortSignal): Promise<TimedAircraft[]> {
-  const data = await getJson<ReadsbPayload>(url, signal)
+/** Shared fetch for the readsb-compatible feeds. */
+async function readsb(url: string, signal: AbortSignal, headers?: Record<string, string>): Promise<TimedAircraft[]> {
+  const data = await getJson<ReadsbPayload>(url, signal, headers)
   // airplanes.live answers 200 with `{ error }` in some refusal cases.
   if (!Array.isArray(data.ac) && data.error) throw new UpstreamError(data.error.slice(0, 120), 403)
   // `now` is the aggregator's clock in ms; it dates `seen_pos` correctly even if ours drifts.
@@ -108,15 +119,24 @@ export const adsbFi: AircraftProvider = {
   },
 }
 
-/** adsb.lol — open data under ODbL 1.0, no key (yet), point + radius in nm. */
-export const adsbLol: AircraftProvider = {
-  name: 'adsb.lol',
-  credit: { label: 'adsb.lol (ODbL)', url: 'https://adsb.lol' },
-  fetch(apt, signal) {
-    const [lon, lat] = apt.center
-    return readsb(`https://api.adsb.lol/v2/point/${lat}/${lon}/${apt.radiusNm}`, signal)
-  },
+/**
+ * adsb.lol — ODbL 1.0. Without a key the whole site shares 500 requests a day
+ * per egress IP (Cloudflare's), so the caller must pace it. `x-api-key` spends
+ * the key's own quota instead.
+ */
+export function adsbLolProvider(apiKey?: string): AircraftProvider {
+  const headers = apiKey ? { 'x-api-key': apiKey } : undefined
+  return {
+    name: 'adsb.lol',
+    credit: { label: 'adsb.lol (ODbL)', url: 'https://adsb.lol' },
+    fetch(apt, signal) {
+      const [lon, lat] = apt.center
+      return readsb(`https://api.adsb.lol/v2/point/${lat}/${lon}/${apt.radiusNm}`, signal, headers)
+    },
+  }
 }
+
+export const adsbLol: AircraftProvider = adsbLolProvider()
 
 /** airplanes.live — same readsb shape (1 req/s, non-commercial). Used with their permission, see the file header. */
 export const airplanesLive: AircraftProvider = {
@@ -193,13 +213,21 @@ export type SourceEnv = {
   /** OpenSky API client (free account): 4,000 credits a day instead of 400. */
   OPENSKY_CLIENT_ID?: string
   OPENSKY_CLIENT_SECRET?: string
+  /**
+   * adsb.lol key (`x-api-key`). Without it the site shares 500 requests a day
+   * on Cloudflare's egress IP; a feeder key is what makes live refresh possible.
+   */
+  ADSBLOL_API_KEY?: string
 }
 
 /** The feeds in use for this environment (opt-ins added, credentials applied, rehearsal failures wired in). */
 export function providersFor(env: SourceEnv = {}): AircraftProvider[] {
-  const enabled = ALL_PROVIDERS.filter((p) => p !== airplanesLive || env.ATC_ENABLE_AIRPLANES_LIVE !== '0').map((p) =>
-    p === openSky && env.OPENSKY_CLIENT_ID && env.OPENSKY_CLIENT_SECRET ? openSkyProvider({ id: env.OPENSKY_CLIENT_ID, secret: env.OPENSKY_CLIENT_SECRET }) : p,
-  )
+  const lol = adsbLolProvider(env.ADSBLOL_API_KEY)
+  const enabled = ALL_PROVIDERS.filter((p) => p !== airplanesLive || env.ATC_ENABLE_AIRPLANES_LIVE !== '0').map((p) => {
+    if (p === adsbLol) return lol
+    if (p === openSky && env.OPENSKY_CLIENT_ID && env.OPENSKY_CLIENT_SECRET) return openSkyProvider({ id: env.OPENSKY_CLIENT_ID, secret: env.OPENSKY_CLIENT_SECRET })
+    return p
+  })
   const broken = new Set((env.ATC_FAIL_SOURCES ?? '').split(',').map((s) => s.trim()).filter(Boolean))
   return enabled.map((p) => (broken.has(p.name) ? rehearsedFailure(p) : p))
 }
@@ -391,8 +419,94 @@ function result(aircraft: Aircraft[], used: AircraftProvider[], failures: string
 
 /** Fresh answers are shared for this long: shorter than the fastest client poll. */
 export const AIRCRAFT_TTL_S = 4
+/**
+ * adsb.lol with no key allows 500 requests a day per IP, and every visitor
+ * shares Cloudflare's egress address. One call every few minutes stays under
+ * that; a key spends its own quota and can be asked more often.
+ */
+const LOL_GAP_NO_KEY_S = 170
+const LOL_GAP_KEY_S = 15
+/** adsb.fi allows 1 request/s per IP. Two seconds leaves room for a second airport. */
+const FI_GAP_S = 2
+/** A 403 is usually a ban; hammering it extends the ban. Stay away for half an hour. */
+const PAUSE_403_S = 30 * 60
+/** Unkeyed adsb.lol 429 means the daily quota is gone. Don't spend the rest of it on retries. */
+const PAUSE_429_LOL_S = 15 * 60
+const PAUSE_429_S = 60
+/** OpenSky from this network tends to hang. One timeout is enough for a while. */
+const PAUSE_OPENSKY_S = 10 * 60
 /** The last good answer is kept this long to cover an outage of every feed. */
-const STALE_TTL_S = 90
+const STALE_TTL_S = 15 * 60
+
+const pauseKey = (name: string) => `feed-pause:${name}`
+const slotKey = (name: string) => `feed-slot:${name}`
+
+/**
+ * How long this feed must wait before another colo-wide request.
+ * `0` means no shared gap (the in-isolate breaker is enough).
+ */
+function slotSeconds(name: string, env: SourceEnv): number {
+  if (name === 'adsb.fi') return FI_GAP_S
+  if (name === 'adsb.lol') return env.ADSBLOL_API_KEY ? LOL_GAP_KEY_S : LOL_GAP_NO_KEY_S
+  return 0
+}
+
+async function claimSlot(cache: JsonCache, name: string, ttl: number): Promise<boolean> {
+  const key = slotKey(name)
+  if (await cache.get(key)) return false
+  await cache.put(key, 1, ttl)
+  return true
+}
+
+/** Remember a refusal so every isolate in this colo stops asking until it expires. */
+async function notePause(cache: JsonCache, name: string, err: unknown, env: SourceEnv) {
+  const status = err instanceof UpstreamError ? err.status : null
+  const reason = errorText(err)
+  let ttl = 0
+  if (status === 403) ttl = PAUSE_403_S
+  else if (status === 429) ttl = name === 'adsb.lol' && !env.ADSBLOL_API_KEY ? PAUSE_429_LOL_S : PAUSE_429_S
+  else if (name === 'opensky' && reason === 'timed out') ttl = PAUSE_OPENSKY_S
+  if (ttl) await cache.put(pauseKey(name), { reason }, ttl)
+}
+
+/**
+ * `null` when the feed may be asked. A string when it is paused (the reason).
+ * `''` when a shared gap is still open: use the last result, don't treat it as a failure.
+ */
+export async function feedBlock(cache: JsonCache, name: string): Promise<string | null> {
+  const pause = await cache.get<{ reason?: string }>(pauseKey(name))
+  if (pause?.reason) return pause.reason
+  if ((await cache.get(slotKey(name))) != null) return ''
+  return null
+}
+
+/**
+ * Share one pause and one request gap per feed across every isolate in the colo.
+ * A paused or gapped feed throws `PacedSkip` (not a failure) instead of calling out.
+ */
+export function withFeedGuards(providers: AircraftProvider[], cache: JsonCache, env: SourceEnv = {}): AircraftProvider[] {
+  return providers.map((p) => ({
+    ...p,
+    async fetch(apt, signal) {
+      const block = await feedBlock(cache, p.name)
+      if (block != null) throw new PacedSkip(block || `${p.name} is within its request gap`)
+      const gap = slotSeconds(p.name, env)
+      if (gap && !(await claimSlot(cache, p.name, gap))) throw new PacedSkip(`${p.name} is within its request gap`)
+      try {
+        return await p.fetch(apt, signal)
+      } catch (err) {
+        await notePause(cache, p.name, err, env)
+        throw err
+      }
+    },
+  }))
+}
+
+function freshTtl(sources: string[], env: SourceEnv): number {
+  if (sources.includes('adsb.fi')) return AIRCRAFT_TTL_S
+  if (sources.includes('adsb.lol')) return env.ADSBLOL_API_KEY ? LOL_GAP_KEY_S : LOL_GAP_NO_KEY_S
+  return AIRCRAFT_TTL_S
+}
 
 type CachedSnapshot = AircraftResult & { fetchedAt: number }
 
@@ -406,7 +520,8 @@ const inflight = new Map<string, Promise<CachedSnapshot>>()
  * feeds answered rides in headers: `X-Provider` (display name), `X-Sources`,
  * `X-Attribution` (credit lines), `X-Upstream-Error`. When every feed fails
  * the last good list (up to 90 s old) is served with `X-Stale` so the map
- * doesn't empty during a blip.
+ * doesn't empty during a blip. With no adsb.lol key the fresh window is a few
+ * minutes, because that feed allows 500 requests a day for the whole site.
  */
 export async function handleAircraftRequest(
   airport: string,
@@ -421,19 +536,24 @@ export async function handleAircraftRequest(
   const staleKey = `aircraft-stale:${code}`
 
   const hit = await cache.get<CachedSnapshot>(freshKey)
-  if (hit) return aircraftResponse(hit, AIRCRAFT_TTL_S)
+  if (hit) return aircraftResponse(hit, freshTtl(hit.sources, env))
 
   let job = inflight.get(code)
   if (!job) {
-    job = fetchAircraftForAirport(code, { providers: providersFor(env) }).then((r) => ({ ...r, fetchedAt: Date.now() }))
+    // Without a key, don't spend adsb.lol on a merge while adsb.fi might still answer.
+    job = fetchAircraftForAirport(code, {
+      providers: withFeedGuards(providersFor(env), cache, env),
+      merge: Boolean(env.ADSBLOL_API_KEY),
+    }).then((r) => ({ ...r, fetchedAt: Date.now() }))
     inflight.set(code, job)
     void job.catch(() => {}).finally(() => inflight.delete(code))
   }
 
   try {
     const snap = await job
-    await Promise.all([cache.put(freshKey, snap, AIRCRAFT_TTL_S), cache.put(staleKey, snap, STALE_TTL_S)])
-    return aircraftResponse(snap, AIRCRAFT_TTL_S)
+    const ttl = freshTtl(snap.sources, env)
+    await Promise.all([cache.put(freshKey, snap, ttl), cache.put(staleKey, snap, STALE_TTL_S)])
+    return aircraftResponse(snap, ttl)
   } catch (err) {
     const message = headerSafe(String(err instanceof Error ? err.message : err))
     const stale = await cache.get<CachedSnapshot>(staleKey)

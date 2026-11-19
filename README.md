@@ -41,7 +41,7 @@ Live airport traffic on a painted airfield map: real runway markings, every cont
 | Data | adsb.fi + adsb.lol + adsb.one + airplanes.live merged, OpenSky last resort (health-aware failover); adsbdb + hexdb; aviationweather.gov + NOAA; FAA NASR. Every source and its terms: [docs/data-sources.md](docs/data-sources.md) |
 | Tooling | oxlint, Vitest, Wrangler; Python + Piper for the replay clips |
 
-No paid APIs, fonts, icon packs or tile services are needed, and no accounts or keys. Two optional extras use the owner's own accounts, set as Cloudflare secrets: the AI features and a last-resort AirNav flight lookup (see [docs/ai-setup.md](docs/ai-setup.md)).
+No paid APIs, fonts, icon packs or tile services are needed to run it locally. The public site does need one key for live traffic: Cloudflare's address is shared by every visitor, and the free ADS-B feeds either refuse that address or allow it a few hundred requests a day. Set the Pages secret `ADSBLOL_API_KEY` (a feeder key from [adsb.lol/mmb](https://www.adsb.lol/mmb); see [docs/data-sources.md](docs/data-sources.md)). Two further extras use the owner's own accounts: the AI features and a last-resort AirNav flight lookup (see [docs/ai-setup.md](docs/ai-setup.md)).
 
 ## Project layout
 

@@ -1,10 +1,12 @@
 # AI and AirNav: set-up for the site owner
 
-The app works with none of this. Two optional extras are switched on by putting
-a secret into Cloudflare:
+Live traffic on the public site needs `ADSBLOL_API_KEY` (below). The AI features
+and the AirNav lookup are optional and are switched on by putting a secret into
+Cloudflare:
 
 | Secret | What it switches on | Cost |
 | --- | --- | --- |
+| `ADSBLOL_API_KEY` | Live aircraft. Without it the server may ask adsb.lol only a few times an hour, because Cloudflare's address is allowed 500 requests a day | Free. A feeder key (7,200/day) is the one that keeps the map current. Request one at [adsb.lol/mmb](https://www.adsb.lol/mmb), then `npx wrangler pages secret put ADSBLOL_API_KEY --project-name atc-web` and redeploy. |
 | `ANTHROPIC_API_KEY` and/or `OPENROUTER_API_KEY` | The AI features: radio calls cleaned up and explained before they are shown, airport briefings, flight stories, weather in plain words. They run on Claude Haiku 5.5 unless you pick Sonnet (below) | You pay your AI provider per request. Capped per day (below). |
 | `AIRNAV_ODAPI_TOKEN` | A last-resort lookup of a flight's route and aircraft when the free sources know neither. Needs the KV namespace (section 3) as well | AirNav credits. Capped at 3 a day and 90 in total by default (below). |
 | `TURNSTILE_SECRET_KEY` (+ the variable `TURNSTILE_SITE_KEY`) | An invisible browser check before anything that costs money, so scripts cannot use the site as a free AI or speech-to-text service (section 4) | Free |
