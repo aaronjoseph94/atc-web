@@ -15,11 +15,9 @@ binding = "AI"
 # check, whose public TURNSTILE_SITE_KEY may go in a [vars] section here.
 # See docs/ai-setup.md.
 
-# Optional: one worldwide count for the daily AI and transcript caps and the
-# AirNav credits (without it each Cloudflare data centre counts on its own,
-# and AirNav lookups stay off). Create a KV
-# namespace (`npx wrangler kv namespace create atc-web-counters`), put its id
-# below and uncomment. Left commented out because a made-up id breaks deploys.
-# [[kv_namespaces]]
-# binding = "AI_KV"
-# id = "<the namespace id>"
+# One worldwide count for the daily AI and transcript caps and the AirNav
+# credits. Without this binding each Cloudflare data centre counts on its own,
+# and AirNav lookups stay off.
+[[kv_namespaces]]
+binding = "AI_KV"
+id = "90a21e1c67054ea487155d7834fe45bb"
